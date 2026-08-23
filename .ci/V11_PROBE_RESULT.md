@@ -1,6 +1,6 @@
 # v1.1 implementation CI probe
 
-Commit at checkout: cb860997ccc0f7a42dbdd0e259c8fd8a19409ae4
+Commit at checkout: 28aa1eac29085cab41c77fc17b316048eda74ef2
 
 bootstrap_uv_exit_code: 0
 
@@ -8,7 +8,7 @@ bootstrap_uv_exit_code: 0
 exit_code: 0
 ```text
 Using CPython 3.11.16 interpreter at: /opt/hostedtoolcache/Python/3.11.16/x64/bin/python3
-Resolved 58 packages in 0.53ms
+Resolved 58 packages in 0.64ms
 ```
 
 ## sync
@@ -97,31 +97,49 @@ exit_code: 0
 ```
 
 ## pytest
-exit_code: 0
+exit_code: 1
 ```text
-........................................................................ [ 72%]
-............................                                             [100%]
+........................................................F............... [ 64%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
+
+    def test_apply_schema_grows_small_blank_grid_before_batch_update():
+        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
+        sh = FakeSpreadsheet([ws])
+        JT._apply_schema(sh, ws)
+>       assert ws.col_count == 27
+E       assert 10 == 27
+E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f10185f2bd0>.col_count
+
+tests/test_job_tracker_v11.py:130: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
+ +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f10185f2bd0>.col_count
 ```
 
 ## doctor
 exit_code: 0
 ```text
-🩺 jobs-scraper doctor
+🩺 jobs-scraper v1.1 doctor
 ============================================================
   ✅ Python: 3.11 (need >= 3.11)
   ✅ venv interpreter: /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python (exists)
   ✅ imports: OK
   ✅ file: sg_product_jobs.py: exists
-  ✅ file: server.py: exists
+  ✅ file: server.py (legacy v1.0 entrypoint): exists
+  ✅ file: server_v1_1.py: exists
+  ✅ file: job_tracker.py: exists
   ✅ file: pyproject.toml: exists
   ✅ file: LICENSE: exists
   ✅ file: .gitignore: exists
   ✅ file: skills/jobs-scraper/SKILL.md: exists
+  ✅ file: skills/jobs-scraper/references/JOB_TRACKER_SCHEMA.md: exists
   ✅ file: .codex-plugin/plugin.json: exists
-  ⚠️  sheet config: 未設定: GSPREAD_SA_KEY_PATH, SHEET_ID, SHEET_GID — Sheet tools 會回 CONFIG_MISSING 結構化錯誤
+  ⚠️  sheet config: v1.1 未設定: GSPREAD_SA_KEY_PATH, SHEET_ID — crawl_jobs 仍可用；Sheet tools 會 fail closed。SHEET_GID 不需設定
   ✅ git hygiene: OK (no secrets tracked)
 ============================================================
-⚠️  doctor: warnings only (Sheet tools 不一定可用, 但 scraper CLI 跟 read-only MCP 可用)
+⚠️  doctor: warnings only (public-source crawl works; Sheet tools need user-owned Sheet config)
 ```
 
 ## skills_install
@@ -129,11 +147,11 @@ exit_code: 0
 ```text
    Updating https://github.com/agentskills/agentskills.git (69ef37e9424c0a7ea9dd2293b559e43ec8176379)
     Updated https://github.com/agentskills/agentskills.git (69ef37e9424c0a7ea9dd2293b559e43ec8176379)
-Resolved 5 packages in 458ms
+Resolved 5 packages in 915ms
    Building skills-ref @ git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
       Built skills-ref @ git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
-Prepared 4 packages in 321ms
-Installed 4 packages in 1ms
+Prepared 4 packages in 376ms
+Installed 4 packages in 2ms
  + python-dateutil==2.9.0.post0
  + six==1.17.0
  + skills-ref==0.1.0 (from git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref)
@@ -158,109 +176,68 @@ STDIO_MCP_SMOKE_PASS ['audit_sheet', 'crawl_jobs', 'get_stats', 'sync_jobs_to_sh
 ```
 
 ## stdio_v11
-exit_code: 1
+exit_code: 0
 ```text
-  |     asyncio.run(run())
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/runners.py", line 190, in run
-  |     return runner.run(main)
-  |            ^^^^^^^^^^^^^^^^
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/runners.py", line 118, in run
-  |     return self._loop.run_until_complete(task)
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-  |     return future.result()
-  |            ^^^^^^^^^^^^^^^
-  |   File "/home/runner/work/jobs-scraper/jobs-scraper/scripts/verify_mcp_stdio_v11.py", line 25, in run
-  |     async with stdio_client(params) as (read, write):
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/contextlib.py", line 231, in __aexit__
-  |     await self.gen.athrow(typ, value, traceback)
-  |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/mcp/client/stdio.py", line 200, in stdio_client
-  |     async with anyio.create_task_group() as tg:
-  |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 815, in __aexit__
-  |     raise BaseExceptionGroup(
-  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | Exception Group Traceback (most recent call last):
-    |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/mcp/client/stdio.py", line 204, in stdio_client
-    |     yield read_stream, write_stream
-    |   File "/home/runner/work/jobs-scraper/jobs-scraper/scripts/verify_mcp_stdio_v11.py", line 26, in run
-    |     async with ClientSession(read, write) as session:
-    |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/mcp/client/session.py", line 481, in __aexit__
-    |     result = await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
-    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 815, in __aexit__
-    |     raise BaseExceptionGroup(
-    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-    +-+---------------- 1 ----------------
-      | Traceback (most recent call last):
-      |   File "/home/runner/work/jobs-scraper/jobs-scraper/scripts/verify_mcp_stdio_v11.py", line 40, in run
-      |     props = (sync.inputSchema or {}).get("properties") or {}
-      |              ^^^^^^^^^^^^^^^^
-      |   File "/home/runner/work/jobs-scraper/jobs-scraper/.venv/lib/python3.11/site-packages/pydantic/main.py", line 1042, in __getattr__
-      |     raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
-      | AttributeError: 'Tool' object has no attribute 'inputSchema'. Did you mean: 'input_schema'?
-      +------------------------------------
+STDIO_MCP_V11_SMOKE_PASS ['audit_sheet', 'crawl_jobs', 'get_stats', 'initialize_job_tracker', 'sync_jobs_to_sheet']
 ```
 
 ## fresh_v10
-exit_code: 0
+exit_code: 1
 ```text
-[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-fresh-qkjvxx5w
+[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-fresh-lf63sbr3
 [fresh-install] copied
-[fresh-install] venv: /tmp/jobs-scraper-fresh-qkjvxx5w/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
+[fresh-install] venv: /tmp/jobs-scraper-fresh-lf63sbr3/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
 [fresh-install] deps installed (incl. pytest from [dev])
 [fresh-install] compile OK
-[fresh-install] pytest OK
-[fresh-install] server import OK
-[fresh-install] MCP tools listed: tools: ['audit_sheet', 'crawl_jobs', 'get_stats', 'sync_jobs_to_sheet']
-[fresh-install] SKILL.md frontmatter OK
+FAIL: pytest: ........................................................F............... [ 64%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
 
-🎉 fresh install qualified at /tmp/jobs-scraper-fresh-qkjvxx5w
+    def test_apply_schema_grows_small_blank_grid_before_batch_update():
+        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
+        sh = FakeSpreadsheet([ws])
+        JT._apply_schema(sh, ws)
+>       assert ws.col_count == 27
+E       assert 10 == 27
+E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7fc22abf6b50>.col_count
+
+/tmp/jobs-scraper-fresh-lf63sbr3/tests/test_job_tracker_v11.py:130: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../tmp/jobs-scraper-fresh-lf63sbr3/tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
+ +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7fc22abf6b50>.col_count
+
+
 ```
 
 ## fresh_v11
 exit_code: 1
 ```text
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/runners.py", line 190, in run
-  |     return runner.run(main)
-  |            ^^^^^^^^^^^^^^^^
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/runners.py", line 118, in run
-  |     return self._loop.run_until_complete(task)
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
-  |     return future.result()
-  |            ^^^^^^^^^^^^^^^
-  |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/scripts/verify_mcp_stdio_v11.py", line 25, in run
-  |     async with stdio_client(params) as (read, write):
-  |   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/contextlib.py", line 231, in __aexit__
-  |     await self.gen.athrow(typ, value, traceback)
-  |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/mcp/client/stdio.py", line 200, in stdio_client
-  |     async with anyio.create_task_group() as tg:
-  |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 815, in __aexit__
-  |     raise BaseExceptionGroup(
-  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | Exception Group Traceback (most recent call last):
-    |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/mcp/client/stdio.py", line 204, in stdio_client
-    |     yield read_stream, write_stream
-    |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/scripts/verify_mcp_stdio_v11.py", line 26, in run
-    |     async with ClientSession(read, write) as session:
-    |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/mcp/client/session.py", line 481, in __aexit__
-    |     result = await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
-    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 815, in __aexit__
-    |     raise BaseExceptionGroup(
-    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-    +-+---------------- 1 ----------------
-      | Traceback (most recent call last):
-      |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/scripts/verify_mcp_stdio_v11.py", line 40, in run
-      |     props = (sync.inputSchema or {}).get("properties") or {}
-      |              ^^^^^^^^^^^^^^^^
-      |   File "/tmp/jobs-scraper-v11-fresh-mm3m0fgo/.venv/lib/python3.11/site-packages/pydantic/main.py", line 1042, in __getattr__
-      |     raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
-      | AttributeError: 'Tool' object has no attribute 'inputSchema'. Did you mean: 'input_schema'?
-      +------------------------------------
+[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-v11-fresh-undjwl05
+[fresh-install] copied
+[fresh-install] venv: /tmp/jobs-scraper-v11-fresh-undjwl05/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
+[fresh-install] deps installed (incl. pytest from [dev])
+[fresh-install] compile OK
+FAIL: pytest: ........................................................F............... [ 64%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
 
+    def test_apply_schema_grows_small_blank_grid_before_batch_update():
+        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
+        sh = FakeSpreadsheet([ws])
+        JT._apply_schema(sh, ws)
+>       assert ws.col_count == 27
+E       assert 10 == 27
+E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f128da46690>.col_count
+
+/tmp/jobs-scraper-v11-fresh-undjwl05/tests/test_job_tracker_v11.py:130: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../tmp/jobs-scraper-v11-fresh-undjwl05/tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
+ +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f128da46690>.col_count
+
+
+FAIL: legacy fresh-install gate failed before v1.1 checks
 ```
 
 ## production_id_hygiene
