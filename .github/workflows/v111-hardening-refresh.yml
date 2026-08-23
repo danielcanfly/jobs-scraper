@@ -1,5 +1,6 @@
 name: v1.1.1 hardening identity refresh
 
+# One-shot branch-only migration. The job deletes this workflow before committing.
 permissions:
   contents: write
 
