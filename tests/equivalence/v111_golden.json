@@ -1,0 +1,178 @@
+{
+  "baseline": {
+    "tag": "v1.1.1",
+    "commit": "8fbf32484418c2d5edd1fc1e0e451232515dadd8",
+    "tree": "f0ba649aa4d989fceffa51b14c49a1f4b7e311c4"
+  },
+  "urls": {
+    "linkedin_list_base": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+    "linkedin_list_query": {
+      "keywords": "\"product manager\" OR \"product director\" OR \"director of product\" OR \"head of product\" OR \"product lead\" OR \"chief of staff\"",
+      "location": "Taiwan",
+      "geoId": "104187078",
+      "f_TPR": "r604800",
+      "sortBy": "DD",
+      "start": "20"
+    },
+    "linkedin_jd": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342",
+    "jora_list": "https://sg.jora.com/j?a=7d&l=Singapore&q=product+manager&p=3",
+    "jobstreet_list": "https://sg.jobstreet.com/api/jobsearch/v5/search?siteKey=SG-Main&keywords=product+manager&where=Singapore&worktype=242&daterange=7&page=2&pageSize=20",
+    "jobstreet_graphql_endpoint": "https://sg.jobstreet.com/graphql",
+    "jobstreet_graphql_normalized_sha256": "b5e35f913134f45917fba9b0309125d2173f899f7a763c8672e79ba6ca31018b"
+  },
+  "parsers": {
+    "linkedin": [
+      {
+        "job_id": "4430572342",
+        "title": "Principal Product Manager",
+        "company": "Acme AI",
+        "location": "Singapore",
+        "posted_at": "2026-08-20",
+        "posted_ago": "3 days ago",
+        "url": "https://www.linkedin.com/jobs/view/4430572342",
+        "source": "linkedin"
+      }
+    ],
+    "jora": [
+      {
+        "job_id": "3edbbb646574ed2a0a926fee537b0e7c",
+        "title": "Senior Product Manager",
+        "company": "",
+        "location": "Singapore",
+        "posted_at": "",
+        "posted_ago": "",
+        "url": "https://sg.jora.com/job/Senior-Product-Manager-3edbbb646574ed2a0a926fee537b0e7c?tracking=abc",
+        "source": "jora"
+      }
+    ],
+    "jobstreet": [
+      {
+        "job_id": "94145676",
+        "title": "AI Product Manager",
+        "company": "Tech Co",
+        "location": "Singapore",
+        "posted_at": "2026-08-20",
+        "posted_ago": "3d ago",
+        "work_mode": "Onsite",
+        "teaser": "Build AI",
+        "url": "",
+        "keyword_used": "product manager",
+        "source": "jobstreet"
+      }
+    ],
+    "linkedin_jd": {
+      "jd_text": "Build products\nShip safely",
+      "jd_lines": ["Build products", "Ship safely"],
+      "jd_html": null,
+      "error": null
+    },
+    "jora_jd": {
+      "jd_text": "Build products Lead team",
+      "jd_lines": ["Build products", "Lead team"],
+      "jd_html": null,
+      "company": "Acme Jora",
+      "location": "Singapore",
+      "title": "Senior Product Manager",
+      "error": null
+    },
+    "jobstreet_jd": {
+      "jd_text": "Build AI products. Ship safely.",
+      "jd_lines": ["Build AI products.", "Ship safely."],
+      "jd_html": "<div><p>Build AI products.</p><ul><li>Ship safely.</li></ul></div>",
+      "company": "GraphQL Co",
+      "location": "Singapore",
+      "title": "AI Product Manager",
+      "error": null
+    }
+  },
+  "title_filter": {
+    "Junior Product Manager": "junior",
+    "Assistant Vice President, Product": null,
+    "Assistant to CEO, Product": "assistant",
+    "AVP, Product Specialist": null,
+    "Product Specialist": "specialist",
+    "Senior Product Marketing Manager": "product marketing",
+    "Director of Product": null
+  },
+  "work_mode": {
+    "title_remote": "Remote",
+    "jd_hybrid": "Hybrid",
+    "jd_in_office": "Onsite",
+    "jd_chinese_remote": "Remote",
+    "jd_fallback_hybrid": "Hybrid",
+    "none": ""
+  },
+  "visa": {
+    "hard": "⚠️ HARD: Singapore citizens only",
+    "soft": "do not require visa sponsorship",
+    "positive": "Visa sponsorship is available",
+    "none": ""
+  },
+  "dedup": {
+    "seen_keys": [
+      ["jobstreet", "4430572342"],
+      ["jora", "3edbbb646574ed2a0a926fee537b0e7c"],
+      ["linkedin", "4430572342"]
+    ],
+    "sheet_keys": [
+      ["jobstreet", "94145676"],
+      ["linkedin", "4430572342"]
+    ],
+    "sheet_next_row": 4
+  },
+  "sheet": {
+    "normalized_row": [
+      "New",
+      "",
+      "<TODAY>",
+      "JobStreet / Minimax",
+      "=HYPERLINK(\"https://sg.jobstreet.com/job/94145676\",\"https://sg.jobstreet.com/job/94145676\")",
+      "Tech Co",
+      "AI Product Manager",
+      "Location: Singapore (hybrid). We do not require visa sponsorship for this role.",
+      "Singapore",
+      "Hybrid",
+      "do not require visa sponsorship"
+    ],
+    "write_calls": [
+      ["A2:D2", "RAW"],
+      ["F2:K2", "RAW"],
+      ["E2:E2", "USER_ENTERED"]
+    ],
+    "write_result": {
+      "written": 1,
+      "skipped_dup": 2,
+      "skipped_no_jd": 3,
+      "next_row": 2,
+      "end_row": 2
+    }
+  },
+  "machine_summary": {
+    "parsed": {"jobs_found": 7, "written": 3},
+    "missing": null
+  },
+  "mcp": {
+    "legacy_tools": ["audit_sheet", "crawl_jobs", "get_stats", "sync_jobs_to_sheet"],
+    "v11_tools": ["audit_sheet", "crawl_jobs", "get_stats", "initialize_job_tracker", "sync_jobs_to_sheet"],
+    "source_enum": ["linkedin", "jora", "jobstreet"],
+    "range_enum": ["1h", "24h", "3d", "7d", "14d", "21d", "30d"],
+    "region_enum": ["SG", "TW", "China"],
+    "initializer_dry_run_default": true
+  },
+  "tracker": {
+    "schema_version": "job-tracker-v1",
+    "column_count": 27,
+    "header_height_px": 52,
+    "default_tabs": ["SG-Raw", "SG-Selected", "TW-Raw", "TW-Selected", "China-Raw", "China-Selected"],
+    "canonical_regions": {
+      "sg": "SG",
+      "Singapore": "SG",
+      "tw": "TW",
+      "台灣": "TW",
+      "cn": "China",
+      "Shanghai": "China",
+      "Japan": "Japan"
+    },
+    "validation_columns": [0, 1, 9, 12, 14, 15, 16]
+  }
+}
