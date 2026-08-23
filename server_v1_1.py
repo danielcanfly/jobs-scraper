@@ -9,11 +9,12 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 import job_tracker as JT
+import runtime_core as RT
 import server as legacy
 import sg_product_jobs as M
 
-Source = legacy.Source
-Range = legacy.Range
+Source = RT.Source
+Range = RT.Range
 Region = Literal["SG", "TW", "China"]
 
 REGION_LOCATIONS: dict[str, str] = {"SG": "Singapore", "TW": "Taiwan", "China": "Shanghai"}
@@ -131,7 +132,7 @@ mcp.add_tool(
 
 
 def _cfg_or_error():
-    return JT.check_tracker_config(legacy.REPO_ROOT)
+    return JT.check_tracker_config(RT.REPO_ROOT)
 
 
 def _source_region_supported(source: str, region: str) -> tuple[bool, str | None]:
@@ -252,8 +253,8 @@ def sync_jobs_to_sheet(
         args.append("--dry-run-sheet")
     args.append("--json-summary")
 
-    r = legacy._run_subprocess(args)
-    summary = legacy._parse_machine_summary(r["stdout_tail"])
+    r = RT.run_scraper_subprocess(args)
+    summary = RT.parse_machine_summary(r["stdout_tail"])
     if r["ok"] and summary is None:
         r = {**r, "ok": False, "error_code": "OUTPUT_CONTRACT_MISSING"}
     message = "sync completed" if r["ok"] else f"sync failed (timeout={r['timed_out']}, code={r['error_code']})"
@@ -316,7 +317,7 @@ def audit_sheet(region: Annotated[Region, "Tracker region to audit"] = "SG") -> 
             key_to_meta.setdefault(key, set()).add((row[5][:30] if len(row) > 5 else "", row[6][:50] if len(row) > 6 else ""))
     mismatches = sum(1 for values in key_to_meta.values() if len(values) > 1)
 
-    seen_path = legacy.REPO_ROOT / "seen_jds.jsonl"
+    seen_path = RT.REPO_ROOT / "seen_jds.jsonl"
     sheet_seen_drift = 0
     if seen_path.exists():
         seen = M.load_seen_ids(seen_path)
@@ -356,7 +357,7 @@ def get_stats(region: Annotated[Region, "Tracker region to inspect"] = "SG") -> 
     wm = Counter(row[9] for row in rows if len(row) > 9)
     dates = Counter(row[2] for row in rows if len(row) > 2 and row[2])
 
-    seen_path = legacy.REPO_ROOT / "seen_jds.jsonl"
+    seen_path = RT.REPO_ROOT / "seen_jds.jsonl"
     seen_unique: int | None = None
     seen_by_source: dict[str, int] | None = None
     if seen_path.exists():

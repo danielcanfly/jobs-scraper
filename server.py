@@ -46,24 +46,19 @@ except ImportError:
 from pydantic import BaseModel, Field
 
 import sg_product_jobs as M  # noqa: E402
+import runtime_core as RT
 
 # ──────────────────────────────────────────────────────────────────────
 # Paths / config
 # ──────────────────────────────────────────────────────────────────────
-REPO_ROOT = Path(__file__).parent.resolve()
+REPO_ROOT = RT.REPO_ROOT
+PYTHON_EXE = RT.PYTHON_EXE
+SUBPROCESS_TIMEOUT = RT.SUBPROCESS_TIMEOUT
+OUTPUT_TAIL_STDOUT = RT.OUTPUT_TAIL_STDOUT
+OUTPUT_TAIL_STDERR = RT.OUTPUT_TAIL_STDERR
 
-# MCP v2 沒有低階對等的 settings 物件; `python -c` import server 時
-# sys.executable 就會是 .venv/bin/python, 沒問題。
-PYTHON_EXE = sys.executable
-
-# 7200 秒 (2 小時) — full-JD 跑最寬鬆估算 50-100 分, 留緩衝
-SUBPROCESS_TIMEOUT = int(os.getenv("JOBS_SCRAPER_SUBPROCESS_TIMEOUT", "7200"))
-
-OUTPUT_TAIL_STDOUT = 5_000
-OUTPUT_TAIL_STDERR = 2_000
-
-Source = Literal["linkedin", "jora", "jobstreet"]
-Range = Literal["1h", "24h", "3d", "7d", "14d", "21d", "30d"]
+Source = RT.Source
+Range = RT.Range
 
 SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 SCOPES_WRITE = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -212,67 +207,10 @@ def _read_sheet_rows(sa_key_path: str, sheet_id: str, gid: str) -> list[list[str
     return ws.get_all_values()[1:]
 
 
-def _run_subprocess(args: list[str], timeout: int = SUBPROCESS_TIMEOUT, *, raw: bool = False) -> dict:
-    """Run a subprocess and return a normalised result dict.
-
-    By default, args are prepended with [PYTHON_EXE, sg_product_jobs.py] and
-    cwd=REPO_ROOT. Pass raw=True to run args verbatim (for tests / ad-hoc cmds).
-
-    Returns: {
-        "ok": bool,
-        "exit_code": int,
-        "timed_out": bool,
-        "error_code": str | None,
-        "stdout_tail": str,
-        "stderr_tail": str,
-    }
-    """
-    cmd = args if raw else [PYTHON_EXE, str(REPO_ROOT / "sg_product_jobs.py")] + args
-    try:
-        r = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout, cwd=str(REPO_ROOT),
-        )
-    except subprocess.TimeoutExpired as e:
-        return {
-            "ok": False,
-            "exit_code": -1,
-            "timed_out": True,
-            "error_code": "SUBPROCESS_TIMEOUT",
-            "stdout_tail": (e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or ""))[-OUTPUT_TAIL_STDOUT:],
-            "stderr_tail": (e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, bytes) else (e.stderr or ""))[-OUTPUT_TAIL_STDERR:],
-        }
-    out = (r.stdout or "")[-OUTPUT_TAIL_STDOUT:]
-    err = (r.stderr or "")[-OUTPUT_TAIL_STDERR:]
-    error_code: str | None = None
-    if r.returncode != 0:
-        if re.search(r"\b(429|403|rate\s*limit|too many requests)\b", err, re.IGNORECASE):
-            error_code = "UPSTREAM_RATE_LIMIT"
-        else:
-            error_code = "SCRAPER_EXIT_NONZERO"
-    return {
-        "ok": r.returncode == 0,
-        "exit_code": r.returncode,
-        "timed_out": False,
-        "error_code": error_code,
-        "stdout_tail": out,
-        "stderr_tail": err,
-    }
-
-
-SUMMARY_PREFIX = "JOBS_SCRAPER_SUMMARY="
-
-
-def _parse_machine_summary(stdout: str) -> dict[str, Any] | None:
-    """Parse the final machine-readable CLI summary; never infer counts from prose logs."""
-    for line in reversed(stdout.splitlines()):
-        if not line.startswith(SUMMARY_PREFIX):
-            continue
-        try:
-            value = json.loads(line[len(SUMMARY_PREFIX):])
-        except json.JSONDecodeError:
-            return None
-        return value if isinstance(value, dict) else None
-    return None
+# Backward-compatible aliases for v1.0 callers/tests. Runtime implementation is shared.
+_run_subprocess = RT.run_scraper_subprocess
+SUMMARY_PREFIX = RT.SUMMARY_PREFIX
+_parse_machine_summary = RT.parse_machine_summary
 
 
 # ──────────────────────────────────────────────────────────────────────

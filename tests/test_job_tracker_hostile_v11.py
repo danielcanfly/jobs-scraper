@@ -194,7 +194,7 @@ def test_missing_region_blocks_subprocess(monkeypatch):
         raise JT.TrackerError("REGION_NOT_INITIALIZED", "missing SG-Raw")
 
     monkeypatch.setattr(S.JT, "open_region_raw", fail_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d")
     assert result.ok is False
     assert result.error_code == "REGION_NOT_INITIALIZED"
@@ -207,7 +207,7 @@ def test_schema_mismatch_blocks_subprocess(monkeypatch):
         raise JT.TrackerError("SCHEMA_MISMATCH", "bad header")
 
     monkeypatch.setattr(S.JT, "open_region_raw", fail_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d")
     assert result.ok is False
     assert result.error_code == "SCHEMA_MISMATCH"
@@ -215,7 +215,7 @@ def test_schema_mismatch_blocks_subprocess(monkeypatch):
 
 def test_unsupported_source_region_blocks_before_config_or_subprocess(monkeypatch):
     monkeypatch.setattr(S, "_cfg_or_error", lambda: pytest.fail("config must not be consulted"))
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="TW", source="jobstreet", range="7d")
     assert result.ok is False
     assert result.error_code == "SOURCE_REGION_UNSUPPORTED"
@@ -239,7 +239,7 @@ def test_sync_dry_run_resolves_readonly_and_uses_internal_gid(monkeypatch):
         return _summary()
 
     monkeypatch.setattr(S.JT, "open_region_raw", fake_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", fake_run)
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", fake_run)
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d", with_jd=False, dry_run=True)
     assert result.ok is True
     assert opens == [False]
@@ -268,7 +268,7 @@ def test_sync_real_write_resolves_with_write_scope(monkeypatch):
         return _summary(written=2)
 
     monkeypatch.setattr(S.JT, "open_region_raw", fake_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", fake_run)
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", fake_run)
     result = S.sync_jobs_to_sheet(region="China", source="linkedin", range="24h", with_jd=False, dry_run=False)
     assert result.ok is True and result.written == 2
     assert opens == [True]

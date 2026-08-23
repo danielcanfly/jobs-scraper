@@ -190,17 +190,17 @@ def test_invalid_range_rejected_by_pydantic():
 
 # ── Q29: subprocess uses sys.executable / list args / cwd ──────────
 def test_subprocess_uses_sys_executable_and_cwd():
-    import server
     import inspect
-    src = inspect.getsource(server)
-    # subprocess.run with list args (not shell=True string)
-    assert re.search(r"subprocess\.run\(\s*\n?\s*cmd", src), "subprocess.run cmd arg not found"
-    assert "shell=True" not in src, "shell=True forbidden"
-    # sys.executable is the interpreter (also set PYTHON_EXE)
+    import runtime_core as RT
+    import server
+
+    src = inspect.getsource(RT)
+    assert "subprocess.run" in src
+    assert "shell=True" not in src
     assert "sys.executable" in src
-    assert "PYTHON_EXE" in src
-    # cwd is REPO_ROOT
     assert "REPO_ROOT" in src
+    assert server._run_subprocess is RT.run_scraper_subprocess
+    assert server._parse_machine_summary is RT.parse_machine_summary
 
 
 # ── Q30: subprocess timeout >= 7200s ───────────────────────────────
