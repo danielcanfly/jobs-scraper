@@ -1,0 +1,89 @@
+name: v11-ci-probe
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [feature/job-tracker-v1.1.0]
+    paths: [.ci/v11-probe-trigger]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SHEET_ID: ""
+      SHEET_GID: ""
+      GSPREAD_SA_KEY_PATH: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/job-tracker-v1.1.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run gates and publish report only
+        shell: bash
+        run: |
+          set +e
+          mkdir -p .ci/logs
+          report=.ci/V11_PROBE_RESULT.md
+          echo '# v1.1 implementation CI probe' > "$report"
+          echo >> "$report"
+          echo "Commit at checkout: $(git rev-parse HEAD)" >> "$report"
+          echo >> "$report"
+
+          run_gate() {
+            name="$1"; shift
+            echo "## $name" >> "$report"
+            "$@" > ".ci/logs/${name}.log" 2>&1
+            rc=$?
+            echo "exit_code: $rc" >> "$report"
+            echo '```text' >> "$report"
+            tail -n 40 ".ci/logs/${name}.log" >> "$report"
+            echo '```' >> "$report"
+            echo >> "$report"
+            return 0
+          }
+
+          python -m pip install --quiet 'uv>=0.8,<0.9' > .ci/logs/bootstrap.log 2>&1
+          bootstrap_rc=$?
+          echo "bootstrap_uv_exit_code: $bootstrap_rc" >> "$report"
+          echo >> "$report"
+
+          run_gate lock uv lock --check
+          run_gate sync uv sync --locked --extra dev --python 3.11
+          if [ -x .venv/bin/python ]; then
+            run_gate compile .venv/bin/python -m compileall -q .
+            run_gate helpers .venv/bin/python test_helpers.py
+            run_gate pytest .venv/bin/python -m pytest -q
+            run_gate doctor .venv/bin/python scripts/doctor.py
+            uv pip install --python .venv/bin/python 'skills-ref @ git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref' > .ci/logs/skills_install.log 2>&1
+            skills_install_rc=$?
+            echo '## skills_install' >> "$report"
+            echo "exit_code: $skills_install_rc" >> "$report"
+            echo '```text' >> "$report"; tail -n 40 .ci/logs/skills_install.log >> "$report"; echo '```' >> "$report"; echo >> "$report"
+            if [ "$skills_install_rc" -eq 0 ]; then
+              run_gate skills_ref .venv/bin/skills-ref validate skills/jobs-scraper
+            fi
+            run_gate plugin_manifest .venv/bin/python -c "import json; m=json.load(open('.codex-plugin/plugin.json')); assert m['name']=='jobs-scraper'; assert m['version']=='1.1.0'; assert m['skills']=='./skills/'"
+            run_gate stdio_v10 .venv/bin/python scripts/verify_mcp_stdio.py
+            run_gate stdio_v11 .venv/bin/python scripts/verify_mcp_stdio_v11.py
+            run_gate fresh_v10 .venv/bin/python scripts/verify_fresh_install.py
+            run_gate fresh_v11 .venv/bin/python scripts/verify_fresh_install_v11.py
+          fi
+          echo '## production_id_hygiene' >> "$report"
+          if git grep -n '1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8' -- 'sg_product_jobs.py' 'server.py' 'server_v1_1.py' 'job_tracker.py' 'setup.sh' '.codex-plugin/' 'skills/' 'scripts/' 'tests/' 'pyproject.toml' '.env.example' 'README.md' > .ci/logs/hygiene.log 2>&1; then
+            echo 'exit_code: 1' >> "$report"
+            echo '```text' >> "$report"; cat .ci/logs/hygiene.log >> "$report"; echo '```' >> "$report"
+          else
+            echo 'exit_code: 0' >> "$report"
+            echo 'No production Sheet ID in distributable/test surfaces.' >> "$report"
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$report"
+          git commit -m 'ci: publish v1.1 implementation probe result'
+          git push origin HEAD:feature/job-tracker-v1.1.0
