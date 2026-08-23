@@ -6,7 +6,9 @@ permissions:
 on:
   push:
     branches: [feature/job-tracker-v1.1.0]
-    paths: [scripts/_v11_atomic_repair.py]
+    paths:
+      - scripts/_v11_atomic_repair.py
+      - .ci/v11-atomic-trigger
 
 jobs:
   repair:
@@ -28,6 +30,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add job_tracker.py tests/test_job_tracker_hostile_v11.py
-          git rm scripts/_v11_atomic_repair.py .github/workflows/v11-atomic-repair.yml
+          git rm scripts/_v11_atomic_repair.py .github/workflows/v11-atomic-repair.yml .ci/v11-atomic-trigger
           git commit -m 'fix: make v1.1 tracker initialization atomic'
           git push origin HEAD:feature/job-tracker-v1.1.0
