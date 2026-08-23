@@ -10,6 +10,7 @@ Narrow repository-hygiene hardening release. Scraper business behaviour is uncha
 - Replaced the previous hand-picked CI production-ID grep with the repository-wide hygiene guard.
 - Updated package, plugin, Agent Skill, MCP server, and `uv.lock` patch-version identity to `1.1.1`.
 - Corrected the dependency-file MCP tool-count comment to include `initialize_job_tracker`.
+- Moved the stale v1.0 repair-stage status report out of the repository root into `docs/history/v1.0-repair-result.md`, with an explicit historical-only banner.
 
 Explicitly unchanged:
 
