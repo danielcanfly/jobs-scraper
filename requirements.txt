@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────
+# 依賴套件 (Python 3.11+)
+# 安裝: pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────
+
+# 1. LinkedIn Guest API (無 cookie 抓取)
+#    curl_cffi: 偽裝瀏覽器 TLS fingerprint, 避免被 LinkedIn ban
+curl-cffi>=0.5.10
+
+# 2. Jora HTML parse (沒有 API)
+scrapling[parser]>=0.2.99
+
+# 3. JobStreet GraphQL (不需要 Cloudflare solve)
+#    用 curl_cffi 就夠, 不需要 scrapling 的 StealthyFetcher (managed CF 解不動)
+
+# 4. Google Sheets 寫入
+gspread>=6.0.0
+google-auth>=2.23.0
+
+# 5. JobStreet JD HTML 轉純文字
+beautifulsoup4>=4.12.0
+
+# 6. 讀 .env 自動載入環境變數
+python-dotenv>=1.0.0

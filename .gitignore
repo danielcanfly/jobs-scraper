@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────────
+# 排除清單 (其他人 fork 不用擔心推這些)
+# ─────────────────────────────────────────────────────────────
+
+# Secrets (絕對不能推)
+.secrets/
+*.pem
+*.key
+*.p12
+
+# Local env (個別使用者的設定)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 跑出來的 JD cache (巨大, 每 range 4MB+, 跨 run 用)
+*_jd.json
+sg_product_jobs_*.json
+jora_sg_product_jobs_*.json
+jobstreet_sg_product_jobs_*.json
+shanghai_product_jobs_*.json
+tw_product_jobs_*.json
+
+# 跨 run dedup 紀錄
+seen_jds.jsonl
+
+# Debug / 測試 fixture
+raw_list_*.html
+probe.py
+async_probe.py
+
+# Log
+*.log
+nohup.out
+
+# 暫存
+.cache/
+.tmp/
+tmp/
