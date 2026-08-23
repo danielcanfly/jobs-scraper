@@ -160,12 +160,65 @@ Should print `27/27 通過, 0 失敗`. Covers:
 
 ---
 
-## 🤖 Use with Codex / Claude Code
+## 🤖 Use with Codex / Claude Code / Mavis
 
-This script is Codex-friendly. Example conversation with Codex:
-> "Run `python sg_product_jobs.py 7d --source linkedin --with-jd` in the jobs-scraper repo"
+This repo ships with an MCP server (`server.py`) that exposes 3 tools to any MCP-compatible agent:
+- `crawl_jobs(source, range, with_jd, to_sheet)` — run scraper
+- `audit_sheet()` — read existing sheet and check dedup / visa / work mode
+- `get_stats()` — show sheet + seen file stats
 
-For more advanced integration (MCP server so Codex has native `crawl_jobs()` / `audit_sheet()` tools), build an MCP server wrapper around `sg_product_jobs.py` — out of scope for this repo but straightforward (one file using the `mcp` Python SDK).
+### Setup MCP server
+
+```bash
+# 1. Install MCP SDK (注意: 用 mcp 1.x, 2.x 拿掉了 FastMCP)
+pip install 'mcp>=1.0,<2.0'
+
+# 2. Configure your agent:
+```
+
+#### Codex (`~/.codex/config.toml`)
+```toml
+[mcp_servers.jobs-scraper]
+command = "python"
+args = ["/absolute/path/to/jobs-scraper/server.py"]
+```
+
+#### Claude Code
+```bash
+claude mcp add jobs-scraper -- python /absolute/path/to/jobs-scraper/server.py
+```
+
+#### Cursor (`~/.cursor/mcp.json`)
+```json
+{
+  "mcpServers": {
+    "jobs-scraper": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["/absolute/path/to/jobs-scraper/server.py"]
+    }
+  }
+}
+```
+
+**重要**: 設 `GSPREAD_SA_KEY_PATH` env var 指向你的 service account JSON (絕對路徑, 不要用相對路徑):
+```bash
+export GSPREAD_SA_KEY_PATH=/Users/you/.secrets/gsheet-sa.json
+export SHEET_ID=your_google_sheet_id
+export SHEET_GID=0
+```
+
+設定完後, 你可以直接跟 Codex 說:
+
+> "用 crawl_jobs 跑 LinkedIn 7d 帶 JD"
+> "用 audit_sheet 看一下"
+> "用 get_stats 顯示現在狀態"
+
+Codex 會自動呼叫對應的 MCP tool.
+
+### Mavis Plugin (本地用)
+
+如果你是 Mavis Code Desktop 用戶, 整個 jobs-scraper 已經包成 Mavis Plugin 在 `~/.minimax/plugins/jobs-scraper/`. 新 session 開起來 Mavis 自動看到 3 個 skill (sg-jobs-run, sg-jobs-audit, sg-jobs-stats) 跟 MCP server. 你可以直接說 "跑 linkedin 7d" 就會觸發對應的 skill.
 
 ---
 
