@@ -66,8 +66,11 @@ jobs:
       - name: Verify v1.1 tracker MCP stdio transport
         run: .venv/bin/python scripts/verify_mcp_stdio_v11.py
 
-      - name: Fresh-install verification
+      - name: Fresh-install legacy verification
         run: .venv/bin/python scripts/verify_fresh_install.py
+
+      - name: Fresh-install v1.1 tracker verification
+        run: .venv/bin/python scripts/verify_fresh_install_v11.py
 
       - name: Author production Sheet ID must not appear in distributable surfaces
         run: |
