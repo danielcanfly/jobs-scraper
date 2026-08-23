@@ -84,6 +84,11 @@ cp .env.example .env
 #   GSPREAD_SA_KEY_PATH=.secrets/gsheet-sa.json
 #   SHEET_ID=<paste your sheet ID>
 #   SHEET_GID=<paste your GID, usually 0 for first tab>
+
+# Load those same .env values into this shell for the CLI examples below.
+set -a
+. ./.env
+set +a
 ```
 
 ### Step 5: Run your first scrape
@@ -93,7 +98,7 @@ cp .env.example .env
 .venv/bin/python sg_product_jobs.py 7d --source linkedin
 
 # Full pipeline (list + JD + sheet write, ~50-100 min for 7d)
-.venv/bin/python sg_product_jobs.py 7d --source linkedin --with-jd --to-sheet "$SHEET_URL"
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --with-jd --to-sheet "$SHEET_ID" --gid "$SHEET_GID"
 ```
 
 > ⏱️ **Full-JD runs are slow.** A 7-day LinkedIn run with JD enrichment takes
@@ -133,16 +138,16 @@ for src in linkedin jora jobstreet; do
 done
 
 # Deep LinkedIn 14d refresh with JD + sheet
-.venv/bin/python sg_product_jobs.py 14d --source linkedin --with-jd --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 14d --source linkedin --with-jd --to-sheet "$SHEET_ID" --gid "$SHEET_GID"
 
 # JobStreet full 30d sweep (all 5 keywords × 25 pages)
-.venv/bin/python sg_product_jobs.py 30d --source jobstreet --with-jd --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 30d --source jobstreet --with-jd --to-sheet "$SHEET_ID" --gid "$SHEET_GID"
 
 # Taiwan instead of Singapore
 .venv/bin/python sg_product_jobs.py 7d --location Taiwan
 
 # Force re-fetch all JDs (after schema change in your Sheet, etc.)
-.venv/bin/python sg_product_jobs.py 7d --source linkedin --refetch --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --refetch --to-sheet "$SHEET_ID" --gid "$SHEET_GID"
 ```
 
 ---
@@ -179,7 +184,7 @@ Shared across all sources:
   - 3-tier visa detection (HARD / SOFT / POSITIVE)
   - Work mode parser (Onsite / Hybrid / Remote)
   - (source, job_id) tuple dedup across sources + runs
-  - 11-column Google Sheet write, two-phase (E=HYPERLINK USER_ENTERED, rest=RAW)
+  - 11-column Google Sheet write, three-phase (A:D/F:K RAW first; E=HYPERLINK USER_ENTERED last)
 ```
 
 See **[RULES.md](RULES.md)** for the full design rules, 14 known gotchas, and historical context.
@@ -206,10 +211,10 @@ by Git. Never prints credential content or private key material.
 .venv/bin/python -m pytest -q
 ```
 
-Should print `47 passed` (27 original helper tests + 20 contract tests for
-the MCP v2 server, fail-closed config, two-phase sheet write, and the setup
-contract). Tests are deterministic, do not require Google credentials, and
-do not touch a production Sheet.
+Should complete with all tests passing. The frozen v1.0.0 qualification candidate
+currently has **83 pytest cases**; CI also runs the original **27/27 helper
+regressions explicitly**. Tests are deterministic, do not require Google
+credentials, and do not touch a production Sheet.
 
 ### Fresh-install qualification
 
