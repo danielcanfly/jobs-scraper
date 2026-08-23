@@ -1,0 +1,6 @@
+{
+  "name": "jobs-scraper",
+  "version": "1.0.0",
+  "description": "Search, audit, and sync product-management job postings with a local MCP-backed workflow.",
+  "skills": "./skills/"
+}

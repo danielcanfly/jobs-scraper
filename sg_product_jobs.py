@@ -61,10 +61,10 @@ try:
 except ImportError:
     pass  # 沒裝 python-dotenv 也沒關係, 用實際 env 變數
 
-# 預設值 (原開發者 danielcanfly 的設定, 別人 fork 後應該 override)
+# 預設值 (fail-closed: 留空代表 user 沒設, 寫入/讀取工具必須報 CONFIG_MISSING)
 SHEET_SA_KEY = os.getenv("GSPREAD_SA_KEY_PATH", ".secrets/gsheet-sa.json")
-SHEET_ID_OVERRIDE = os.getenv("SHEET_ID", "")  # 留空 = 用預設的 SG_RAW_SHEET_ID
-SHEET_GID_OVERRIDE = os.getenv("SHEET_GID", "")  # 留空 = 用預設的 SG_RAW_GID
+SHEET_ID_OVERRIDE = os.getenv("SHEET_ID", "")  # 留空 → SG_RAW_SHEET_ID="" → 寫入/讀取 fail-closed
+SHEET_GID_OVERRIDE = os.getenv("SHEET_GID", "")  # 留空 → SG_RAW_GID=0 → 寫入/讀取 fail-closed
 JOBSTREET_KEYWORDS_OVERRIDE = os.getenv("JOBSTREET_KEYWORDS", "")  # 留空 = 用預設 5 kw
 # 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
 
@@ -248,10 +248,11 @@ VISA_PATTERNS = {
 
 DEFAULT_SHEET_SOURCE = "LinkedIn / Minimax"
 
-# 預設 Google Sheet 目標 (避免不小心寫到第一個 tab)
+# 預設 Google Sheet 目標 (fail-closed: 沒設 env 時 Sheet ID/GID 留空,
+# 寫入/讀取工具必須回報 CONFIG_MISSING 結構化錯誤, 不可 fallback 到 author 的 Sheet)
 # 可被 SHEET_ID / SHEET_GID env var 覆寫 (見上面 env 讀取區塊)
-SG_RAW_GID = int(SHEET_GID_OVERRIDE) if SHEET_GID_OVERRIDE.isdigit() else 1119491672
-SG_RAW_SHEET_ID = SHEET_ID_OVERRIDE or "1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8"
+SG_RAW_GID = int(SHEET_GID_OVERRIDE) if SHEET_GID_OVERRIDE.isdigit() else 0
+SG_RAW_SHEET_ID = SHEET_ID_OVERRIDE or ""
 SG_RAW_URL = (
     f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}"
     f"/edit?gid={SG_RAW_GID}#gid={SG_RAW_GID}"
@@ -791,16 +792,43 @@ def _build_sheet_row(job: dict, source_label: str, location: str,
 
 def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
                           skipped_dup: int = 0, skipped_no_jd: int = 0) -> dict:
-    """把 new_rows 寫到 sheet, 回傳 stats dict (跟原本 push_to_sheet 一樣格式)。"""
+    """把 new_rows 寫到 sheet, 回傳 stats dict (跟原本 push_to_sheet 一樣格式)。
+
+    三段式寫入 (防 F10 公式注入，且 intentional formula 最後才啟用):
+      - Phase 1: A:D 用 RAW
+      - Phase 2: F:K 用 RAW
+      - Phase 3: E 欄 hyperlink formula 用 USER_ENTERED
+    只有我們自己生成的 E 欄 HYPERLINK 會被當公式, 其他所有外部 scraped text
+    (title / company / JD / location / source label / visa) 都不能被當公式執行。
+    """
     end_row = next_row + len(new_rows) - 1
-    print(f"  準備寫入 row {next_row}-{end_row} ({len(new_rows)} 筆)...")
+    print(f"  準備寫入 row {next_row}-{end_row} ({len(new_rows)} 筆, 兩段式寫入防公式注入)...")
     # 防呆: 自動擴展 sheet rows (避免 end_row > row_count 報 400)
     if end_row > ws.row_count:
         extra = end_row - ws.row_count + 100
         print(f"  ⚠️  sheet 只有 {ws.row_count} rows, 加 {extra} rows 避免 overflow")
         ws.add_rows(extra)
-    # 用 values=... , range_name=... 順序 (新 gspread 風格, 解 deprecation)
-    ws.update(range_name=f"A{next_row}:K{end_row}", values=new_rows, value_input_option="USER_ENTERED")
+    # External scraped text is written first as RAW. If a later data phase fails,
+    # the E-column live formula is never activated.
+    a_d_rows = [[r[i] for i in (0, 1, 2, 3)] for r in new_rows]
+    f_k_rows = [[r[i] for i in (5, 6, 7, 8, 9, 10)] for r in new_rows]
+    e_only_rows = [[r[4]] for r in new_rows]
+    ws.update(
+        range_name=f"A{next_row}:D{end_row}",
+        values=a_d_rows,
+        value_input_option="RAW",
+    )
+    ws.update(
+        range_name=f"F{next_row}:K{end_row}",
+        values=f_k_rows,
+        value_input_option="RAW",
+    )
+    # Intentional formula is the final phase.
+    ws.update(
+        range_name=f"E{next_row}:E{end_row}",
+        values=e_only_rows,
+        value_input_option="USER_ENTERED",
+    )
     return {
         "written": len(new_rows),
         "skipped_dup": skipped_dup,
@@ -1465,6 +1493,7 @@ def main():
                     help=f"寫入 Sheet 的 Source 欄位值 (default: {DEFAULT_SHEET_SOURCE})")
     ap.add_argument("--dry-run-sheet", action="store_true",
                     help="跟 --to-sheet 一起用，只印將寫入什麼、不真的寫")
+    ap.add_argument("--json-summary", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     seen_path = Path(args.seen_file)
@@ -1553,6 +1582,12 @@ def main():
         jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
     if not jobs:
         print("\n無資料，結束。")
+        if args.json_summary:
+            print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
+                "jobs_found": 0, "jobs_enriched": 0, "jobs_failed": 0,
+                "output_file": None, "written": 0, "skipped_dup": 0,
+                "skipped_no_jd": 0,
+            }, ensure_ascii=False, separators=(",", ":")))
         return
 
     # 1.5) 載入 JD cache (跨 run 從 *_jd.json 抓)，跳過當前將輸出的檔
@@ -1594,6 +1629,7 @@ def main():
         print(f"     seen file: {seen_path} ({total} 筆累計)")
 
     # 4) 寫到 Google Sheet (可選)
+    sheet_stats = {"written": 0, "skipped_dup": 0, "skipped_no_jd": 0}
     if args.to_sheet:
         if not args.with_jd:
             print("\n⚠️  --to-sheet 需要 --with-jd 才能填 JD 內容 (column H)")
@@ -1609,6 +1645,17 @@ def main():
                 location=location,
             )
             print(f"\n  結果: {sheet_stats}")
+
+    if args.json_summary:
+        print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
+            "jobs_found": len(jobs),
+            "jobs_enriched": ((stats.get("cached", 0) + stats.get("fetched", 0)) if stats else 0),
+            "jobs_failed": (stats.get("failed", 0) if stats else 0),
+            "output_file": str(out.resolve()),
+            "written": int(sheet_stats.get("written", 0)),
+            "skipped_dup": int(sheet_stats.get("skipped_dup", 0)),
+            "skipped_no_jd": int(sheet_stats.get("skipped_no_jd", 0)),
+        }, ensure_ascii=False, separators=(",", ":")))
 
 
 if __name__ == "__main__":
