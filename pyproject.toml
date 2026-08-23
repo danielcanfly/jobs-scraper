@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jobs-scraper"
+version = "1.0.0"
+description = "Multi-source SG product-management job scraper (LinkedIn / Jora / JobStreet) with cross-source dedup, visa signal detection, and a local MCP server + Agent Skill wrapper."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "danielcanfly" }]
+keywords = ["jobs", "scraper", "linkedin", "jora", "jobstreet", "singapore", "product-manager", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+dependencies = [
+    "curl-cffi>=0.5.10",
+    "scrapling[parser]>=0.2.99",
+    "gspread>=6.0.0",
+    "google-auth>=2.23.0",
+    "beautifulsoup4>=4.12.0",
+    "python-dotenv>=1.0.0",
+    "mcp>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/danielcanfly/jobs-scraper"
+Repository = "https://github.com/danielcanfly/jobs-scraper"
+
+# Canonical dependency source. requirements.txt is generated/mirrored from
+# this file (see setup.sh). Edit this file when bumping a dependency.
+[tool.setuptools]
+py-modules = ["sg_product_jobs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

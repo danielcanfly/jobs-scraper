@@ -9,18 +9,40 @@ Supports 3 sources:
 
 Designed for personal job-search tracking. Cross-source dedup, visa signal detection, work-mode parsing, all automated.
 
+> **Local STDIO distribution.** This repository ships the scraper CLI, the
+> local MCP server, the Agent Skill (`skills/jobs-scraper/SKILL.md`) and the
+> Codex plugin packaging manifest (`.codex-plugin/plugin.json`). It does
+> **not** ship a public remote Plugin; a stable public HTTPS Streamable HTTP
+> endpoint and Marketplace submission are a separate future lane and are not
+> represented by anything in this repo.
+
 ---
 
 ## 🚀 Quick Start (15-20 min first time)
 
 ### Step 1: Clone & install
+
 ```bash
 git clone https://github.com/danielcanfly/jobs-scraper.git
 cd jobs-scraper
-pip install -r requirements.txt
+./setup.sh
 ```
 
+`setup.sh` creates `.venv/`, installs from `pyproject.toml` (incl. `[dev]`
+extras for pytest), runs the test suite, and runs `scripts/doctor.py`. It
+prints the exact interpreter path to use for the MCP host at the end.
+
+If `./setup.sh` is not executable on your system, run `bash setup.sh`.
+
+> Re-running `./setup.sh` is safe: it does not overwrite your existing
+> `.env` or `.secrets/`.
+
 ### Step 2: Get Google Cloud credentials (one-time, ~10 min)
+
+> **Optional for public-source crawling.** All three sources work without any
+> Google configuration. You only need a service account if you want to use
+> the Google Sheet read/write tools.
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → create or select a project
 2. **APIs & Services** → **Library** → search "Google Sheets API" → **Enable**
 3. **IAM & Admin** → **Service Accounts** → **Create Service Account**
@@ -35,9 +57,16 @@ pip install -r requirements.txt
    ```
 
 ### Step 3: Create a Google Sheet
+
+> Only required for `audit_sheet` / `get_stats` / `sync_jobs_to_sheet`. The
+> scraper will fail-closed with a structured `CONFIG_MISSING` error if these
+> tools are called without `SHEET_ID` / `SHEET_GID` configured. There is
+> **no fallback to the package author's Sheet**.
+
 1. Go to [sheets.new](https://sheets.new) → creates a blank Sheet
 2. **Share** the Sheet with the service account email (looks like `jobs-scraper@your-project.iam.gserviceaccount.com`)
-   - ⚠️ **Editor** access required
+   - ⚠️ **Editor** access required for `sync_jobs_to_sheet` (the read tools
+     use a read-only OAuth scope and only need **Viewer**)
 3. Copy the Sheet ID from the URL:
    ```
    https://docs.google.com/spreadsheets/d/[THIS_PART_IS_SHEET_ID]/edit
@@ -48,22 +77,29 @@ pip install -r requirements.txt
    ```
 
 ### Step 4: Configure
+
 ```bash
 cp .env.example .env
-# Edit .env:
+# Edit .env (fill in your own values; empty values fail-closed on Sheet tools):
 #   GSPREAD_SA_KEY_PATH=.secrets/gsheet-sa.json
 #   SHEET_ID=<paste your sheet ID>
 #   SHEET_GID=<paste your GID, usually 0 for first tab>
 ```
 
 ### Step 5: Run your first scrape
-```bash
-# List only (no JD fetch, fast, ~30 sec)
-python sg_product_jobs.py 7d --source linkedin
 
-# Full pipeline (list + JD + sheet write, ~50 min for 7d)
-python sg_product_jobs.py 7d --source linkedin --with-jd --to-sheet "$SHEET_URL"
+```bash
+# Use the venv interpreter (the one setup.sh printed at the end)
+.venv/bin/python sg_product_jobs.py 7d --source linkedin
+
+# Full pipeline (list + JD + sheet write, ~50-100 min for 7d)
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --with-jd --to-sheet "$SHEET_URL"
 ```
+
+> ⏱️ **Full-JD runs are slow.** A 7-day LinkedIn run with JD enrichment takes
+> roughly 50–100 minutes. The scraper subprocess has a 7200-second (2 hour)
+> ceiling. If you wire the scraper into a Codex or Claude MCP host, also
+> raise the host's `tool_timeout_sec` to 7200 or higher (see [MCP section](#-use-with-codex--claude-code)).
 
 That's it. You should see jobs in your Google Sheet.
 
@@ -72,7 +108,7 @@ That's it. You should see jobs in your Google Sheet.
 ## 📖 CLI Reference
 
 ```
-python sg_product_jobs.py [range] [options]
+.venv/bin/python sg_product_jobs.py [range] [options]
 
 range:        1h | 24h | 3d | 7d | 14d | 21d | 30d  (default: 24h)
 --source:     linkedin | jora | jobstreet          (default: linkedin)
@@ -93,20 +129,20 @@ range:        1h | 24h | 3d | 7d | 14d | 21d | 30d  (default: 24h)
 ```bash
 # Daily check on LinkedIn + Jora + JobStreet (no JD, fast)
 for src in linkedin jora jobstreet; do
-  python sg_product_jobs.py 24h --source $src
+  .venv/bin/python sg_product_jobs.py 24h --source $src
 done
 
 # Deep LinkedIn 14d refresh with JD + sheet
-python sg_product_jobs.py 14d --source linkedin --with-jd --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 14d --source linkedin --with-jd --to-sheet "$URL"
 
 # JobStreet full 30d sweep (all 5 keywords × 25 pages)
-python sg_product_jobs.py 30d --source jobstreet --with-jd --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 30d --source jobstreet --with-jd --to-sheet "$URL"
 
 # Taiwan instead of Singapore
-python sg_product_jobs.py 7d --location Taiwan
+.venv/bin/python sg_product_jobs.py 7d --location Taiwan
 
 # Force re-fetch all JDs (after schema change in your Sheet, etc.)
-python sg_product_jobs.py 7d --source linkedin --refetch --to-sheet "$URL"
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --refetch --to-sheet "$URL"
 ```
 
 ---
@@ -115,13 +151,16 @@ python sg_product_jobs.py 7d --source linkedin --refetch --to-sheet "$URL"
 
 | Variable | Default | Description |
 |---|---|---|
-| `GSPREAD_SA_KEY_PATH` | `.secrets/gsheet-sa.json` | Path to your service account JSON |
-| `SHEET_ID` | (empty) | Your Google Sheet ID. **Must override** to use your own sheet |
-| `SHEET_GID` | `0` | The sheet tab GID within the spreadsheet |
+| `GSPREAD_SA_KEY_PATH` | `.secrets/gsheet-sa.json` | Path to your service account JSON. Must be a real file path; missing files yield `CREDENTIAL_FILE_MISSING`. |
+| `SHEET_ID` | **(empty, fail-closed)** | Your Google Sheet ID. **Must override** to use your own sheet. Empty = Sheet tools return `CONFIG_MISSING`; no fallback to author. |
+| `SHEET_GID` | **(empty, fail-closed)** | The sheet tab GID. Empty = `CONFIG_MISSING`. |
 | `JOBSTREET_KEYWORDS` | `product manager,product director,director of product,head of product,product lead` | Comma-separated JobStreet search keywords |
 | `LINKEDIN_GEO_ID` | `102454443` | LinkedIn geoId (Singapore). 104187078=Taiwan, 107388191=Shanghai |
 
-If `SHEET_ID` is empty, the script falls back to the original developer's Sheet — but you'll get a permission error unless you're the developer. **Always set your own `SHEET_ID`.**
+> The scraper does **not** read or fall back to a hard-coded Sheet ID.
+> Every Google Sheet tool checks env at call time and returns
+> `CONFIG_MISSING` (or `CREDENTIAL_FILE_MISSING`) when the user has not
+> supplied their own.
 
 ---
 
@@ -140,85 +179,128 @@ Shared across all sources:
   - 3-tier visa detection (HARD / SOFT / POSITIVE)
   - Work mode parser (Onsite / Hybrid / Remote)
   - (source, job_id) tuple dedup across sources + runs
-  - 11-column Google Sheet write (Status, Date, Source, URL, Co, Title, JD, Loc, WM, Visa)
+  - 11-column Google Sheet write, two-phase (E=HYPERLINK USER_ENTERED, rest=RAW)
 ```
 
 See **[RULES.md](RULES.md)** for the full design rules, 14 known gotchas, and historical context.
 
 ---
 
-## 🧪 Testing
+## 🩺 Doctor
+
+`./setup.sh` runs `scripts/doctor.py` automatically. Run it any time:
 
 ```bash
-python test_helpers.py
+.venv/bin/python scripts/doctor.py
 ```
 
-Should print `27/27 通過, 0 失敗`. Covers:
-- HYPERLINK formula generation for all 3 sources
-- Sheet row parsing for dedup (LinkedIn digit, Jora 32-hex, JobStreet digit)
-- Work mode regex (Title prefix, JD header, Chinese patterns, fallback)
+It checks Python version, venv interpreter, imports, presence of required
+files, fail-closed Sheet config, and that no `.env` / `.secrets` are tracked
+by Git. Never prints credential content or private key material.
 
 ---
 
-## 🤖 Use with Codex / Claude Code / Mavis
+## 🧪 Testing
 
-This repo ships with an MCP server (`server.py`) that exposes 3 tools to any MCP-compatible agent:
-- `crawl_jobs(source, range, with_jd, to_sheet)` — run scraper
-- `audit_sheet()` — read existing sheet and check dedup / visa / work mode
-- `get_stats()` — show sheet + seen file stats
+```bash
+.venv/bin/python -m pytest -q
+```
+
+Should print `47 passed` (27 original helper tests + 20 contract tests for
+the MCP v2 server, fail-closed config, two-phase sheet write, and the setup
+contract). Tests are deterministic, do not require Google credentials, and
+do not touch a production Sheet.
+
+### Fresh-install qualification
+
+```bash
+.venv/bin/python scripts/verify_fresh_install.py
+```
+
+Copies the repository into a temp directory, builds a fresh venv, installs
+from `pyproject.toml`, compiles all source, runs pytest, imports the MCP
+server, lists the 4 tools, and validates the Skill frontmatter — without
+any Google credentials. Used by the CI workflow.
+
+---
+
+## 🤖 Use with Codex / Claude Code / Cursor
+
+This repo ships an MCP server (`server.py`, MCP **v2 line**) that exposes
+4 tools. Read tools never write to your Sheet. The single write tool
+(`sync_jobs_to_sheet`) is the explicit write boundary.
+
+| Tool | Reads Sheet | Writes Sheet | Notes |
+|---|---|---|---|
+| `crawl_jobs`        | no  | no  | Public-source crawl; max 1h/24h/3d/7d/14d/21d/30d |
+| `sync_jobs_to_sheet` | no  | yes | Explicit write. Requires `SHEET_ID` / `SHEET_GID` / `GSPREAD_SA_KEY_PATH`. Supports `dry_run`. |
+| `audit_sheet`       | yes (read-only scope) | no  | Dedup, URL dups, cross-source collisions, visa/work-mode distributions |
+| `get_stats`         | yes (read-only scope) | no  | Row counts and per-source distributions |
 
 ### Setup MCP server
 
-```bash
-# 1. Install MCP SDK (注意: 用 mcp 1.x, 2.x 拿掉了 FastMCP)
-pip install 'mcp>=1.0,<2.0'
-
-# 2. Configure your agent:
-```
+`./setup.sh` installs the SDK. Then point your agent at the venv
+interpreter the script printed (it is **not** a system `python`).
 
 #### Codex (`~/.codex/config.toml`)
+
 ```toml
 [mcp_servers.jobs-scraper]
-command = "python"
-args = ["/absolute/path/to/jobs-scraper/server.py"]
+command = "/ABS/PATH/jobs-scraper/.venv/bin/python"
+args = ["/ABS/PATH/jobs-scraper/server.py"]
+cwd = "/ABS/PATH/jobs-scraper"
+tool_timeout_sec = 7200   # full-JD runs are 50-100 min; default 60s is too short
+required = true
+
+[mcp_servers.jobs-scraper.env]
+GSPREAD_SA_KEY_PATH = "/ABS/PATH/jobs-scraper/.secrets/gsheet-sa.json"
+SHEET_ID = "YOUR_SHEET_ID"
+SHEET_GID = "YOUR_TAB_GID"
 ```
 
+> Codex's default `tool_timeout_sec` is **60 seconds**, which is too short
+> for a full-JD run. Raise it to 7200. The scraper subprocess inside the
+> server also has a 7200s ceiling.
+
 #### Claude Code
+
 ```bash
-claude mcp add jobs-scraper -- python /absolute/path/to/jobs-scraper/server.py
+claude mcp add jobs-scraper \
+  -- /ABS/PATH/jobs-scraper/.venv/bin/python /ABS/PATH/jobs-scraper/server.py
+```
+
+Then in your shell, set the env vars before launching Claude Code:
+
+```bash
+export GSPREAD_SA_KEY_PATH=/Users/you/jobs-scraper/.secrets/gsheet-sa.json
+export SHEET_ID=your_google_sheet_id
+export SHEET_GID=0
 ```
 
 #### Cursor (`~/.cursor/mcp.json`)
+
 ```json
 {
   "mcpServers": {
     "jobs-scraper": {
       "type": "stdio",
-      "command": "python",
-      "args": ["/absolute/path/to/jobs-scraper/server.py"]
+      "command": "/ABS/PATH/jobs-scraper/.venv/bin/python",
+      "args": ["/ABS/PATH/jobs-scraper/server.py"],
+      "timeout": 7200
     }
   }
 }
 ```
 
-**重要**: 設 `GSPREAD_SA_KEY_PATH` env var 指向你的 service account JSON (絕對路徑, 不要用相對路徑):
-```bash
-export GSPREAD_SA_KEY_PATH=/Users/you/.secrets/gsheet-sa.json
-export SHEET_ID=your_google_sheet_id
-export SHEET_GID=0
-```
+> **Secrets in config**: prefer forwarding by env var name (Codex `env`,
+> Claude Code shell export) rather than embedding credential values.
 
-設定完後, 你可以直接跟 Codex 說:
+After setup, you can ask your agent:
 
 > "用 crawl_jobs 跑 LinkedIn 7d 帶 JD"
 > "用 audit_sheet 看一下"
 > "用 get_stats 顯示現在狀態"
-
-Codex 會自動呼叫對應的 MCP tool.
-
-### Mavis Plugin (本地用)
-
-如果你是 Mavis Code Desktop 用戶, 整個 jobs-scraper 已經包成 Mavis Plugin 在 `~/.minimax/plugins/jobs-scraper/`. 新 session 開起來 Mavis 自動看到 3 個 skill (sg-jobs-run, sg-jobs-audit, sg-jobs-stats) 跟 MCP server. 你可以直接說 "跑 linkedin 7d" 就會觸發對應的 skill.
+> "用 sync_jobs_to_sheet 跑 24h dry-run (先不寫)"
 
 ---
 
@@ -227,10 +309,17 @@ Codex 會自動呼叫對應的 MCP tool.
 **"gspread.exceptions.SpreadsheetNotFound"**
 → Wrong `SHEET_ID`, or service account email not shared with the Sheet.
 
+**`CONFIG_MISSING` from any Sheet tool**
+→ `SHEET_ID` or `SHEET_GID` is empty in your environment. Edit `.env`.
+
+**`CREDENTIAL_FILE_MISSING` from any Sheet tool**
+→ The `GSPREAD_SA_KEY_PATH` file does not exist. Place your service
+account JSON there.
+
 **"403 rate limit"** (LinkedIn only)
 → Wait 30-60 min, or reduce `--max-pages`. The script uses random 3-10s sleep + curl_cffi to mimic browser, but heavy testing can still trigger.
 
-**"Cloudflare"** (HTML page, not API)
+**"Cloudflare"** (JobStreet HTML page, not API)
 → JobStreet HTML pages are blocked. The script uses the public API + GraphQL which is not blocked. If you need HTML page data, you're out of luck.
 
 **Empty results for `daterange=1` (1 day)**
@@ -240,7 +329,7 @@ Codex 會自動呼叫對應的 MCP tool.
 
 ## 📜 License
 
-MIT — do whatever you want, no warranty.
+MIT — do whatever you want, no warranty. See [LICENSE](LICENSE).
 
 ## 🙏 Credits
 

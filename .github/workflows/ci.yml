@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main, repair/**]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Force fail-closed: no Google config in CI.
+      SHEET_ID: ""
+      SHEET_GID: ""
+      GSPREAD_SA_KEY_PATH: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package + dev deps
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --quiet --upgrade pip
+          .venv/bin/python -m pip install --quiet -e ".[dev]"
+
+      - name: Compile all
+        run: .venv/bin/python -m compileall -q .
+
+      - name: Run tests (helper + 4 contract)
+        run: .venv/bin/python -m pytest -q
+
+      - name: Run doctor (no Google config; expect warn, not fail)
+        run: .venv/bin/python scripts/doctor.py
+        continue-on-error: true
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          test -f skills/jobs-scraper/SKILL.md
+          head -1 skills/jobs-scraper/SKILL.md | grep -q '^---$'
+          grep -q '^name: jobs-scraper' skills/jobs-scraper/SKILL.md
+          grep -q '^description:' skills/jobs-scraper/SKILL.md
+
+      - name: Validate .codex-plugin manifest
+        run: |
+          test -f .codex-plugin/plugin.json
+          .venv/bin/python -c "import json; m=json.load(open('.codex-plugin/plugin.json')); assert m['name']=='jobs-scraper'; assert m['version']=='1.0.0'; assert 'skills' in m"
+
+      - name: List MCP tools (no creds)
+        run: |
+          .venv/bin/python -c "
+          import asyncio, server
+          async def go():
+              tools = await server.mcp.list_tools()
+              names = sorted(t.name for t in tools)
+              print('tools:', names)
+              need = ['crawl_jobs', 'sync_jobs_to_sheet', 'audit_sheet', 'get_stats']
+              missing = [n for n in need if n not in names]
+              assert not missing, f'missing: {missing}'
+          asyncio.run(go())
+          "
+
+      - name: Author Sheet ID must not appear in code
+        run: |
+          ! git grep -n '1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8' -- 'sg_product_jobs.py' 'server.py' 'setup.sh' '.codex-plugin/' 'skills/' 'scripts/' 'tests/' 'pyproject.toml' '.env.example' 'README.md' || (echo "FAIL: author Sheet ID leaked into code"; exit 1)
