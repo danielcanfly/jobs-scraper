@@ -40,7 +40,7 @@ Default regions create:
 
 Each tab is initialized with the exact `Job Tracker Schema v1` A:AA contract, frozen header row, native dropdown validation, conditional formatting, notes, date formatting, and tracker column widths.
 
-If a non-empty target tab already exists with the wrong schema, initialization returns `SCHEMA_MISMATCH` and performs no destructive migration.
+If a non-empty target tab already exists with the wrong A:AA header contract, initialization returns `SCHEMA_MISMATCH` and performs no destructive migration. After preflight succeeds, real initialization submits the requested tab creation/resizing/schema/default-tab cleanup as one Google Sheets `batchUpdate` transaction.
 
 ## Region routing
 

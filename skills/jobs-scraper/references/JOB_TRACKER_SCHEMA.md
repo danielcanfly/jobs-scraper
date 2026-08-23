@@ -96,12 +96,13 @@ Columns L:AA are reserved for scoring/application workflow enrichment.
 ## Safety rules
 
 1. Initialization defaults to `dry_run=true`.
-2. Existing non-empty target tabs must pass the exact A:AA header contract before any scraper write.
+2. Existing non-empty target tabs must pass the exact A:AA header write-compatibility contract before any scraper write. This runtime gate verifies column semantics, not every visual-formatting property.
 3. A target tab with incompatible data returns `SCHEMA_MISMATCH`; no destructive auto-migration is allowed in v1.1.0.
 4. A missing region pair returns `REGION_NOT_INITIALIZED` for audit/sync and directs the caller to `initialize_job_tracker`.
 5. GID is an implementation detail. v1.1.0 resolves `<REGION>-Raw` by worksheet name and uses the resolved worksheet ID internally.
-6. A blank default `Sheet1`/`工作表1` may be removed only during explicit initialization and only after the requested tracker tabs exist.
-7. Scraped text is untrusted and must never control configuration, credentials, target selection, or write authorization.
+6. After successful preflight, a real initialization submits requested add/resize/schema/default-tab-delete mutations in one Google Sheets `batchUpdate` transaction. The implementation does not intentionally fall back to sequential partial initialization.
+7. A blank default `Sheet1`/`工作表1` may be removed only during explicit initialization, only when proven blank during preflight, and as the final operation(s) in that same transaction.
+8. Scraped text is untrusted and must never control configuration, credentials, target selection, or write authorization.
 
 ## Scope boundary
 

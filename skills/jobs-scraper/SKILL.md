@@ -38,7 +38,7 @@ See `references/JOB_TRACKER_SCHEMA.md` for the exact A:AA contract.
 
 `crawl_jobs`, `audit_sheet`, and `get_stats` must not mutate Google Sheets.
 
-`initialize_job_tracker(dry_run=true)` must not mutate Google Sheets. `initialize_job_tracker(dry_run=false)` is an explicit structure write and must fail closed when an existing target tab contains incompatible data.
+`initialize_job_tracker(dry_run=true)` must not mutate Google Sheets. `initialize_job_tracker(dry_run=false)` is an explicit structure write, must fail closed when an existing target tab contains incompatible data, and submits the requested structural/schema mutations as one Sheets batch transaction after preflight.
 
 Do not convert a read request into a write request. Use `sync_jobs_to_sheet` only for explicit write intent.
 
@@ -59,6 +59,7 @@ For v1.1.0, MCP region input is `SG | TW | China`.
 - LinkedIn supports SG, TW, and China (China routes to the validated Shanghai preset).
 - Jora and JobStreet remain Singapore-only in this release. Do not silently route them to a non-SG region.
 - A region write targets only `<REGION>-Raw`; `Selected` is not a scraper dump target.
+- Before sync/audit, the runtime safety gate checks the exact A:AA header write-compatibility contract. Full visual formatting/dropdown creation belongs to initialization and is not re-audited on every sync.
 
 ## Long runs
 

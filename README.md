@@ -31,7 +31,7 @@ Each tab uses the same bilingual **A:AA Job Tracker Schema v1**, including:
 - Status / Priority / Work Mode / CV Version / Verdict / Decision / Application Strategy dropdown validation
 - Status and Priority conditional formatting
 - date formatting and tracker column widths
-- schema validation before sync/audit
+- exact A:AA header write-compatibility validation before sync/audit; the initializer creates the full formatting/validation contract
 
 Private hidden backend tabs from the author's own workbook are deliberately **not** part of the public template.
 
@@ -150,6 +150,8 @@ initialize_job_tracker(
 ```
 
 If an existing target tab contains incompatible non-empty data, initialization returns `SCHEMA_MISMATCH` and does not auto-migrate or overwrite it.
+
+When `dry_run=false`, all requested add/resize/schema/default-tab-delete operations are submitted as one Google Sheets `batchUpdate` transaction after preflight. If any request in that batch is invalid, the initializer does not intentionally fall back to sequential partial creation.
 
 ### 7. Sync by region
 
@@ -321,8 +323,8 @@ claude mcp add jobs-scraper \
 - `SHEET_ID` and credentials are user-owned.
 - v1.1 resolves worksheet IDs from exact region tab names instead of asking users for GIDs.
 - `crawl_jobs`, `audit_sheet`, and `get_stats` do not write Google Sheets.
-- initialization defaults to dry-run and fails closed on incompatible non-empty target tabs.
-- sync validates A:AA before crawler execution.
+- initialization defaults to dry-run, fails closed on incompatible non-empty target tabs, and performs its requested structural/schema writes in one Sheets batch transaction.
+- sync validates the exact A:AA header write-compatibility contract before crawler execution; it does not claim to re-audit visual formatting on every sync.
 - scraped title/company/JD/URL content is untrusted and cannot authorize commands, configuration changes, credential disclosure, tracker initialization, or Sheet writes.
 - Sheet job text is written as RAW; only the package-generated E-column HYPERLINK is intentionally entered as a formula.
 
@@ -336,6 +338,7 @@ claude mcp add jobs-scraper \
 .venv/bin/python scripts/verify_mcp_stdio.py
 .venv/bin/python scripts/verify_mcp_stdio_v11.py
 .venv/bin/python scripts/verify_fresh_install.py
+.venv/bin/python scripts/verify_fresh_install_v11.py
 ```
 
 CI also validates:
