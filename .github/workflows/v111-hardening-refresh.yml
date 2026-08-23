@@ -50,13 +50,16 @@ jobs:
 
           gid = '111' + '9491672'
 
-          # Preserve the legacy safety assertions without storing the production GID literal.
           path = Path('tests/test_config_fail_closed.py')
           text = path.read_text()
           old_author = f'AUTHOR_GID = "{gid}"'
           if old_author not in text:
               raise SystemExit('missing AUTHOR_GID test anchor')
           text = text.replace(old_author, 'AUTHOR_GID = "111" + "9491672"', 1)
+          old_comment = f'actual default must be 0/empty. Check no `else {gid}` remains.'
+          if old_comment not in text:
+              raise SystemExit('missing config-test GID comment anchor')
+          text = text.replace(old_comment, 'actual default must be 0/empty. Check no historical hardcoded GID fallback remains.', 1)
           old_assert = f'assert "else {gid}" not in text, "hardcoded gid fallback still present"'
           new_assert = 'assert f"else {AUTHOR_GID}" not in text, "hardcoded gid fallback still present"'
           if old_assert not in text:
@@ -75,7 +78,6 @@ jobs:
               raise SystemExit('missing sheet-safety GID assertion anchor')
           path.write_text(text.replace(old_assert, new_assert, 1))
 
-          # The scraper contains the historical GID only in one user-facing help example.
           scraper = Path('sg_product_jobs.py')
           text = scraper.read_text()
           if text.count(gid) != 2:
