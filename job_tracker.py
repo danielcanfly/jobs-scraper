@@ -405,14 +405,29 @@ def _schema_requests(sheet_id: int, row_count: int) -> list[dict[str, Any]]:
     return requests
 
 
+def _grid_resize_request(sheet_id: int, row_count: int, col_count: int) -> dict[str, Any]:
+    """Grow a blank target grid in the same atomic Sheets batch as the schema write."""
+    return {
+        "updateSheetProperties": {
+            "properties": {
+                "sheetId": int(sheet_id),
+                "gridProperties": {
+                    "rowCount": max(int(row_count), DEFAULT_ROWS),
+                    "columnCount": max(int(col_count), SCHEMA_COLUMNS),
+                },
+            },
+            "fields": "gridProperties.rowCount,gridProperties.columnCount",
+        }
+    }
+
+
 def _apply_schema(sh, ws) -> None:
-    # Existing blank user tabs can be smaller than the A:AA/1000-row contract.
-    # Grow them before raw Sheets API requests so updateCells/ranges stay in-bounds.
-    if int(ws.col_count) < SCHEMA_COLUMNS:
-        ws.add_cols(SCHEMA_COLUMNS - int(ws.col_count))
-    if int(ws.row_count) < DEFAULT_ROWS:
-        ws.add_rows(DEFAULT_ROWS - int(ws.row_count))
-    sh.batch_update({"requests": _schema_requests(ws.id, ws.row_count)})
+    # One spreadsheet batch means resize + schema either commit together or fail together.
+    requests = [
+        _grid_resize_request(ws.id, ws.row_count, ws.col_count),
+        *_schema_requests(ws.id, max(int(ws.row_count), DEFAULT_ROWS)),
+    ]
+    sh.batch_update({"requests": requests})
 
 
 def _find_blank_default_sheets(sh, protected_titles: set[str]) -> list[Any]:
@@ -462,6 +477,55 @@ def plan_initialize(sh, regions: Iterable[str] | None = None) -> dict[str, Any]:
     }
 
 
+def _allocate_sheet_ids(worksheets: dict[str, Any], titles: list[str]) -> dict[str, int]:
+    """Allocate explicit non-negative sheet IDs so addSheet + schema can share one batch."""
+    used = {int(ws.id) for ws in worksheets.values()}
+    out: dict[str, int] = {}
+    candidate = 1
+    for title in titles:
+        while candidate in used:
+            candidate += 1
+        if candidate > 2_147_483_647:
+            raise TrackerError("SHEET_ID_ALLOCATION_FAILED", "no available Google Sheet tab ID")
+        out[title] = candidate
+        used.add(candidate)
+        candidate += 1
+    return out
+
+
+def _build_initialization_requests(sh, plan: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Build the full initializer transaction without mutating the spreadsheet."""
+    worksheets = {ws.title: ws for ws in sh.worksheets()}
+    new_ids = _allocate_sheet_ids(worksheets, list(plan["create"]))
+    requests: list[dict[str, Any]] = []
+
+    for title in plan["create"]:
+        sheet_id = new_ids[title]
+        requests.append({
+            "addSheet": {
+                "properties": {
+                    "sheetId": sheet_id,
+                    "title": title,
+                    "gridProperties": {"rowCount": DEFAULT_ROWS, "columnCount": SCHEMA_COLUMNS},
+                }
+            }
+        })
+        requests.extend(_schema_requests(sheet_id, DEFAULT_ROWS))
+
+    for title in plan["configure_blank"]:
+        ws = worksheets[title]
+        requests.append(_grid_resize_request(ws.id, ws.row_count, ws.col_count))
+        requests.extend(_schema_requests(ws.id, max(int(ws.row_count), DEFAULT_ROWS)))
+
+    # Delete only defaults proven blank during preflight, and do it last in the same transaction.
+    for title in plan["remove_blank_defaults"]:
+        ws = worksheets.get(title)
+        if ws is not None:
+            requests.append({"deleteSheet": {"sheetId": int(ws.id)}})
+
+    return requests, new_ids
+
+
 def initialize_job_tracker(
     sheet_id: str,
     sa_key_path: str,
@@ -484,28 +548,15 @@ def initialize_job_tracker(
             **plan,
         }
 
-    worksheets = {ws.title: ws for ws in sh.worksheets()}
-    configured: list[str] = []
-    created: list[str] = []
+    # All structure + schema mutations are one Google Sheets batch transaction.
+    # If any request is invalid, Sheets rejects the entire batch instead of leaving partial tabs.
+    requests, _new_ids = _build_initialization_requests(sh, plan)
+    if requests:
+        sh.batch_update({"requests": requests})
 
-    for title in plan["create"]:
-        ws = sh.add_worksheet(title=title, rows=DEFAULT_ROWS, cols=SCHEMA_COLUMNS)
-        _apply_schema(sh, ws)
-        worksheets[title] = ws
-        created.append(title)
-        configured.append(title)
-
-    for title in plan["configure_blank"]:
-        ws = worksheets[title]
-        _apply_schema(sh, ws)
-        configured.append(title)
-
-    removed_blank_defaults: list[str] = []
-    protected = set(expected_tabs(plan["regions"]))
-    for ws in _find_blank_default_sheets(sh, protected):
-        sh.del_worksheet(ws)
-        removed_blank_defaults.append(ws.title)
-
+    created = list(plan["create"])
+    configured = [*plan["create"], *plan["configure_blank"]]
+    removed_blank_defaults = list(plan["remove_blank_defaults"])
     return {
         "ok": True,
         "dry_run": False,
@@ -515,7 +566,7 @@ def initialize_job_tracker(
         "configured": configured,
         "already_compatible": plan["already_compatible"],
         "removed_blank_defaults": removed_blank_defaults,
-        "message": "job tracker initialized",
+        "message": "job tracker initialized atomically",
     }
 
 

@@ -1,35 +1,4 @@
-#!/usr/bin/env python3
 from __future__ import annotations
-
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"{label}: expected exactly 1 anchor, found {count}")
-    return text.replace(old, new, 1)
-
-
-job_path = ROOT / "job_tracker.py"
-text = job_path.read_text(encoding="utf-8")
-
-old_apply = '''def _apply_schema(sh, ws) -> None:\n    # Existing blank user tabs can be smaller than the A:AA/1000-row contract.\n    # Grow them before raw Sheets API requests so updateCells/ranges stay in-bounds.\n    if int(ws.col_count) < SCHEMA_COLUMNS:\n        ws.add_cols(SCHEMA_COLUMNS - int(ws.col_count))\n    if int(ws.row_count) < DEFAULT_ROWS:\n        ws.add_rows(DEFAULT_ROWS - int(ws.row_count))\n    sh.batch_update({"requests": _schema_requests(ws.id, ws.row_count)})\n'''
-new_apply = '''def _grid_resize_request(sheet_id: int, row_count: int, col_count: int) -> dict[str, Any]:\n    """Grow a blank target grid in the same atomic Sheets batch as the schema write."""\n    return {\n        "updateSheetProperties": {\n            "properties": {\n                "sheetId": int(sheet_id),\n                "gridProperties": {\n                    "rowCount": max(int(row_count), DEFAULT_ROWS),\n                    "columnCount": max(int(col_count), SCHEMA_COLUMNS),\n                },\n            },\n            "fields": "gridProperties.rowCount,gridProperties.columnCount",\n        }\n    }\n\n\ndef _apply_schema(sh, ws) -> None:\n    # One spreadsheet batch means resize + schema either commit together or fail together.\n    requests = [\n        _grid_resize_request(ws.id, ws.row_count, ws.col_count),\n        *_schema_requests(ws.id, max(int(ws.row_count), DEFAULT_ROWS)),\n    ]\n    sh.batch_update({"requests": requests})\n'''
-text = replace_once(text, old_apply, new_apply, "replace _apply_schema")
-
-insert_anchor = '''\n\ndef initialize_job_tracker(\n'''
-helpers = '''\n\ndef _allocate_sheet_ids(worksheets: dict[str, Any], titles: list[str]) -> dict[str, int]:\n    """Allocate explicit non-negative sheet IDs so addSheet + schema can share one batch."""\n    used = {int(ws.id) for ws in worksheets.values()}\n    out: dict[str, int] = {}\n    candidate = 1\n    for title in titles:\n        while candidate in used:\n            candidate += 1\n        if candidate > 2_147_483_647:\n            raise TrackerError("SHEET_ID_ALLOCATION_FAILED", "no available Google Sheet tab ID")\n        out[title] = candidate\n        used.add(candidate)\n        candidate += 1\n    return out\n\n\ndef _build_initialization_requests(sh, plan: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, int]]:\n    """Build the full initializer transaction without mutating the spreadsheet."""\n    worksheets = {ws.title: ws for ws in sh.worksheets()}\n    new_ids = _allocate_sheet_ids(worksheets, list(plan["create"]))\n    requests: list[dict[str, Any]] = []\n\n    for title in plan["create"]:\n        sheet_id = new_ids[title]\n        requests.append({\n            "addSheet": {\n                "properties": {\n                    "sheetId": sheet_id,\n                    "title": title,\n                    "gridProperties": {"rowCount": DEFAULT_ROWS, "columnCount": SCHEMA_COLUMNS},\n                }\n            }\n        })\n        requests.extend(_schema_requests(sheet_id, DEFAULT_ROWS))\n\n    for title in plan["configure_blank"]:\n        ws = worksheets[title]\n        requests.append(_grid_resize_request(ws.id, ws.row_count, ws.col_count))\n        requests.extend(_schema_requests(ws.id, max(int(ws.row_count), DEFAULT_ROWS)))\n\n    # Delete only defaults proven blank during preflight, and do it last in the same transaction.\n    for title in plan["remove_blank_defaults"]:\n        ws = worksheets.get(title)\n        if ws is not None:\n            requests.append({"deleteSheet": {"sheetId": int(ws.id)}})\n\n    return requests, new_ids\n\n\ndef initialize_job_tracker(\n'''
-text = replace_once(text, insert_anchor, helpers, "insert atomic helpers")
-
-old_mutation = '''    worksheets = {ws.title: ws for ws in sh.worksheets()}\n    configured: list[str] = []\n    created: list[str] = []\n\n    for title in plan["create"]:\n        ws = sh.add_worksheet(title=title, rows=DEFAULT_ROWS, cols=SCHEMA_COLUMNS)\n        _apply_schema(sh, ws)\n        worksheets[title] = ws\n        created.append(title)\n        configured.append(title)\n\n    for title in plan["configure_blank"]:\n        ws = worksheets[title]\n        _apply_schema(sh, ws)\n        configured.append(title)\n\n    removed_blank_defaults: list[str] = []\n    protected = set(expected_tabs(plan["regions"]))\n    for ws in _find_blank_default_sheets(sh, protected):\n        sh.del_worksheet(ws)\n        removed_blank_defaults.append(ws.title)\n\n    return {\n        "ok": True,\n        "dry_run": False,\n        "schema_version": SCHEMA_VERSION,\n        "regions": plan["regions"],\n        "created": created,\n        "configured": configured,\n        "already_compatible": plan["already_compatible"],\n        "removed_blank_defaults": removed_blank_defaults,\n        "message": "job tracker initialized",\n    }\n'''
-new_mutation = '''    # All structure + schema mutations are one Google Sheets batch transaction.\n    # If any request is invalid, Sheets rejects the entire batch instead of leaving partial tabs.\n    requests, _new_ids = _build_initialization_requests(sh, plan)\n    if requests:\n        sh.batch_update({"requests": requests})\n\n    created = list(plan["create"])\n    configured = [*plan["create"], *plan["configure_blank"]]\n    removed_blank_defaults = list(plan["remove_blank_defaults"])\n    return {\n        "ok": True,\n        "dry_run": False,\n        "schema_version": SCHEMA_VERSION,\n        "regions": plan["regions"],\n        "created": created,\n        "configured": configured,\n        "already_compatible": plan["already_compatible"],\n        "removed_blank_defaults": removed_blank_defaults,\n        "message": "job tracker initialized atomically",\n    }\n'''
-text = replace_once(text, old_mutation, new_mutation, "replace sequential initializer")
-job_path.write_text(text, encoding="utf-8")
-
-hostile = r'''from __future__ import annotations
 
 import inspect
 
@@ -307,7 +276,3 @@ def test_sync_real_write_resolves_with_write_scope(monkeypatch):
     assert args[args.index("--gid") + 1] == "2718"
     assert args[args.index("--location") + 1] == "Shanghai"
     assert "--dry-run-sheet" not in args
-'''
-(ROOT / "tests" / "test_job_tracker_hostile_v11.py").write_text(hostile, encoding="utf-8")
-
-print("V11_ATOMIC_REPAIR_PATCHED")
