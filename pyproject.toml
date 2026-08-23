@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobs-scraper"
-version = "1.0.0"
-description = "Multi-source SG product-management job scraper (LinkedIn / Jora / JobStreet) with cross-source dedup, visa signal detection, and a local MCP server + Agent Skill wrapper."
+version = "1.1.0"
+description = "Multi-source product-management job scraper with LinkedIn/Jora/JobStreet integrations, a local MCP server + Agent Skill, and portable Region-Raw/Region-Selected Google Sheet Job Tracker onboarding."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "danielcanfly" }]
-keywords = ["jobs", "scraper", "linkedin", "jora", "jobstreet", "singapore", "product-manager", "mcp"]
+keywords = ["jobs", "scraper", "linkedin", "jora", "jobstreet", "product-manager", "mcp", "google-sheets"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -41,10 +41,10 @@ dev = [
 Homepage = "https://github.com/danielcanfly/jobs-scraper"
 Repository = "https://github.com/danielcanfly/jobs-scraper"
 
-# Canonical dependency source. requirements.txt is generated/mirrored from
-# this file (see setup.sh). Edit this file when bumping a dependency.
+# Canonical dependency source. requirements.txt mirrors this dependency set.
+# v1.1 ships both the frozen v1.0 entrypoint and the portable tracker entrypoint.
 [tool.setuptools]
-py-modules = ["sg_product_jobs"]
+py-modules = ["sg_product_jobs", "server", "server_v1_1", "job_tracker"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]
