@@ -1,0 +1,56 @@
+name: v1.1.1 hardening identity refresh
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [hardening/v1.1.1-repo-hygiene]
+    paths: [.github/workflows/v111-hardening-refresh.yml]
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening/v1.1.1-repo-hygiene
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Refresh bounded v1.1.1 identity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          replacements = {
+              Path('pyproject.toml'): [('version = "1.1.0"', 'version = "1.1.1"')],
+              Path('.codex-plugin/plugin.json'): [('"version": "1.1.0"', '"version": "1.1.1"')],
+              Path('skills/jobs-scraper/SKILL.md'): [('  version: "1.1.0"', '  version: "1.1.1"')],
+              Path('server_v1_1.py'): [
+                  ('jobs-scraper MCP v1.1.0:', 'jobs-scraper MCP v1.1.1:'),
+                  ('version="1.1.0"', 'version="1.1.1"'),
+              ],
+              Path('requirements.txt'): [
+                  ('#    提供 crawl_jobs / sync_jobs_to_sheet / audit_sheet / get_stats 四個 tools',
+                   '#    v1.1.x provides crawl_jobs / initialize_job_tracker / sync_jobs_to_sheet / audit_sheet / get_stats'),
+              ],
+          }
+          for path, pairs in replacements.items():
+              text = path.read_text()
+              for old, new in pairs:
+                  if old not in text:
+                      raise SystemExit(f'missing expected anchor in {path}: {old}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+          PY
+          python -m pip install --quiet 'uv>=0.8,<0.9'
+          uv lock
+          python scripts/check_repo_hygiene.py
+      - name: Commit refreshed identity and self-remove workflow
+        run: |
+          rm .github/workflows/v111-hardening-refresh.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: align v1.1.1 identity and lock' || exit 0
+          git push origin HEAD:hardening/v1.1.1-repo-hygiene
