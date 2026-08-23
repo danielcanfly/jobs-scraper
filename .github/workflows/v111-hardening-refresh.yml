@@ -8,9 +8,12 @@ on:
   push:
     branches: [hardening/v1.1.1-repo-hygiene]
     paths: [.github/workflows/v111-hardening-refresh.yml]
+  pull_request:
+    branches: [main]
 
 jobs:
   refresh:
+    if: github.head_ref == 'hardening/v1.1.1-repo-hygiene' || github.ref_name == 'hardening/v1.1.1-repo-hygiene'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
