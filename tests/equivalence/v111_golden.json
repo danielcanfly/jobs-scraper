@@ -103,7 +103,7 @@
     "none": ""
   },
   "visa": {
-    "hard": "⚠️ HARD: Singapore citizens only",
+    "hard": "⚠️ HARD: must be Singapore citizen",
     "soft": "do not require visa sponsorship",
     "positive": "Visa sponsorship is available",
     "none": ""
