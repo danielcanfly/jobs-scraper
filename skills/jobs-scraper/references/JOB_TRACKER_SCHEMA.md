@@ -4,7 +4,7 @@ This is the public Google Sheet contract for jobs-scraper v1.1.0.
 
 It is derived from the visible Region-Raw / Region-Selected structure of the reference `Job List_New` workbook. Private hidden backend tabs are intentionally excluded from the portable template.
 
-> Release status: this contract is not self-certified. A frozen v1.1.0 candidate must pass fresh independent qualification before merge/release.
+> Release status: this contract is not self-certified. A frozen v1.1.0 candidate must pass exact-head CI and fresh independent qualification before merge/release.
 
 ## Region pairs
 
