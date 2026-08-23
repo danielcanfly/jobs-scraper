@@ -44,6 +44,9 @@ jobs:
       - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
 
+      - name: Verify behaviour equivalence harness freeze
+        run: .venv/bin/python scripts/check_equivalence_freeze.py
+
       - name: Run v1.1.1 behaviour equivalence gate
         run: .venv/bin/python -m pytest -q tests/equivalence/test_v111_equivalence.py
 
