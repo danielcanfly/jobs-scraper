@@ -671,7 +671,7 @@ def push_to_sheet(jobs: list[dict], sheet_url: str,
     if resolved_gid is None:
         raise ValueError(
             "❌ 沒帶 gid 會撞到 jobs_raw (第一個 tab)\n"
-            "   修法: URL 帶 #gid=1119491672  或  --gid 1119491672  或  --to-sheet 用 SG_RAW_URL"
+            "   修法: URL 帶 #gid=<worksheet-gid>  或  --gid <worksheet-gid>  或  --to-sheet 用 SG_RAW_URL"
         )
     gid = str(resolved_gid)
 

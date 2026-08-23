@@ -24,6 +24,6 @@ beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
 
 # 7. MCP server (給 Codex / 其他 MCP 工具用)
-#    提供 crawl_jobs / sync_jobs_to_sheet / audit_sheet / get_stats 四個 tools
+#    v1.1.x provides crawl_jobs / initialize_job_tracker / sync_jobs_to_sheet / audit_sheet / get_stats
 #    升 MCP v2 stable line (FastMCP 已 rename 為 MCPServer)
 mcp>=2.0,<3

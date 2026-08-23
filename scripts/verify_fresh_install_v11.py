@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Extend the qualified fresh-install harness with v1.1 MCP checks in the same clean copy."""
+"""Extend the qualified fresh-install harness with v1.1.x MCP checks in the same clean copy."""
 from __future__ import annotations
 
-import asyncio
 import subprocess
 import sys
 import tempfile
@@ -26,13 +25,15 @@ def main() -> int:
     script = dst / "_list_v11_tools.py"
     script.write_text(
         "import asyncio, server_v1_1\n"
+        "from importlib.metadata import version as package_version\n"
         "async def go():\n"
         "    tools = await server_v1_1.mcp.list_tools()\n"
         "    names = sorted(t.name for t in tools)\n"
         "    print('v1.1 tools:', names)\n"
         "    need = ['audit_sheet','crawl_jobs','get_stats','initialize_job_tracker','sync_jobs_to_sheet']\n"
         "    assert names == need, (names, need)\n"
-        "    assert server_v1_1.mcp.version == '1.1.0'\n"
+        "    expected_version = package_version('jobs-scraper')\n"
+        "    assert server_v1_1.mcp.version == expected_version, (server_v1_1.mcp.version, expected_version)\n"
         "asyncio.run(go())\n",
         encoding="utf-8",
     )
