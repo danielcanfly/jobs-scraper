@@ -9,20 +9,17 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 import job_tracker as JT
+import region_policy as RP
 import runtime_core as RT
 import server as legacy
 import sg_product_jobs as M
 
 Source = RT.Source
 Range = RT.Range
-Region = Literal["SG", "TW", "China"]
+Region = RP.PublicRegion
 
-REGION_LOCATIONS: dict[str, str] = {"SG": "Singapore", "TW": "Taiwan", "China": "Shanghai"}
-SOURCE_LABELS: dict[str, str] = {
-    "linkedin": "LinkedIn / jobs-scraper",
-    "jora": "Jora / jobs-scraper",
-    "jobstreet": "JobStreet / jobs-scraper",
-}
+REGION_LOCATIONS = RP.REGION_LOCATIONS
+SOURCE_LABELS = RP.SOURCE_LABELS
 
 
 class TrackerInitResult(BaseModel):
@@ -136,9 +133,7 @@ def _cfg_or_error():
 
 
 def _source_region_supported(source: str, region: str) -> tuple[bool, str | None]:
-    if source in {"jora", "jobstreet"} and region != "SG":
-        return False, f"{source} is currently Singapore-only in v1.1.0; use source='linkedin' for region={region}"
-    return True, None
+    return RP.source_region_supported(source, region)
 
 
 @mcp.tool(

@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+import region_policy as RP
+
 SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 SCOPES_WRITE = ["https://www.googleapis.com/auth/spreadsheets"]
 
@@ -89,14 +91,8 @@ VALIDATIONS: dict[int, tuple[str, ...]] = {
     ),
 }
 
-REGION_ALIASES = {
-    "sg": "SG", "singapore": "SG",
-    "tw": "TW", "taiwan": "TW", "台灣": "TW", "台湾": "TW",
-    "cn": "China", "china": "China", "mainland china": "China",
-    "中國": "China", "中国": "China", "shanghai": "China",
-}
-
-DEFAULT_REGIONS = ("SG", "TW", "China")
+REGION_ALIASES = RP.REGION_ALIASES
+DEFAULT_REGIONS = RP.DEFAULT_REGIONS
 DEFAULT_SHEET_TITLES = {"sheet1", "工作表1", "工作表 1"}
 
 # Pixel widths derived from the exported reference Job List_New workbook:
