@@ -21,7 +21,7 @@ def _by_name(name: str):
 
 def test_v11_server_version_and_tool_set():
     import server_v1_1
-    assert server_v1_1.mcp.version == "1.1.0"
+    assert server_v1_1.mcp.version == "1.1.1"
     assert {t.name for t in _tools()} == {
         "crawl_jobs",
         "initialize_job_tracker",
