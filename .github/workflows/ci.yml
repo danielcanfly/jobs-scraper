@@ -1,7 +1,7 @@
 name: ci
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
@@ -20,6 +20,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply bounded Q64 README repair
+        if: github.event_name == 'push' && github.ref == 'refs/heads/repair/audit-v1.0.0'
+        run: python scripts/apply_q64_readme_fix.py
+
+      - name: Commit bounded Q64 README repair
+        if: github.event_name == 'push' && github.ref == 'refs/heads/repair/audit-v1.0.0'
+        run: |
+          git add README.md
+          if ! git diff --cached --quiet; then
+            git config user.name 'jobs-scraper primary repair'
+            git config user.email 'primary-repair@jobs-scraper.local'
+            git commit -m 'Fix Q64 executable README quick start'
+            git push origin HEAD:repair/audit-v1.0.0
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
