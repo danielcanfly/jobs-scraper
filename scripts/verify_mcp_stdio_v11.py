@@ -37,7 +37,7 @@ async def run() -> None:
             assert names == expected, f"unexpected v1.1 tool set: {sorted(names)}"
 
             sync = next(t for t in tools.tools if t.name == "sync_jobs_to_sheet")
-            props = (sync.inputSchema or {}).get("properties") or {}
+            props = (sync.input_schema or {}).get("properties") or {}
             assert "region" in props
             assert "gid" not in props
             assert "sheet_id" not in props
