@@ -44,6 +44,9 @@ jobs:
       - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
 
+      - name: Run v1.1.1 behaviour equivalence gate
+        run: .venv/bin/python -m pytest -q tests/equivalence/test_v111_equivalence.py
+
       - name: Run full pytest suite
         run: .venv/bin/python -m pytest -q
 
