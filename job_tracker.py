@@ -99,10 +99,20 @@ REGION_ALIASES = {
 DEFAULT_REGIONS = ("SG", "TW", "China")
 DEFAULT_SHEET_TITLES = {"sheet1", "工作表1", "工作表 1"}
 
+# Pixel widths derived from the exported reference Job List_New workbook:
+# A:B=15.13, C:E=17.0, F:H=23.88, I:M=18.88, N:Q=18.25,
+# R:Y=14.88, Z:AA=40.13 Excel width units.
+# Conversion follows the effective exported Google-Sheets-to-XLSX dimensions.
 COLUMN_WIDTHS = (
-    110, 90, 110, 135, 170, 160, 260, 520, 190, 120, 280, 190, 175,
-    90, 120, 95, 245, 100, 100, 125, 120, 120, 125, 115, 135, 340, 340,
+    111, 111,                       # A:B
+    124, 124, 124,                  # C:E
+    172, 172, 172,                  # F:H
+    137, 137, 137, 137, 137,        # I:M
+    133, 133, 133, 133,             # N:Q
+    109, 109, 109, 109, 109, 109, 109, 109,  # R:Y
+    286, 286,                       # Z:AA
 )
+HEADER_HEIGHT_PX = 52  # Reference export: 39 pt ~= 52 px at 96 dpi.
 
 HEADER_RGB = {"red": 0.101960786, "green": 0.21568628, "blue": 0.33333334}
 WHITE_RGB = {"red": 1.0, "green": 1.0, "blue": 1.0}
@@ -216,7 +226,11 @@ def _header_values(ws) -> list[str]:
 
 
 def worksheet_is_blank(ws) -> bool:
-    return not any(cell.strip() for row in ws.get_all_values() for cell in row)
+    # Fast path: a populated first row is enough to prove non-blank.
+    if any(str(cell).strip() for cell in ws.row_values(1)):
+        return False
+    # A custom workbook may have row 1 blank but data lower down. Only then do the broader read.
+    return not any(str(cell).strip() for row in ws.get_all_values() for cell in row)
 
 
 def validate_worksheet_schema(ws) -> dict[str, Any]:
@@ -384,7 +398,7 @@ def _schema_requests(sheet_id: int, row_count: int) -> list[dict[str, Any]]:
     requests.append({
         "updateDimensionProperties": {
             "range": {"sheetId": int(sheet_id), "dimension": "ROWS", "startIndex": 0, "endIndex": 1},
-            "properties": {"pixelSize": 42},
+            "properties": {"pixelSize": HEADER_HEIGHT_PX},
             "fields": "pixelSize",
         }
     })
@@ -392,6 +406,12 @@ def _schema_requests(sheet_id: int, row_count: int) -> list[dict[str, Any]]:
 
 
 def _apply_schema(sh, ws) -> None:
+    # Existing blank user tabs can be smaller than the A:AA/1000-row contract.
+    # Grow them before raw Sheets API requests so updateCells/ranges stay in-bounds.
+    if int(ws.col_count) < SCHEMA_COLUMNS:
+        ws.add_cols(SCHEMA_COLUMNS - int(ws.col_count))
+    if int(ws.row_count) < DEFAULT_ROWS:
+        ws.add_rows(DEFAULT_ROWS - int(ws.row_count))
     sh.batch_update({"requests": _schema_requests(ws.id, ws.row_count)})
 
 
