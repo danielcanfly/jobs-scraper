@@ -1,0 +1,73 @@
+name: phase-b2-region-policy
+
+on:
+  push:
+    branches: [feature/v1.2.0-architecture-cleanup]
+    paths: [.github/workflows/_phase_b2_region_policy.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1.2.0-architecture-cleanup
+          fetch-depth: 0
+
+      - name: Apply bounded region-policy migration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('job_tracker.py')
+          text = p.read_text(encoding='utf-8')
+          anchor = 'from typing import Any, Iterable\n\n'
+          assert text.count(anchor) == 1
+          assert 'import region_policy as RP' not in text
+          text = text.replace(anchor, anchor + 'import region_policy as RP\n\n', 1)
+          start = text.index('REGION_ALIASES = {')
+          end = text.index('DEFAULT_SHEET_TITLES =', start)
+          text = text[:start] + '''REGION_ALIASES = RP.REGION_ALIASES
+          DEFAULT_REGIONS = RP.DEFAULT_REGIONS
+          ''' + text[end:]
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('server_v1_1.py')
+          text = p.read_text(encoding='utf-8')
+          anchor = 'import job_tracker as JT\nimport runtime_core as RT\n'
+          assert text.count(anchor) == 1
+          text = text.replace(anchor, 'import job_tracker as JT\nimport region_policy as RP\nimport runtime_core as RT\n', 1)
+          text = text.replace('Region = Literal["SG", "TW", "China"]', 'Region = RP.PublicRegion', 1)
+
+          start = text.index('REGION_LOCATIONS:')
+          end = text.index('\n\n\nclass TrackerInitResult', start)
+          text = text[:start] + '''REGION_LOCATIONS = RP.REGION_LOCATIONS
+          SOURCE_LABELS = RP.SOURCE_LABELS''' + text[end:]
+
+          start = text.index('def _source_region_supported(')
+          end = text.index('\n\n\n@mcp.tool(', start)
+          text = text[:start] + '''def _source_region_supported(source: str, region: str) -> tuple[bool, str | None]:
+              return RP.source_region_supported(source, region)''' + text[end:]
+
+          p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Assert migration scope
+        run: |
+          python -m compileall -q region_policy.py job_tracker.py server_v1_1.py
+          grep -q 'REGION_ALIASES = RP.REGION_ALIASES' job_tracker.py
+          grep -q 'Region = RP.PublicRegion' server_v1_1.py
+          grep -q 'return RP.source_region_supported' server_v1_1.py
+          git diff --check
+
+      - name: Commit migration and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/_phase_b2_region_policy.yml
+          git add job_tracker.py server_v1_1.py region_policy.py
+          git commit -m 'refactor: centralize tracker region policy'
+          git push origin HEAD:feature/v1.2.0-architecture-cleanup
