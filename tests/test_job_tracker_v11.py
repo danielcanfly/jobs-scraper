@@ -123,15 +123,31 @@ def test_schema_request_contains_freeze_validation_conditional_and_widths():
     assert dimensions[-1]["properties"]["pixelSize"] == 52
 
 
-def test_apply_schema_grows_small_blank_grid_before_batch_update():
+def test_apply_schema_grows_small_blank_grid_in_same_atomic_batch():
     ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
     sh = FakeSpreadsheet([ws])
     JT._apply_schema(sh, ws)
-    assert ws.col_count == 27
-    assert ws.row_count == 1000
-    assert ws.added_cols == 17
-    assert ws.added_rows == 950
+
+    # Atomic v1.1 intentionally does not perform separate ws.add_cols/add_rows calls.
+    # The resize and schema writes must share one spreadsheets.batchUpdate request.
+    assert ws.col_count == 10
+    assert ws.row_count == 50
+    assert ws.added_cols == 0
+    assert ws.added_rows == 0
     assert len(sh.batch_bodies) == 1
+
+    requests = sh.batch_bodies[0]["requests"]
+    resize = requests[0]["updateSheetProperties"]
+    assert resize["properties"]["sheetId"] == ws.id
+    assert resize["properties"]["gridProperties"] == {
+        "rowCount": 1000,
+        "columnCount": 27,
+    }
+    assert resize["fields"] == "gridProperties.rowCount,gridProperties.columnCount"
+    assert any(
+        r.get("updateCells", {}).get("start", {}).get("sheetId") == ws.id
+        for r in requests[1:]
+    )
 
 
 def test_plan_initialize_empty_default_sheet_creates_pairs_and_removes_default():
@@ -157,7 +173,7 @@ def test_plan_initialize_preserves_compatible_existing_pair():
 
 def test_plan_initialize_fails_closed_on_nonempty_schema_mismatch():
     sh = FakeSpreadsheet([
-        FakeWorksheet("SG-Raw", [["Status", "Priority", "Date"]], wid=11),
+        FakeWorksheet("SG-Raw", [["Status", "Priority", "Date"]], wid=11, col_count=27),
         FakeWorksheet("SG-Selected", [list(JT.HEADERS)], wid=12, col_count=27),
     ])
     plan = JT.plan_initialize(sh, ["SG"])
