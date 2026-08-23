@@ -1,6 +1,6 @@
 # v1.1 implementation CI probe
 
-Commit at checkout: 28aa1eac29085cab41c77fc17b316048eda74ef2
+Commit at checkout: 8447a60aaa72dd3f0e6d8713c6adf1e048ade6f6
 
 bootstrap_uv_exit_code: 0
 
@@ -8,7 +8,7 @@ bootstrap_uv_exit_code: 0
 exit_code: 0
 ```text
 Using CPython 3.11.16 interpreter at: /opt/hostedtoolcache/Python/3.11.16/x64/bin/python3
-Resolved 58 packages in 0.64ms
+Resolved 58 packages in 0.65ms
 ```
 
 ## sync
@@ -97,25 +97,10 @@ exit_code: 0
 ```
 
 ## pytest
-exit_code: 1
+exit_code: 0
 ```text
-........................................................F............... [ 64%]
+........................................................................ [ 64%]
 ........................................                                 [100%]
-=================================== FAILURES ===================================
-_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
-
-    def test_apply_schema_grows_small_blank_grid_before_batch_update():
-        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
-        sh = FakeSpreadsheet([ws])
-        JT._apply_schema(sh, ws)
->       assert ws.col_count == 27
-E       assert 10 == 27
-E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f10185f2bd0>.col_count
-
-tests/test_job_tracker_v11.py:130: AssertionError
-=========================== short test summary info ============================
-FAILED tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
- +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f10185f2bd0>.col_count
 ```
 
 ## doctor
@@ -147,11 +132,11 @@ exit_code: 0
 ```text
    Updating https://github.com/agentskills/agentskills.git (69ef37e9424c0a7ea9dd2293b559e43ec8176379)
     Updated https://github.com/agentskills/agentskills.git (69ef37e9424c0a7ea9dd2293b559e43ec8176379)
-Resolved 5 packages in 915ms
+Resolved 5 packages in 471ms
    Building skills-ref @ git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
       Built skills-ref @ git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
-Prepared 4 packages in 376ms
-Installed 4 packages in 2ms
+Prepared 4 packages in 408ms
+Installed 4 packages in 1ms
  + python-dateutil==2.9.0.post0
  + six==1.17.0
  + skills-ref==0.1.0 (from git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref)
@@ -182,62 +167,38 @@ STDIO_MCP_V11_SMOKE_PASS ['audit_sheet', 'crawl_jobs', 'get_stats', 'initialize_
 ```
 
 ## fresh_v10
-exit_code: 1
+exit_code: 0
 ```text
-[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-fresh-lf63sbr3
+[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-fresh-cpo0sudo
 [fresh-install] copied
-[fresh-install] venv: /tmp/jobs-scraper-fresh-lf63sbr3/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
+[fresh-install] venv: /tmp/jobs-scraper-fresh-cpo0sudo/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
 [fresh-install] deps installed (incl. pytest from [dev])
 [fresh-install] compile OK
-FAIL: pytest: ........................................................F............... [ 64%]
-........................................                                 [100%]
-=================================== FAILURES ===================================
-_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
+[fresh-install] pytest OK
+[fresh-install] server import OK
+[fresh-install] MCP tools listed: tools: ['audit_sheet', 'crawl_jobs', 'get_stats', 'sync_jobs_to_sheet']
+[fresh-install] SKILL.md frontmatter OK
 
-    def test_apply_schema_grows_small_blank_grid_before_batch_update():
-        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
-        sh = FakeSpreadsheet([ws])
-        JT._apply_schema(sh, ws)
->       assert ws.col_count == 27
-E       assert 10 == 27
-E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7fc22abf6b50>.col_count
-
-/tmp/jobs-scraper-fresh-lf63sbr3/tests/test_job_tracker_v11.py:130: AssertionError
-=========================== short test summary info ============================
-FAILED ../../../../../tmp/jobs-scraper-fresh-lf63sbr3/tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
- +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7fc22abf6b50>.col_count
-
-
+🎉 fresh install qualified at /tmp/jobs-scraper-fresh-cpo0sudo
 ```
 
 ## fresh_v11
-exit_code: 1
+exit_code: 0
 ```text
-[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-v11-fresh-undjwl05
+[fresh-install] src=/home/runner/work/jobs-scraper/jobs-scraper  dst=/tmp/jobs-scraper-v11-fresh-igwzocaw
 [fresh-install] copied
-[fresh-install] venv: /tmp/jobs-scraper-v11-fresh-undjwl05/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
+[fresh-install] venv: /tmp/jobs-scraper-v11-fresh-igwzocaw/.venv/bin/python (using /home/runner/work/jobs-scraper/jobs-scraper/.venv/bin/python3.11)
 [fresh-install] deps installed (incl. pytest from [dev])
 [fresh-install] compile OK
-FAIL: pytest: ........................................................F............... [ 64%]
-........................................                                 [100%]
-=================================== FAILURES ===================================
-_________ test_apply_schema_grows_small_blank_grid_before_batch_update _________
+[fresh-install] pytest OK
+[fresh-install] server import OK
+[fresh-install] MCP tools listed: tools: ['audit_sheet', 'crawl_jobs', 'get_stats', 'sync_jobs_to_sheet']
+[fresh-install] SKILL.md frontmatter OK
 
-    def test_apply_schema_grows_small_blank_grid_before_batch_update():
-        ws = FakeWorksheet("SG-Raw", [], row_count=50, col_count=10)
-        sh = FakeSpreadsheet([ws])
-        JT._apply_schema(sh, ws)
->       assert ws.col_count == 27
-E       assert 10 == 27
-E        +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f128da46690>.col_count
-
-/tmp/jobs-scraper-v11-fresh-undjwl05/tests/test_job_tracker_v11.py:130: AssertionError
-=========================== short test summary info ============================
-FAILED ../../../../../tmp/jobs-scraper-v11-fresh-undjwl05/tests/test_job_tracker_v11.py::test_apply_schema_grows_small_blank_grid_before_batch_update - assert 10 == 27
- +  where 10 = <test_job_tracker_v11.FakeWorksheet object at 0x7f128da46690>.col_count
-
-
-FAIL: legacy fresh-install gate failed before v1.1 checks
+🎉 fresh install qualified at /tmp/jobs-scraper-v11-fresh-igwzocaw
+[fresh-install-v1.1] v1.1 tools: ['audit_sheet', 'crawl_jobs', 'get_stats', 'initialize_job_tracker', 'sync_jobs_to_sheet']
+[fresh-install-v1.1] STDIO_MCP_V11_SMOKE_PASS ['audit_sheet', 'crawl_jobs', 'get_stats', 'initialize_job_tracker', 'sync_jobs_to_sheet']
+FRESH_INSTALL_V11_PASS
 ```
 
 ## production_id_hygiene
