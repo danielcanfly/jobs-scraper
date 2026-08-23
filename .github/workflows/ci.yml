@@ -1,7 +1,7 @@
 name: ci
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
@@ -20,8 +20,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,43 +27,21 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Apply bounded primary correction
-        if: github.event_name == 'push' && github.ref == 'refs/heads/repair/audit-v1.0.0'
-        run: |
-          if [ -f scripts/apply_primary_correction.py ]; then
-            python scripts/apply_primary_correction.py
-          fi
-
       - name: Install lock tooling
         run: python -m pip install --quiet 'uv>=0.8,<0.9'
 
-      - name: Generate lock on repair branch and commit bounded corrections
-        if: github.event_name == 'push' && github.ref == 'refs/heads/repair/audit-v1.0.0'
-        run: |
-          uv lock
-          git add -A
-          if ! git diff --cached --quiet; then
-            git config user.name 'jobs-scraper primary repair'
-            git config user.email 'primary-repair@jobs-scraper.local'
-            git commit -m 'Primary correction: behavioral MCP tests, safety closure, reproducible lock'
-            git push origin HEAD:repair/audit-v1.0.0
-          fi
-
-      - name: Verify lock is current
+      - name: Verify reproducible lock
         run: |
           test -f uv.lock
           uv lock --check
 
-      - name: Install package + dev deps
-        run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --quiet --upgrade pip
-          .venv/bin/python -m pip install --quiet -e ".[dev]"
+      - name: Install locked environment
+        run: uv sync --locked --extra dev --python 3.11
 
       - name: Compile all
         run: .venv/bin/python -m compileall -q .
 
-      - name: Run original helper regression explicitly
+      - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
 
       - name: Run full pytest suite
