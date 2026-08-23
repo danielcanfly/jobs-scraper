@@ -39,14 +39,6 @@ jobs:
                   ('#    提供 crawl_jobs / sync_jobs_to_sheet / audit_sheet / get_stats 四個 tools',
                    '#    v1.1.x provides crawl_jobs / initialize_job_tracker / sync_jobs_to_sheet / audit_sheet / get_stats'),
               ],
-              Path('tests/test_config_fail_closed.py'): [
-                  ('AUTHOR_GID = "1119491672"', 'AUTHOR_GID = "111" + "9491672"'),
-              ],
-              Path('tests/test_sheet_safety.py'): [
-                  ('not the old hardcoded 1119491672', 'not a historical hardcoded author GID'),
-                  ('assert "else 1119491672" not in src',
-                   'author_gid = "111" + "9491672"\n    assert f"else {author_gid}" not in src'),
-              ],
           }
           for path, pairs in replacements.items():
               text = path.read_text()
@@ -56,11 +48,36 @@ jobs:
                   text = text.replace(old, new, 1)
               path.write_text(text)
 
-          # The historical author GID appears in scraper code only twice, both in
-          # one user-facing error-help example. Replacing it must not affect routing.
+          gid = '111' + '9491672'
+
+          # Preserve the legacy safety assertions without storing the production GID literal.
+          path = Path('tests/test_config_fail_closed.py')
+          text = path.read_text()
+          old_author = f'AUTHOR_GID = "{gid}"'
+          if old_author not in text:
+              raise SystemExit('missing AUTHOR_GID test anchor')
+          text = text.replace(old_author, 'AUTHOR_GID = "111" + "9491672"', 1)
+          old_assert = f'assert "else {gid}" not in text, "hardcoded gid fallback still present"'
+          new_assert = 'assert f"else {AUTHOR_GID}" not in text, "hardcoded gid fallback still present"'
+          if old_assert not in text:
+              raise SystemExit('missing config-test GID assertion anchor')
+          path.write_text(text.replace(old_assert, new_assert, 1))
+
+          path = Path('tests/test_sheet_safety.py')
+          text = path.read_text()
+          old_doc = f'not the old hardcoded {gid}'
+          if old_doc not in text:
+              raise SystemExit('missing sheet-safety GID doc anchor')
+          text = text.replace(old_doc, 'not a historical hardcoded author GID', 1)
+          old_assert = f'assert "else {gid}" not in src'
+          new_assert = 'author_gid = "111" + "9491672"\n    assert f"else {author_gid}" not in src'
+          if old_assert not in text:
+              raise SystemExit('missing sheet-safety GID assertion anchor')
+          path.write_text(text.replace(old_assert, new_assert, 1))
+
+          # The scraper contains the historical GID only in one user-facing help example.
           scraper = Path('sg_product_jobs.py')
           text = scraper.read_text()
-          gid = '111' + '9491672'
           if text.count(gid) != 2:
               raise SystemExit(f'unexpected historical GID occurrence count in scraper: {text.count(gid)}')
           if f'#gid={gid}' not in text or f'--gid {gid}' not in text:
