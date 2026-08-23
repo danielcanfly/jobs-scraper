@@ -1,6 +1,6 @@
 {
   "name": "jobs-scraper",
-  "version": "1.0.0",
-  "description": "Search, audit, and sync product-management job postings with a local MCP-backed workflow.",
+  "version": "1.1.0",
+  "description": "Search jobs and initialize, audit, or sync a portable Region-Raw/Region-Selected Job Tracker with a local MCP workflow.",
   "skills": "./skills/"
 }

@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [main, repair/**]
+    branches: [main, repair/**, feature/**]
   pull_request:
     branches: [main]
 
@@ -58,14 +58,20 @@ jobs:
       - name: Validate .codex-plugin manifest
         run: |
           test -f .codex-plugin/plugin.json
-          .venv/bin/python -c "import json; m=json.load(open('.codex-plugin/plugin.json')); assert m['name']=='jobs-scraper'; assert m['version']=='1.0.0'; assert m['skills']=='./skills/'"
+          .venv/bin/python -c "import json; m=json.load(open('.codex-plugin/plugin.json')); assert m['name']=='jobs-scraper'; assert m['version']=='1.1.0'; assert m['skills']=='./skills/'"
 
-      - name: Verify MCP stdio transport
+      - name: Verify legacy v1.0 MCP stdio transport
         run: .venv/bin/python scripts/verify_mcp_stdio.py
 
-      - name: Fresh-install verification
+      - name: Verify v1.1 tracker MCP stdio transport
+        run: .venv/bin/python scripts/verify_mcp_stdio_v11.py
+
+      - name: Fresh-install legacy verification
         run: .venv/bin/python scripts/verify_fresh_install.py
+
+      - name: Fresh-install v1.1 tracker verification
+        run: .venv/bin/python scripts/verify_fresh_install_v11.py
 
       - name: Author production Sheet ID must not appear in distributable surfaces
         run: |
-          ! git grep -n '1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8' -- 'sg_product_jobs.py' 'server.py' 'setup.sh' '.codex-plugin/' 'skills/' 'scripts/' 'tests/' 'pyproject.toml' '.env.example' 'README.md' || (echo 'FAIL: author Sheet ID leaked into distributable/test surfaces'; exit 1)
+          ! git grep -n '1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8' -- 'sg_product_jobs.py' 'server.py' 'server_v1_1.py' 'job_tracker.py' 'setup.sh' '.codex-plugin/' 'skills/' 'scripts/' 'tests/' 'pyproject.toml' '.env.example' 'README.md' || (echo 'FAIL: author Sheet ID leaked into distributable/test surfaces'; exit 1)
