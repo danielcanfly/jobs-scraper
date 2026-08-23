@@ -20,7 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-AUTHOR_SHEET_ID = "1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8"
+AUTHOR_SHEET_ID = "".join(("1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-", "Fc42jAZ8"))
 AUTHOR_GID = "1119491672"
 
 

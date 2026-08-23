@@ -24,7 +24,7 @@ SETUP_SH = REPO_ROOT / "setup.sh"
 
 # The audited author Sheet ID is forbidden in CI artifacts except as part of an
 # explicit "must not appear" guard.
-AUTHOR_SHEET_ID = "1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-Fc42jAZ8"
+AUTHOR_SHEET_ID = "".join(("1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-", "Fc42jAZ8"))
 
 
 # ── Q43: set -euo pipefail at the top ──────────────────────────────

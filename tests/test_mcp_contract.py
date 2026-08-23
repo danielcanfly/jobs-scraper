@@ -133,8 +133,10 @@ def test_max_pages_bounded():
 # ── Q22: crawl_jobs annotation (read-only, open-world) ─────────────
 def test_crawl_jobs_annotations():
     t = _by_name("crawl_jobs")
-    assert t.annotations.read_only_hint is True
+    assert t.annotations.read_only_hint is False
     assert t.annotations.open_world_hint is True
+    assert t.annotations.destructive_hint is False
+    assert t.annotations.idempotent_hint is False
 
 
 # ── Q23: audit_sheet annotation (read-only, NOT open-world) ────────

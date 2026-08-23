@@ -136,7 +136,7 @@ def main(target_dir: str | None = None) -> int:
         return 1
     print("[fresh-install] compile OK")
 
-    # 5. pytest (無 creds 也能跑的 27 helper test + 4 contract test 都會 pass)
+    # 5. full pytest discovery (includes root helper regressions + contract tests)
     r = _run([str(vpy), "-m", "pytest", "-q", str(dst)], timeout=120)
     if r.returncode != 0:
         print(f"FAIL: pytest: {r.stdout}\n{r.stderr}")

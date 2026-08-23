@@ -794,9 +794,10 @@ def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
                           skipped_dup: int = 0, skipped_no_jd: int = 0) -> dict:
     """把 new_rows 寫到 sheet, 回傳 stats dict (跟原本 push_to_sheet 一樣格式)。
 
-    兩段式寫入 (防 F10 公式注入):
-      - Phase 1 (E 欄 hyperlink formula):  用 USER_ENTERED → 公式會被解析
-      - Phase 2 (A/B/C/D/F/G/H/I/J/K 11 欄 - 1 = 10 欄文字): 用 RAW → 全部當純文字
+    三段式寫入 (防 F10 公式注入，且 intentional formula 最後才啟用):
+      - Phase 1: A:D 用 RAW
+      - Phase 2: F:K 用 RAW
+      - Phase 3: E 欄 hyperlink formula 用 USER_ENTERED
     只有我們自己生成的 E 欄 HYPERLINK 會被當公式, 其他所有外部 scraped text
     (title / company / JD / location / source label / visa) 都不能被當公式執行。
     """
@@ -807,21 +808,11 @@ def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
         extra = end_row - ws.row_count + 100
         print(f"  ⚠️  sheet 只有 {ws.row_count} rows, 加 {extra} rows 避免 overflow")
         ws.add_rows(extra)
-    # Phase 1: E 欄 hyperlink formula (用 USER_ENTERED, 讓 Google Sheets 解析 =HYPERLINK())
-    e_col_index = 4  # A=0, B=1, C=2, D=3, E=4
-    e_only_rows = [[r[e_col_index]] for r in new_rows]
-    ws.update(
-        range_name=f"E{next_row}:E{end_row}",
-        values=e_only_rows,
-        value_input_option="USER_ENTERED",
-    )
-    # Phase 2: 其他 10 欄 (A,B,C,D,F,G,H,I,J,K) 全部用 RAW 當純文字寫入
-    other_col_indices = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10]  # skip E
-    other_rows = [[r[i] for i in other_col_indices] for r in new_rows]
-    # 範圍: A-D (4 欄) + F-K (6 欄) — 但 gspread 要求連續範圍,
-    # 所以拆成 A{next_row}:D{end_row} 跟 F{next_row}:K{end_row} 兩段。
-    a_d_rows = [[r[i] for i in (0, 1, 2, 3)] for r in new_rows]   # A,B,C,D
-    f_k_rows = [[r[i] for i in (5, 6, 7, 8, 9, 10)] for r in new_rows]  # F,G,H,I,J,K
+    # External scraped text is written first as RAW. If a later data phase fails,
+    # the E-column live formula is never activated.
+    a_d_rows = [[r[i] for i in (0, 1, 2, 3)] for r in new_rows]
+    f_k_rows = [[r[i] for i in (5, 6, 7, 8, 9, 10)] for r in new_rows]
+    e_only_rows = [[r[4]] for r in new_rows]
     ws.update(
         range_name=f"A{next_row}:D{end_row}",
         values=a_d_rows,
@@ -831,6 +822,12 @@ def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
         range_name=f"F{next_row}:K{end_row}",
         values=f_k_rows,
         value_input_option="RAW",
+    )
+    # Intentional formula is the final phase.
+    ws.update(
+        range_name=f"E{next_row}:E{end_row}",
+        values=e_only_rows,
+        value_input_option="USER_ENTERED",
     )
     return {
         "written": len(new_rows),
@@ -1496,6 +1493,7 @@ def main():
                     help=f"寫入 Sheet 的 Source 欄位值 (default: {DEFAULT_SHEET_SOURCE})")
     ap.add_argument("--dry-run-sheet", action="store_true",
                     help="跟 --to-sheet 一起用，只印將寫入什麼、不真的寫")
+    ap.add_argument("--json-summary", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     seen_path = Path(args.seen_file)
@@ -1584,6 +1582,12 @@ def main():
         jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
     if not jobs:
         print("\n無資料，結束。")
+        if args.json_summary:
+            print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
+                "jobs_found": 0, "jobs_enriched": 0, "jobs_failed": 0,
+                "output_file": None, "written": 0, "skipped_dup": 0,
+                "skipped_no_jd": 0,
+            }, ensure_ascii=False, separators=(",", ":")))
         return
 
     # 1.5) 載入 JD cache (跨 run 從 *_jd.json 抓)，跳過當前將輸出的檔
@@ -1625,6 +1629,7 @@ def main():
         print(f"     seen file: {seen_path} ({total} 筆累計)")
 
     # 4) 寫到 Google Sheet (可選)
+    sheet_stats = {"written": 0, "skipped_dup": 0, "skipped_no_jd": 0}
     if args.to_sheet:
         if not args.with_jd:
             print("\n⚠️  --to-sheet 需要 --with-jd 才能填 JD 內容 (column H)")
@@ -1640,6 +1645,17 @@ def main():
                 location=location,
             )
             print(f"\n  結果: {sheet_stats}")
+
+    if args.json_summary:
+        print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
+            "jobs_found": len(jobs),
+            "jobs_enriched": ((stats.get("cached", 0) + stats.get("fetched", 0)) if stats else 0),
+            "jobs_failed": (stats.get("failed", 0) if stats else 0),
+            "output_file": str(out.resolve()),
+            "written": int(sheet_stats.get("written", 0)),
+            "skipped_dup": int(sheet_stats.get("skipped_dup", 0)),
+            "skipped_no_jd": int(sheet_stats.get("skipped_no_jd", 0)),
+        }, ensure_ascii=False, separators=(",", ":")))
 
 
 if __name__ == "__main__":

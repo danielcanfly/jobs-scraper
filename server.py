@@ -24,6 +24,7 @@ tool_timeout_sec = 7200 to allow full-JD runs to complete.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -147,7 +148,8 @@ mcp = MCPServer(
         "Do not paste service-account private keys into chat."
     ),
     instructions=(
-        "Reads (crawl_jobs, audit_sheet, get_stats) and writes (sync_jobs_to_sheet) are separate tools. "
+        "Google Sheet reads (audit_sheet, get_stats) and writes (sync_jobs_to_sheet) are separate tools. "
+        "crawl_jobs never writes Google Sheets but may update local crawl/cache artifacts. "
         "Sheet writes require an explicit sync_jobs_to_sheet invocation and a valid user-owned "
         "GSPREAD_SA_KEY_PATH / SHEET_ID / SHEET_GID configuration. "
         "Never invent or substitute Sheet IDs, GIDs, credential paths, or service-account credentials. "
@@ -175,8 +177,16 @@ def _check_sheet_config() -> tuple[str, str, str] | dict[str, str]:
     """Return (sa_key_path, sheet_id, sheet_gid) on success, or error dict."""
     sid = os.getenv("SHEET_ID", "").strip()
     gid = os.getenv("SHEET_GID", "").strip()
-    if not sid or not gid:
-        missing = [k for k, v in {"SHEET_ID": sid, "SHEET_GID": gid}.items() if not v]
+    placeholder_ids = {"your_google_sheet_id_here", "your-sheet-id", "replace_me"}
+    placeholder_gids = {"your_sheet_gid_here", "your-gid", "replace_me"}
+    sid_missing = not sid or sid.lower() in placeholder_ids
+    gid_missing = not gid or gid.lower() in placeholder_gids
+    if sid_missing or gid_missing:
+        missing = []
+        if sid_missing:
+            missing.append("SHEET_ID")
+        if gid_missing:
+            missing.append("SHEET_GID")
         return {
             "ok": False,
             "error_code": "CONFIG_MISSING",
@@ -249,18 +259,20 @@ def _run_subprocess(args: list[str], timeout: int = SUBPROCESS_TIMEOUT, *, raw: 
     }
 
 
-def _parse_scraper_counts(stdout: str) -> dict[str, int | None]:
-    """Try to extract jobs_found / enriched / failed / output_file from scraper stdout."""
-    found = re.search(r"(?:crawled|got|loaded|fetched)\s*[:=]?\s*(\d+)\s*(?:jobs?|listings?)", stdout, re.IGNORECASE)
-    enriched = re.search(r"(?:enriched|with\s*jd)\s*[:=]?\s*(\d+)", stdout, re.IGNORECASE)
-    failed = re.search(r"(?:failed|errors?)\s*[:=]?\s*(\d+)", stdout, re.IGNORECASE)
-    out_file = re.search(r"(?:output|saved|wrote.*to|→)\s*[:=]?\s*([^\s]+\.json)", stdout, re.IGNORECASE)
-    return {
-        "jobs_found": int(found.group(1)) if found else None,
-        "jobs_enriched": int(enriched.group(1)) if enriched else None,
-        "jobs_failed": int(failed.group(1)) if failed else None,
-        "output_file": out_file.group(1) if out_file else None,
-    }
+SUMMARY_PREFIX = "JOBS_SCRAPER_SUMMARY="
+
+
+def _parse_machine_summary(stdout: str) -> dict[str, Any] | None:
+    """Parse the final machine-readable CLI summary; never infer counts from prose logs."""
+    for line in reversed(stdout.splitlines()):
+        if not line.startswith(SUMMARY_PREFIX):
+            continue
+        try:
+            value = json.loads(line[len(SUMMARY_PREFIX):])
+        except json.JSONDecodeError:
+            return None
+        return value if isinstance(value, dict) else None
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -268,15 +280,17 @@ def _parse_scraper_counts(stdout: str) -> dict[str, int | None]:
 # ──────────────────────────────────────────────────────────────────────
 @mcp.tool(
     name="crawl_jobs",
-    title="Crawl jobs (read-only)",
+    title="Crawl jobs (no Sheet write)",
     description=(
         "Crawl public job sources (LinkedIn Guest API / Jora / JobStreet) and "
-        "optionally enrich each job with its full description. **Never writes to Google Sheets.** "
-        "Use this for searches, listings, and JD fetches. Use sync_jobs_to_sheet for explicit writes."
+        "optionally enrich each job with its full description. Never writes to Google Sheets, "
+        "but may create or update local JSON/cache/seen artifacts. Use sync_jobs_to_sheet for explicit Sheet writes."
     ),
     annotations=ToolAnnotations(
-        read_only_hint=True,
+        read_only_hint=False,
         open_world_hint=True,
+        destructive_hint=False,
+        idempotent_hint=False,
     ),
     structured_output=True,
 )
@@ -294,8 +308,11 @@ def crawl_jobs(
         args.append("--refetch")
     if max_pages is not None:
         args.extend(["--max-pages", str(max_pages)])
+    args.append("--json-summary")
     r = _run_subprocess(args)
-    counts = _parse_scraper_counts(r["stdout_tail"])
+    summary = _parse_machine_summary(r["stdout_tail"])
+    if r["ok"] and summary is None:
+        r = {**r, "ok": False, "error_code": "OUTPUT_CONTRACT_MISSING"}
     msg = "crawl completed" if r["ok"] else (
         f"crawl failed (timeout={r['timed_out']}, code={r['error_code']})"
     )
@@ -305,10 +322,10 @@ def crawl_jobs(
         range=range,
         with_jd=with_jd,
         exit_code=r["exit_code"],
-        output_file=counts["output_file"],
-        jobs_found=counts["jobs_found"],
-        jobs_enriched=counts["jobs_enriched"],
-        jobs_failed=counts["jobs_failed"],
+        output_file=(summary or {}).get("output_file"),
+        jobs_found=(summary or {}).get("jobs_found"),
+        jobs_enriched=(summary or {}).get("jobs_enriched"),
+        jobs_failed=(summary or {}).get("jobs_failed"),
         timed_out=r["timed_out"],
         error_code=r["error_code"],
         message=msg,
@@ -360,21 +377,23 @@ def sync_jobs_to_sheet(
         args.extend(["--max-pages", str(max_pages)])
     if dry_run:
         args.append("--dry-run-sheet")
+    args.append("--json-summary")
     r = _run_subprocess(args)
+    summary = _parse_machine_summary(r["stdout_tail"])
+    if r["ok"] and summary is None:
+        r = {**r, "ok": False, "error_code": "OUTPUT_CONTRACT_MISSING"}
     msg = "sync completed" if r["ok"] else (
         f"sync failed (timeout={r['timed_out']}, code={r['error_code']})"
     )
-    # Best-effort counts from stdout
-    written = sum(int(m) for m in re.findall(r"wrote\s+(\d+)", r["stdout_tail"], re.IGNORECASE))
-    if not written and r["ok"]:
-        written = 0
     return SyncResult(
         ok=r["ok"],
         source=source,
         range=range,
         exit_code=r["exit_code"],
         dry_run=dry_run,
-        written=written,
+        written=int((summary or {}).get("written", 0)),
+        skipped_dup=int((summary or {}).get("skipped_dup", 0)),
+        skipped_no_jd=int((summary or {}).get("skipped_no_jd", 0)),
         target_configured=True,
         timed_out=r["timed_out"],
         error_code=r["error_code"],
