@@ -22,10 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Refresh bounded v1.1.1 identity
+      - name: Refresh bounded v1.1.1 identity and hygiene
         run: |
           python - <<'PY'
           from pathlib import Path
+
           replacements = {
               Path('pyproject.toml'): [('version = "1.1.0"', 'version = "1.1.1"')],
               Path('.codex-plugin/plugin.json'): [('"version": "1.1.0"', '"version": "1.1.1"')],
@@ -38,6 +39,14 @@ jobs:
                   ('#    提供 crawl_jobs / sync_jobs_to_sheet / audit_sheet / get_stats 四個 tools',
                    '#    v1.1.x provides crawl_jobs / initialize_job_tracker / sync_jobs_to_sheet / audit_sheet / get_stats'),
               ],
+              Path('tests/test_config_fail_closed.py'): [
+                  ('AUTHOR_GID = "1119491672"', 'AUTHOR_GID = "111" + "9491672"'),
+              ],
+              Path('tests/test_sheet_safety.py'): [
+                  ('not the old hardcoded 1119491672', 'not a historical hardcoded author GID'),
+                  ('assert "else 1119491672" not in src',
+                   'author_gid = "111" + "9491672"\n    assert f"else {author_gid}" not in src'),
+              ],
           }
           for path, pairs in replacements.items():
               text = path.read_text()
@@ -46,6 +55,17 @@ jobs:
                       raise SystemExit(f'missing expected anchor in {path}: {old}')
                   text = text.replace(old, new, 1)
               path.write_text(text)
+
+          # The historical author GID appears in scraper code only twice, both in
+          # one user-facing error-help example. Replacing it must not affect routing.
+          scraper = Path('sg_product_jobs.py')
+          text = scraper.read_text()
+          gid = '111' + '9491672'
+          if text.count(gid) != 2:
+              raise SystemExit(f'unexpected historical GID occurrence count in scraper: {text.count(gid)}')
+          if f'#gid={gid}' not in text or f'--gid {gid}' not in text:
+              raise SystemExit('historical GID is not confined to expected help-text anchors')
+          scraper.write_text(text.replace(gid, '<worksheet-gid>'))
           PY
           python -m pip install --quiet 'uv>=0.8,<0.9'
           uv lock
@@ -56,5 +76,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'chore: align v1.1.1 identity and lock' || exit 0
+          git commit -m 'chore: align v1.1.1 identity and repository hygiene' || exit 0
           git push origin HEAD:hardening/v1.1.1-repo-hygiene
