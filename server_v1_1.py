@@ -190,7 +190,7 @@ def initialize_job_tracker(
     description=(
         "Explicit write boundary. Resolves <REGION>-Raw by name, validates Job Tracker Schema v1, then crawls/enriches "
         "and appends jobs. Users configure SHEET_ID and service-account credentials; SHEET_GID is not required. "
-        "dry_run=true previews scraper writes without modifying job rows."
+        "dry_run=true previews scraper writes without modifying job rows and resolves the target with read-only Sheets scope."
     ),
     annotations=ToolAnnotations(read_only_hint=False, open_world_hint=True, destructive_hint=False, idempotent_hint=False),
     structured_output=True,
@@ -223,7 +223,8 @@ def sync_jobs_to_sheet(
     sa_key_path, sheet_id = cfg
 
     try:
-        _sh, ws = JT.open_region_raw(sheet_id, sa_key_path, region, write=True)
+        # A dry-run must not request Sheets write scope merely to resolve the target.
+        _sh, ws = JT.open_region_raw(sheet_id, sa_key_path, region, write=not dry_run)
     except JT.TrackerError as exc:
         return RegionSyncResult(
             ok=False, source=source, region=region, range=range, target_sheet=target_sheet,
