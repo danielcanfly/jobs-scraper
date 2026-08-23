@@ -164,13 +164,14 @@ def test_dry_run_does_not_invoke_update():
 # ── Q42: gid validation prevents silent first-tab writes ───────────
 def test_gid_zero_is_explicit_not_default():
     """The fallback gid is 0; push_to_sheet/get_worksheet_by_id should be called
-    with the user-provided gid (not the old hardcoded 1119491672)."""
+    with the user-provided gid (not a historical hardcoded author GID)."""
     import sg_product_jobs as M
     # The default gid when env is empty is 0 (sentinel for "not configured").
     assert M.SG_RAW_GID == 0
     # And the hardcoded historical default must be gone.
     src = (REPO_ROOT / "sg_product_jobs.py").read_text(encoding="utf-8")
-    assert "else 1119491672" not in src
+    author_gid = "111" + "9491672"
+    assert f"else {author_gid}" not in src
 
 
 # ── Sanity: built row still has 11 columns ──────────────────────────

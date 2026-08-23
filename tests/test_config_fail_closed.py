@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 AUTHOR_SHEET_ID = "".join(("1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-", "Fc42jAZ8"))
-AUTHOR_GID = "1119491672"
+AUTHOR_GID = "111" + "9491672"
 
 
 @contextmanager
@@ -53,8 +53,8 @@ def test_no_author_sheet_id_in_executable_code():
         # The hardcoded gid fallback is also forbidden
         if path.name == "sg_product_jobs.py":
             # Only the comment / CLI help mentioning the constant is allowed; the
-            # actual default must be 0/empty. Check no `else 1119491672` remains.
-            assert "else 1119491672" not in text, "hardcoded gid fallback still present"
+            # actual default must be 0/empty. Check no historical hardcoded GID fallback remains.
+            assert f"else {AUTHOR_GID}" not in text, "hardcoded gid fallback still present"
             assert "else CHINA_RAW_GID" not in text, "CHINA hardcoded gid ok (preset, not fallback)"
 
 
