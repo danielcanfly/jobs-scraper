@@ -15,6 +15,24 @@ HERE = Path(__file__).resolve().parent
 GOLDEN = json.loads((HERE / "v111_golden.json").read_text(encoding="utf-8"))
 
 
+def _run_coro(coro):
+    """Run one coroutine without consuming/closing the event loop legacy tests expect."""
+    try:
+        previous = asyncio.get_event_loop()
+    except RuntimeError:
+        previous = None
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+        if previous is not None and not previous.is_closed():
+            asyncio.set_event_loop(previous)
+        else:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
+
 def _normalized_query_sha(query: str) -> str:
     normalized = " ".join(query.split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -272,8 +290,8 @@ def test_machine_summary_characterization():
 
 
 def test_mcp_public_contract_characterization():
-    legacy = asyncio.run(server.mcp.list_tools())
-    v11 = asyncio.run(server_v1_1.mcp.list_tools())
+    legacy = _run_coro(server.mcp.list_tools())
+    v11 = _run_coro(server_v1_1.mcp.list_tools())
     legacy_by_name = {t.name: t for t in legacy}
     v11_by_name = {t.name: t for t in v11}
 
