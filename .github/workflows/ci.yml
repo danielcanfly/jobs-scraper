@@ -1,7 +1,7 @@
 name: ci
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
@@ -10,88 +10,6 @@ on:
     branches: [main]
 
 jobs:
-  migrate_b3b_jora:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.2.0-architecture-cleanup'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feature/v1.2.0-architecture-cleanup
-          fetch-depth: 2
-
-      - name: Apply bounded Jora adapter migration
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          source = Path('sg_product_jobs.py')
-          text = source.read_text(encoding='utf-8')
-          import_anchor = 'from jobs_scraper.sources import linkedin as linkedin_source\n'
-          import_line = 'from jobs_scraper.sources import jora as jora_source\n'
-          if import_line not in text:
-              if import_anchor not in text:
-                  raise SystemExit('JORA_IMPORT_ANCHOR_MISSING')
-              text = text.replace(import_anchor, import_anchor + import_line, 1)
-
-          start_marker = '# ─────────────────────────────────────────────────────────────\n# Jora (sg.jora.com) - 純 HTML parse, 沒 API\n# 用「a=Nd」做時間 filter, 「p=N」做 page, 每頁固定 30 jobs\n# ─────────────────────────────────────────────────────────────\n'
-          end_marker = '# ─────────────────────────────────────────────────────────────\n# JobStreet SG 來源 (sg.jobstreet.com) — 2026-08-22 整合\n# 公開 List API + GraphQL, 不需 Cloudflare solve; HTML 頁 100% 擋, 走 GraphQL 拿 content\n# ─────────────────────────────────────────────────────────────\n'
-          start = text.find(start_marker)
-          end = text.find(end_marker, start + 1)
-          if start < 0 or end < 0 or end <= start:
-              raise SystemExit('JORA_BLOCK_MARKERS_MISSING')
-          replacement = '''# ─────────────────────────────────────────────────────────────
-# Jora compatibility surface
-# Implementation owner: jobs_scraper.sources.jora
-# ─────────────────────────────────────────────────────────────
-def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD,
-                        location: str = JORA_LOCATION) -> str:
-    return jora_source.build_list_url(jora_tpr, page, keyword, location)
-
-
-def parse_jora_list_page(html: str, location: str = JORA_LOCATION) -> list[dict]:
-    return jora_source.parse_list_page(html, location=location)
-
-
-def fetch_jora_jd(url: str) -> dict:
-    return jora_source.fetch_jd(_cc_session, url, sleep_fn=time.sleep)
-
-
-def crawl_jora_list(tpr: str, max_pages: int,
-                    keyword: str = JORA_KEYWORD,
-                    location: str = JORA_LOCATION) -> list[dict]:
-    return jora_source.crawl_list(
-        _cc_session, tpr, max_pages,
-        tpr_map=JORA_TPR,
-        keyword=keyword,
-        location=location,
-        sleep_fn=human_sleep,
-    )
-
-
-'''
-          text = text[:start] + replacement + text[end:]
-          source.write_text(text, encoding='utf-8')
-
-          ci = Path('.github/workflows/ci.yml')
-          ci_text = ci.read_text(encoding='utf-8')
-          ci_text = ci_text.replace('permissions:\n  contents: write\n', 'permissions:\n  contents: read\n', 1)
-          marker = '  migrate_b3b_jora:\n'
-          start_ci = ci_text.find(marker)
-          end_ci = ci_text.find('\n  test:\n', start_ci)
-          if start_ci < 0 or end_ci < 0 or end_ci <= start_ci:
-              raise SystemExit('B3B_CI_SELF_REMOVE_MARKERS_MISSING')
-          ci_text = ci_text[:start_ci] + ci_text[end_ci + 1:]
-          ci.write_text(ci_text, encoding='utf-8')
-          PY
-          python -m py_compile sg_product_jobs.py
-          python -m py_compile jobs_scraper/sources/jora.py
-          git diff --check -- sg_product_jobs.py .github/workflows/ci.yml jobs_scraper/sources/jora.py
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add sg_product_jobs.py .github/workflows/ci.yml jobs_scraper/sources/jora.py
-          git commit -m 'refactor: route Jora through source adapter'
-          git push origin HEAD:feature/v1.2.0-architecture-cleanup
-
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 45
