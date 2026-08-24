@@ -53,7 +53,7 @@ py-modules = [
     "runtime_core",
     "region_policy",
 ]
-packages = ["jobs_scraper", "jobs_scraper.sources", "jobs_scraper.tracker"]
+packages = ["jobs_scraper", "jobs_scraper.sources", "jobs_scraper.tracker", "jobs_scraper.mcp_services"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]

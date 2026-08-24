@@ -24,13 +24,7 @@ tool_timeout_sec = 7200 to allow full-JD runs to complete.
 """
 from __future__ import annotations
 
-import json
-import os
-import re
-import subprocess
 import sys
-from collections import Counter
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
 try:
@@ -45,8 +39,10 @@ except ImportError:
 
 from pydantic import BaseModel, Field
 
-import sg_product_jobs as M  # noqa: E402
 import runtime_core as RT
+from jobs_scraper.mcp_services import crawl as crawl_service
+from jobs_scraper.mcp_services import sheet_analysis
+from jobs_scraper.mcp_services import sheet_config
 
 # ──────────────────────────────────────────────────────────────────────
 # Paths / config
@@ -162,49 +158,17 @@ mcp = MCPServer(
 # ──────────────────────────────────────────────────────────────────────
 def _resolve_sa_key_path() -> str:
     """Resolve GSPREAD_SA_KEY_PATH to absolute path. Empty / unset → fail closed."""
-    sa = os.getenv("GSPREAD_SA_KEY_PATH", "").strip() or ".secrets/gsheet-sa.json"
-    if not Path(sa).is_absolute():
-        sa = str(REPO_ROOT / sa)
-    return sa
+    return sheet_config.resolve_sa_key_path(REPO_ROOT)
 
 
 def _check_sheet_config() -> tuple[str, str, str] | dict[str, str]:
     """Return (sa_key_path, sheet_id, sheet_gid) on success, or error dict."""
-    sid = os.getenv("SHEET_ID", "").strip()
-    gid = os.getenv("SHEET_GID", "").strip()
-    placeholder_ids = {"your_google_sheet_id_here", "your-sheet-id", "replace_me"}
-    placeholder_gids = {"your_sheet_gid_here", "your-gid", "replace_me"}
-    sid_missing = not sid or sid.lower() in placeholder_ids
-    gid_missing = not gid or gid.lower() in placeholder_gids
-    if sid_missing or gid_missing:
-        missing = []
-        if sid_missing:
-            missing.append("SHEET_ID")
-        if gid_missing:
-            missing.append("SHEET_GID")
-        return {
-            "ok": False,
-            "error_code": "CONFIG_MISSING",
-            "message": f"missing env: {', '.join(missing)} — set them in .env or pass via MCP host env. The server never falls back to the package author's Sheet.",
-        }
-    sa = _resolve_sa_key_path()
-    if not Path(sa).exists():
-        return {
-            "ok": False,
-            "error_code": "CREDENTIAL_FILE_MISSING",
-            "message": f"credential file not found: {sa}",
-        }
-    return sa, sid, gid
+    return sheet_config.check_legacy_sheet_config(REPO_ROOT)
 
 
 def _read_sheet_rows(sa_key_path: str, sheet_id: str, gid: str) -> list[list[str]]:
     """Read sheet using readonly OAuth scope."""
-    import gspread
-    from google.oauth2.service_account import Credentials
-    creds = Credentials.from_service_account_file(sa_key_path, scopes=SCOPES_READONLY)
-    gc = gspread.authorize(creds)
-    ws = gc.open_by_key(sheet_id).get_worksheet_by_id(int(gid))
-    return ws.get_all_values()[1:]
+    return sheet_config.read_legacy_sheet_rows(sa_key_path, sheet_id, gid)
 
 
 # Backward-compatible aliases for v1.0 callers/tests. Runtime implementation is shared.
@@ -239,37 +203,14 @@ def crawl_jobs(
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
     refetch: Annotated[bool, "Re-fetch JDs ignoring cache"] = False,
 ) -> CrawlResult:
-    args = [range, "--source", source]
-    if with_jd:
-        args.append("--with-jd")
-    if refetch:
-        args.append("--refetch")
-    if max_pages is not None:
-        args.extend(["--max-pages", str(max_pages)])
-    args.append("--json-summary")
-    r = _run_subprocess(args)
-    summary = _parse_machine_summary(r["stdout_tail"])
-    if r["ok"] and summary is None:
-        r = {**r, "ok": False, "error_code": "OUTPUT_CONTRACT_MISSING"}
-    msg = "crawl completed" if r["ok"] else (
-        f"crawl failed (timeout={r['timed_out']}, code={r['error_code']})"
-    )
-    return CrawlResult(
-        ok=r["ok"],
-        source=source,
-        range=range,
+    return CrawlResult(**crawl_service.crawl_payload(
+        source,
+        range,
         with_jd=with_jd,
-        exit_code=r["exit_code"],
-        output_file=(summary or {}).get("output_file"),
-        jobs_found=(summary or {}).get("jobs_found"),
-        jobs_enriched=(summary or {}).get("jobs_enriched"),
-        jobs_failed=(summary or {}).get("jobs_failed"),
-        timed_out=r["timed_out"],
-        error_code=r["error_code"],
-        message=msg,
-        stdout_tail=r["stdout_tail"],
-        stderr_tail=r["stderr_tail"],
-    )
+        max_pages=max_pages,
+        refetch=refetch,
+        runner=_run_subprocess,
+    ))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -306,39 +247,17 @@ def sync_jobs_to_sheet(
             target_configured=False, error_code=cfg["error_code"], message=cfg["message"],
         )
     sa_key_path, sheet_id, gid = cfg
-    args = [range, "--source", source, "--to-sheet", sheet_id, "--gid", gid]
-    if with_jd:
-        args.append("--with-jd")
-    if refetch:
-        args.append("--refetch")
-    if max_pages is not None:
-        args.extend(["--max-pages", str(max_pages)])
-    if dry_run:
-        args.append("--dry-run-sheet")
-    args.append("--json-summary")
-    r = _run_subprocess(args)
-    summary = _parse_machine_summary(r["stdout_tail"])
-    if r["ok"] and summary is None:
-        r = {**r, "ok": False, "error_code": "OUTPUT_CONTRACT_MISSING"}
-    msg = "sync completed" if r["ok"] else (
-        f"sync failed (timeout={r['timed_out']}, code={r['error_code']})"
-    )
-    return SyncResult(
-        ok=r["ok"],
-        source=source,
-        range=range,
-        exit_code=r["exit_code"],
+    return SyncResult(**crawl_service.sheet_sync_payload(
+        source,
+        range,
+        sheet_id=sheet_id,
+        gid=gid,
+        with_jd=with_jd,
+        max_pages=max_pages,
+        refetch=refetch,
         dry_run=dry_run,
-        written=int((summary or {}).get("written", 0)),
-        skipped_dup=int((summary or {}).get("skipped_dup", 0)),
-        skipped_no_jd=int((summary or {}).get("skipped_no_jd", 0)),
-        target_configured=True,
-        timed_out=r["timed_out"],
-        error_code=r["error_code"],
-        message=msg,
-        stdout_tail=r["stdout_tail"],
-        stderr_tail=r["stderr_tail"],
-    )
+        runner=_run_subprocess,
+    ))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -371,65 +290,8 @@ def audit_sheet() -> AuditResult:
             message=f"could not read sheet: {type(e).__name__}: {e}",
         )
 
-    # 1. (source, job_id) tuple dup
-    keys: list[tuple[str, str]] = []
-    for r in rows:
-        k = M.parse_sheet_row_to_key(r)
-        if k:
-            keys.append(k)
-    key_counts = Counter(keys)
-    dup_keys = sum(1 for v in key_counts.values() if v > 1)
-
-    # 2. E-column URL dup
-    url_counts = Counter(r[4].strip() for r in rows if len(r) > 4 and r[4].strip())
-    dup_urls = sum(1 for v in url_counts.values() if v > 1)
-
-    # 3. cross-source digit ID collision
-    li_ids = {jid for (s, jid) in keys if s == "linkedin" and jid.isdigit()}
-    js_ids = {jid for (s, jid) in keys if s == "jobstreet" and jid.isdigit()}
-    cross = len(li_ids & js_ids)
-
-    # 4. (src, jid) but title/company mismatch
-    key_to_meta: dict[tuple[str, str], set[tuple[str, str]]] = {}
-    for r in rows:
-        k = M.parse_sheet_row_to_key(r)
-        if k:
-            key_to_meta.setdefault(k, set()).add(
-                (r[5][:30] if len(r) > 5 else "", r[6][:50] if len(r) > 6 else "")
-            )
-    mismatches = sum(1 for v in key_to_meta.values() if len(v) > 1)
-
-    # 5. sheet vs seen_jds.jsonl
-    seen_path = REPO_ROOT / "seen_jds.jsonl"
-    sheet_seen_drift = 0
-    if seen_path.exists():
-        seen = M.load_seen_ids(seen_path)
-        sheet_keys = set(keys)
-        sheet_seen_drift = len(sheet_keys - seen)
-
-    # 6. work mode distribution
-    wm = Counter(r[9] for r in rows if len(r) > 9)
-    work_mode_distribution = {k or "(empty)": v for k, v in wm.most_common()}
-
-    # 7. visa
-    hard = sum(1 for r in rows if len(r) > 10 and r[10].startswith("⚠️ HARD"))
-    soft = sum(1 for r in rows if len(r) > 10 and r[10] and not r[10].startswith("⚠️ HARD"))
-
-    # source distribution
-    src = Counter(r[3] for r in rows if len(r) > 3)
-    source_distribution = dict(src.most_common())
-
-    return AuditResult(
-        ok=True, rows_read=len(rows),
-        dup_keys=dup_keys, dup_urls=dup_urls,
-        cross_source_id_collisions=cross,
-        title_company_mismatches=mismatches,
-        sheet_seen_drift=sheet_seen_drift,
-        work_mode_distribution=work_mode_distribution,
-        visa_hard=hard, visa_soft_or_positive=soft,
-        source_distribution=source_distribution,
-        message=f"audited {len(rows)} rows from sheet",
-    )
+    payload = sheet_analysis.audit_rows(rows, seen_path=REPO_ROOT / "seen_jds.jsonl")
+    return AuditResult(ok=True, **payload, message=f"audited {len(rows)} rows from sheet")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -462,28 +324,8 @@ def get_stats() -> StatsResult:
             message=f"could not read sheet: {type(e).__name__}: {e}",
         )
 
-    src = Counter(r[3] for r in rows if len(r) > 3)
-    wm = Counter(r[9] for r in rows if len(r) > 9)
-    date = Counter(r[2] for r in rows if len(r) > 2 and r[2])
-
-    seen_path = REPO_ROOT / "seen_jds.jsonl"
-    seen_unique: int | None = None
-    seen_by_source: dict[str, int] | None = None
-    if seen_path.exists():
-        seen = M.load_seen_ids(seen_path)
-        seen_unique = len(seen)
-        seen_by_source = dict(Counter(s for s, _ in seen).most_common())
-
-    return StatsResult(
-        ok=True,
-        total_rows=len(rows),
-        source_distribution={k: v for k, v in src.most_common()},
-        work_mode_distribution={k or "(empty)": v for k, v in wm.most_common()},
-        date_distribution_top10={k: v for k, v in date.most_common(10)},
-        seen_unique_count=seen_unique,
-        seen_by_source=seen_by_source,
-        message=f"stats for {len(rows)} rows",
-    )
+    payload = sheet_analysis.stats_rows(rows, seen_path=REPO_ROOT / "seen_jds.jsonl")
+    return StatsResult(ok=True, **payload, message=f"stats for {len(rows)} rows")
 
 
 if __name__ == "__main__":
