@@ -1,6 +1,6 @@
 # jobs-scraper — Public Technical Rules
 
-> Public-safe technical reference for jobs-scraper v1.1.1.
+> Public-safe technical reference for jobs-scraper v1.2.1.
 >
 > This file documents scraper/runtime behaviour without embedding any package-author production Sheet IDs, worksheet IDs, service-account identities, private credential paths, or local-machine paths. User-owned Google configuration belongs in `.env`, never in this repository.
 
@@ -46,15 +46,15 @@ GET https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}
 
 No LinkedIn session cookie is required for these Guest API paths. Do not silently substitute Voyager/private endpoints that require authenticated cookies.
 
-Validated region presets currently used by the v1.1 MCP lane:
+LinkedIn location targeting uses LinkedIn `geoId`.
 
-| Region | geoId | location text |
+Useful known direct-CLI examples:
+
+| Location | geoId | location text |
 |---|---:|---|
-| SG | `102454443` | `Singapore` |
-| TW | `104187078` | `Taiwan` |
+| Singapore | `102454443` | `Singapore` |
+| Taiwan | `104187078` | `Taiwan` |
 | China | `107388191` | `Shanghai` |
-
-Other direct-CLI geo IDs may exist, but the public v1.1 MCP contract is only `SG | TW | China`.
 
 ### Jora
 
@@ -106,17 +106,15 @@ Do not remove rate-limit protection merely to make a run finish faster.
 
 ## 4. Title filtering
 
-The scraper uses deterministic title skip rules plus a seniority whitelist. The exact executable rules live in `sg_product_jobs.py` and are covered by the original helper regression suite.
+The v1.2.1 default is clean: full-JD enrichment does not skip titles unless the user supplies `--skip-keywords`.
 
-Representative skip categories include:
+Users can opt into a title skip filter:
 
-- internship / trainee / graduate / junior / entry-level;
-- assistant/support/coordinator/administrator where not senior-whitelisted;
-- analyst/product-marketing tracks;
-- QA/test;
-- sales/business-development/account-executive;
-- specialist where not senior-whitelisted;
-- temporary/contract roles where matched by the frozen rules.
+```bash
+python sg_product_jobs.py 14d --source linkedin --with-jd --skip-keywords intern junior assistant
+```
+
+`--no-skip` remains accepted for backward compatibility and makes the no-skip behavior explicit.
 
 Do not reproduce or alter title filtering inside the Agent/LLM layer. Use the packaged scraper implementation.
 
@@ -221,13 +219,13 @@ The blank default `Sheet1` / localised equivalent may be deleted only when prove
 
 ## 9. Region/source routing
 
-Current v1.1 MCP support:
+Current source location targeting:
 
-| Source | SG | TW | China |
-|---|---:|---:|---:|
-| LinkedIn | yes | yes | yes |
-| Jora | yes | no | no |
-| JobStreet | yes | no | no |
+| Source | Location targeting |
+|---|---|
+| LinkedIn | Uses LinkedIn `geoId` |
+| Jora | Singapore only |
+| JobStreet | Singapore only |
 
 Unsupported Jora/JobStreet region requests must fail before the scraper subprocess executes.
 

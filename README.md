@@ -8,7 +8,7 @@
 
 Local-first job search automation for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.2.0 is the architecture-cleanup release. It keeps the frozen behavior contract intact while tightening the runtime layout, release metadata, typing scaffold, and quality gates.
+jobs-scraper v1.2.1 is a clean-defaults patch on top of the v1.2.0 architecture cleanup. It keeps the local-first runtime and quality gates while making title skip filtering opt-in.
 
 ## Overview
 
@@ -34,7 +34,7 @@ It is not:
 - Crawl LinkedIn, Jora, and JobStreet job listings.
 - Optionally enrich full job descriptions.
 - Deduplicate by `(source, job_id)`.
-- Filter senior/PM titles with deterministic skip logic.
+- Optionally apply a user-supplied title skip filter before full-JD enrichment.
 - Detect work mode and visa/constraint signals.
 - Write to a user-owned Google Sheet with formula-safe rows.
 - Initialize, audit, and inspect a portable Region-Raw / Region-Selected tracker.
@@ -56,13 +56,13 @@ v1.2.0 keeps the same public behavior and organizes the code into clearer pieces
 - mypy scaffold;
 - coverage reporting.
 
-## Supported Sources and Regions
+## Supported Sources and Location Targeting
 
-| Source | SG | TW | China |
-|---|---:|---:|---:|
-| LinkedIn | Yes | Yes | Yes, via the validated Shanghai preset |
-| Jora | Yes | No | No |
-| JobStreet | Yes | No | No |
+| Source | Location targeting |
+|---|---|
+| LinkedIn | Uses LinkedIn `geoId` |
+| Jora | Singapore only |
+| JobStreet | Singapore only |
 
 Jora and JobStreet are Singapore-only in this release. Non-SG requests must fail closed with `SOURCE_REGION_UNSUPPORTED`.
 
@@ -95,6 +95,12 @@ Full JD enrichment:
 
 ```bash
 .venv/bin/python sg_product_jobs.py 7d --source linkedin --with-jd
+```
+
+LinkedIn location targeting can be set with `geoId`:
+
+```bash
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --geo-id 104187078
 ```
 
 ### 3. Create your own Google Sheet
@@ -219,6 +225,14 @@ range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
 --sheet-source:   D-column source label
 ```
 
+By default, full-JD enrichment does not skip titles. To opt into a skip filter, pass `--skip-keywords`:
+
+```bash
+python sg_product_jobs.py 14d --source linkedin --with-jd --skip-keywords intern junior assistant
+```
+
+Use `--no-skip` to make the no-skip behavior explicit.
+
 ## MCP Host Examples
 
 ### Codex
@@ -309,7 +323,7 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 
 ## Versioning and Release Notes
 
-`v1.2.0` is the release-metadata and README refresh on top of the already-qualified behavior baseline.
+`v1.2.1` is a clean-defaults patch on top of the already-qualified v1.2.0 release.
 
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.

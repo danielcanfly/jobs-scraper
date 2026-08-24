@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.2.0"
+  version: "1.2.1"
 ---
 
 # Jobs Scraper
@@ -56,7 +56,7 @@ The server must never fall back to the package author's Sheet.
 
 For v1.1.0, MCP region input is `SG | TW | China`.
 
-- LinkedIn supports SG, TW, and China (China routes to the validated Shanghai preset).
+- LinkedIn uses LinkedIn `geoId` for location targeting.
 - Jora and JobStreet remain Singapore-only in this release. Do not silently route them to a non-SG region.
 - A region write targets only `<REGION>-Raw`; `Selected` is not a scraper dump target.
 - Before sync/audit, the runtime safety gate checks the exact A:AA header write-compatibility contract. Full visual formatting/dropdown creation belongs to initialization and is not re-audited on every sync.
@@ -64,6 +64,8 @@ For v1.1.0, MCP region input is `SG | TW | China`.
 ## Long runs
 
 List-only crawls are relatively fast. Full-JD enrichment can take a long time on broad ranges. Respect the user's requested source/range and use bounded options such as `max_pages` when the user asks for a smaller run.
+
+The default full-JD path does not skip titles. Apply title skip filtering only when the user explicitly supplies `--skip-keywords`; `--no-skip` remains accepted and means no title skip filter.
 
 ## Failure handling
 

@@ -8,7 +8,7 @@
 
 这是一个以本地优先为原则的产品管理职位搜索自动化工具，提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
 
-`jobs-scraper` v1.2.0 是架构整理版本。它保留已冻结的行为契约，同时把 runtime 结构、发布 metadata、typing scaffold 和质量 gate 整理得更清楚。
+`jobs-scraper` v1.2.1 是建立在 v1.2.0 架构整理之上的 clean-defaults patch。它保留本地优先 runtime 和质量 gate，并让职位标题 skip filter 改为 opt-in。
 
 ## 概览
 
@@ -34,7 +34,7 @@
 - 抓取 LinkedIn、Jora、JobStreet 职位。
 - 可选抓取完整 JD。
 - 按 `(source, job_id)` 去重。
-- 使用 deterministic skip logic 过滤偏 junior 的标题。
+- 可选在完整 JD enrichment 前套用用户自定义的职位标题 skip filter。
 - 检测 work mode 和 visa / constraint 信号。
 - 以 formula-safe 格式写入用户自己的 Google 表格。
 - 初始化、审计和查看可携带的 Region-Raw / Region-Selected 追踪表。
@@ -56,13 +56,13 @@ v1.2.0 保持对外行为不变，并把代码整理成更清楚的区块：
 - mypy scaffold；
 - coverage 报告。
 
-## 支持来源与区域
+## 支持来源与地点指定方式
 
-| Source | SG | TW | China |
-|---|---:|---:|---:|
-| LinkedIn | Yes | Yes | Yes，通过已验证的 Shanghai preset |
-| Jora | Yes | No | No |
-| JobStreet | Yes | No | No |
+| Source | 地点指定方式 |
+|---|---|
+| LinkedIn | LinkedIn 使用 LinkedIn `geoId` 指定地点 |
+| Jora | Singapore only |
+| JobStreet | Singapore only |
 
 这个版本中，Jora 和 JobStreet 仅支持新加坡。非 SG 请求必须 fail closed，并返回 `SOURCE_REGION_UNSUPPORTED`。
 
@@ -95,6 +95,12 @@ python -m uv sync --locked --extra dev --python 3.11
 
 ```bash
 .venv/bin/python sg_product_jobs.py 7d --source linkedin --with-jd
+```
+
+LinkedIn 可用 `geoId` 指定地点：
+
+```bash
+.venv/bin/python sg_product_jobs.py 7d --source linkedin --geo-id 104187078
 ```
 
 ### 3. 创建自己的 Google 表格
@@ -219,6 +225,14 @@ range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
 --sheet-source:   D 栏 source label
 ```
 
+默认不套用职位标题 skip filter。需要时可用 `--skip-keywords` 自定义：
+
+```bash
+python sg_product_jobs.py 14d --source linkedin --with-jd --skip-keywords intern junior assistant
+```
+
+也可以使用 `--no-skip` 明确表示不套用 skip。
+
 ## MCP Host 示例
 
 ### Codex
@@ -309,7 +323,7 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本与发布说明
 
-`v1.2.0` 是在已经通过行为基线之上的 release-metadata 与 README 更新。
+`v1.2.1` 是建立在已经通过验证的 v1.2.0 之上的 clean-defaults patch。
 
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
