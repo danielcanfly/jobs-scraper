@@ -42,9 +42,18 @@ Homepage = "https://github.com/danielcanfly/jobs-scraper"
 Repository = "https://github.com/danielcanfly/jobs-scraper"
 
 # Canonical dependency source. requirements.txt mirrors this dependency set.
-# v1.1 ships both the frozen v1.0 entrypoint and the portable tracker entrypoint.
+# v1.2 keeps legacy top-level compatibility modules while implementation moves
+# behind an installable jobs_scraper package.
 [tool.setuptools]
-py-modules = ["sg_product_jobs", "server", "server_v1_1", "job_tracker"]
+py-modules = [
+    "sg_product_jobs",
+    "server",
+    "server_v1_1",
+    "job_tracker",
+    "runtime_core",
+    "region_policy",
+]
+packages = ["jobs_scraper", "jobs_scraper.sources"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]
