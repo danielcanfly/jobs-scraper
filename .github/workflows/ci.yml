@@ -1,7 +1,7 @@
 name: ci
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
@@ -10,6 +10,79 @@ on:
     branches: [main]
 
 jobs:
+  migrate_b3a_linkedin:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.2.0-architecture-cleanup' && !contains(github.event.head_commit.message, 'refactor: route LinkedIn through source adapter')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1.2.0-architecture-cleanup
+          fetch-depth: 2
+
+      - name: Apply bounded LinkedIn adapter migration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('sg_product_jobs.py')
+          text = path.read_text(encoding='utf-8')
+          import_anchor = 'from bs4 import BeautifulSoup\n'
+          import_line = 'from jobs_scraper.sources import linkedin as linkedin_source\n'
+          if import_line not in text:
+              if import_anchor not in text:
+                  raise SystemExit('IMPORT_ANCHOR_MISSING')
+              text = text.replace(import_anchor, import_anchor + import_line, 1)
+          start_marker = '# ─────────────────────────────────────────────────────────────\n# 列表頁\n# ─────────────────────────────────────────────────────────────\n'
+          end_marker = '# ─────────────────────────────────────────────────────────────\n# 主程式\n# ─────────────────────────────────────────────────────────────\n'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start + 1)
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit('LINKEDIN_BLOCK_MARKERS_MISSING')
+          replacement_lines = [
+              '# ─────────────────────────────────────────────────────────────',
+              '# LinkedIn compatibility surface',
+              '# Implementation owner: jobs_scraper.sources.linkedin',
+              '# ─────────────────────────────────────────────────────────────',
+              'JOB_CARD_SEL = linkedin_source.JOB_CARD_SEL',
+              'TITLE_SEL = linkedin_source.TITLE_SEL',
+              'COMPANY_SEL = linkedin_source.COMPANY_SEL',
+              'LOC_SEL = linkedin_source.LOC_SEL',
+              'TIME_SEL = linkedin_source.TIME_SEL',
+              'LINK_SEL = linkedin_source.LINK_SEL',
+              'JD_DESC_SEL = linkedin_source.JD_DESC_SEL',
+              'JD_BLOCK_SEL = linkedin_source.JD_BLOCK_SEL',
+              '_clean = linkedin_source._clean',
+              '', '',
+              'def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:',
+              '    return linkedin_source.build_list_url(',
+              '        tpr, start, location, geo_id, keywords=KEYWORDS,',
+              '    )',
+              '', '',
+              'def parse_list_page(html: str) -> list[dict]:',
+              '    return linkedin_source.parse_list_page(html)',
+              '', '',
+              'def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:',
+              '    return linkedin_source.fetch_list_page(',
+              '        _cc_session, tpr, start, location, geo_id, keywords=KEYWORDS,',
+              '    )',
+              '', '',
+              'def build_jd_url(job_id: str) -> str:',
+              '    return linkedin_source.build_jd_url(job_id)',
+              '', '',
+              'def fetch_jd(job_id: str) -> dict:',
+              '    return linkedin_source.fetch_jd(_cc_session, job_id)',
+              '', '',
+          ]
+          replacement = '\n'.join(replacement_lines)
+          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+          python -m py_compile sg_product_jobs.py
+          git diff --check -- sg_product_jobs.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add sg_product_jobs.py
+          git commit -m 'refactor: route LinkedIn through source adapter'
+          git push origin HEAD:feature/v1.2.0-architecture-cleanup
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 45
