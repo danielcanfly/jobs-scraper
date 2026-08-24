@@ -3,7 +3,7 @@ sg_product_jobs â€” å¤šæºè·ç¼ºçˆ¬èŸ² + Google Sheet åŒæ­¥
 
 æ”¯æ´çš„ source:
   - linkedin:  /jobs-guest/jobs/api/...  (Guest API, ä¸éœ€ cookie)
-  - jora:      sg.jora.com  (HTML parse, 9/9/2026 é—œç«™å‰)
+  - jora:      sg.jora.com  (HTML parse, 9/9/2026 é—œç«™å‰q)
   - jobstreet: sg.jobstreet.com  (å…¬é–‹ API + GraphQL)
 
 Single source of truth: RULES.md (4 ç¨® URL, MAX_PAGES, skip list, sheet 11 æ¬„, dedup, visa)
@@ -43,12 +43,13 @@ from urllib.parse import urlencode
 from curl_cffi import requests as cc_requests
 from scrapling.parser import Adaptor
 from bs4 import BeautifulSoup
+from jobs_scraper.sources import linkedin as linkedin_source
 
 # å…¨åŸŸ session: ç¶­æŒ cookies è·Ÿ connection pool, é™ä½è¢« LinkedIn rate limit è§¸ç™¼ 429 çš„æ©Ÿç‡
 _cc_session = cc_requests.Session(impersonate="chrome")
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # ç’°å¢ƒè®Šæ•¸è®€å– (2026-08-23 æ–°å¢, è®“åˆ¥äºº fork repo è‡ªå·±å®¢è£½åŒ–)
 # è¨­å®šæ–¹å¼: å¾ .env.example è¤‡è£½æˆ .env, å¡«å€¼; æˆ–ç›´æ¥ export ç’°å¢ƒè®Šæ•¸
 # æ²’è¨­æœƒ fallback åˆ°ä¸‹é¢ hardcoded é è¨­å€¼ (åŸé–‹ç™¼è€…è‡ªå·±çš„è¨­å®š)
@@ -71,7 +72,7 @@ JOBSTREET_KEYWORDS_OVERRIDE = os.getenv("JOBSTREET_KEYWORDS", "")  # ç•™ç©º = ç”
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # ç¯©é¸æ¢ä»¶
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 KEYWORDS = (
     '"product manager" OR "product director" OR "director of product" '
     'OR "head of product" OR "product lead" OR "chief of staff"'
@@ -200,7 +201,7 @@ VISA_PATTERNS = {
         r"already\s+authorized\s+to\s+work\s+in\s+Singapore",
         # Chinese (ç¡¬æ€§)
         r"ä¸æä¾›\s*ç°½è­‰",
-        r"ä¸(?:æ|è¾¦|è™•)ç†\s*(?:ç°½è­‰|å·¥ä½œè­‰|EP|visa)",
+        r"ä¸(?:æ|è¾¦|è™‰)\s*(?:ç°½è­‰|å·¥ä½œè­‰|EP|visa)",
         r"åƒ…é™\s*(?:æ–°åŠ å¡|æœ¬åœ°)?\s*(?:å…¬æ°‘|PR|æ°¸ä¹…å±…æ°‘)",
         r"å…¬æ°‘(?:åŠ|å’Œ|èˆ‡)?\s*PR\s*å„ªå…ˆ",
         r"(?:å¿…é ˆ|éœ€|é ˆ)\s*ç‚º?\s*(?:æ–°åŠ å¡)?\s*(?:å…¬æ°‘|PR)",
@@ -227,1436 +228,775 @@ VISA_PATTERNS = {
         r"must\s+(?:already\s+)?(?:be\s+)?(?:legally\s+)?(?:authoriz|authoris)(?:ed|ation)?\s+to\s+work",
         r"candidates?\s+with\s+(?:valid\s+)?work\s+(?:visa|permit|pass|right)",
         r"æ–°åŠ å¡(?:äºº|å…¬æ°‘|PR)å„ªå…ˆ",
-        r"ä¸(?:éœ€|ç”¨)è¦?\s*(?:æä¾›|è¾¦ç†)?\s*(?:ç°½è­‰|visa|å·¥ä½œè­‰)",
-        r"ä¸(?:èƒ½|å¯ä»¥)\s*(?:æä¾›|è¾¦ç†)\s*(?:ç°½è­‰|visa|å·¥ä½œè­‰|EP)",
-        r"å°ç£(?:äºº|å…¬æ°‘)?\s*å„ªå…ˆ",
-        # China / Shanghai
-        r"Chinese\s+(?:citizens?|nationals?)\s+preferred",
-        r"(?:å¤§é™¸|ä¸­å›½|å¤§é™†)\s*(?:äºº|å…¬æ°‘|åœ‹æ°‘)?\s*(?:å„ªå…ˆ|ä¼˜å…ˆ)",
-        r"æœ¬åœ°äºº?\s*(?:å„ªå…ˆ|ä¼˜å…ˆ)",
-        r"ä¸­åœ‹(?:äºº|å…¬æ°‘|åœ‹æ°‘)\s*(?:å„ªå…ˆ|ä¼˜å…ˆ)",
-    ],
-    "POSITIVE": [
-        # English â€” æ˜ç¢ºèªªæœƒ sponsor
-        r"visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered)",
-        r"sponsorship\s+(?:is\s+)?available",
-        r"we\s+(?:do\s+)?sponsor",
-        r"we\s+provide\s+(?:visa\s+)?sponsorship",
-        r"æœƒ(?:æä¾›|è¾¦ç†)\s*(?:ç°½è­‰|visa|å·¥ä½œè­‰|EP)",
-    ],
-}
-
-DEFAULT_SHEET_SOURCE = "LinkedIn / Minimax"
-
-# é è¨­ Google Sheet ç›®æ¨™ (fail-closed: æ²’è¨­ env æ™‚ Sheet ID/GID ç•™ç©º,
-# å¯«å…¥/è®€å–å·¥å…·å¿…é ˆå›å ± CONFIG_MISSING çµæ§‹åŒ–éŒ¯èª¤, ä¸å¯ fallback åˆ° author çš„ Sheet)
-# å¯è¢« SHEET_ID / SHEET_GID env var è¦†å¯« (è¦‹ä¸Šé¢ env è®€å–å€å¡Š)
-SG_RAW_GID = int(SHEET_GID_OVERRIDE) if SHEET_GID_OVERRIDE.isdigit() else 0
-SG_RAW_SHEET_ID = SHEET_ID_OVERRIDE or ""
-SG_RAW_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}"
-    f"/edit?gid={SG_RAW_GID}#gid={SG_RAW_GID}"
-)
-# China-Raw (Shanghai ç”¨çš„, user 2026-08-21 å»º)
-CHINA_RAW_GID = 488353479
-CHINA_RAW_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}"
-    f"/edit?gid={CHINA_RAW_GID}#gid={CHINA_RAW_GID}"
-)
-
-# JD æŠ“å–å‰çš„æ¨™é¡Œé—œéµå­—éæ¿¾ (çœé…é¡)
-# çœ‹åˆ°é€™äº›è©å°±è·³éä¸æŠ“ JDï¼›æ¯”å°ç”¨ word-boundary + case-insensitive
-DEFAULT_SKIP_KEYWORDS = [
-    # æ˜ç¢ºå¤ªèœ
-    "intern", "internship", "trainee", "graduate", "grad",
-    "entry", "entry level", "entry-level", "junior", "jr",
-    # åŠ©ç†/æ”¯æ´ â€” ä½† "assistant" æœ‰ senior æƒ…å¢ƒ (AVP/Asst Director), ç”¨ whitelist è“‹é
-    "assistant", "support", "coordinator", "administrator", "clerk", "secretary",
-    # analyst / marketing track (æœ‰ "product" ä½†å…¶å¯¦ä¸æ˜¯ PM)
-    "product marketing", "product analyst",
-    # æ¸¬è©¦ / QA
-    "qa", "test", "quality assurance",
-    # Sales / BD / AE
-    "sales", "business development", "account executive",
-    # specialist å IC
-    "specialist",
-    # çŸ­/è‡¨æ™‚
-    "temp", "temporary", "contract",
-]
-
-# Senior whitelist: æŸäº›è©é›–ç„¶åœ¨ skip list, ä½†è‹¥å¾Œé¢æ¥é€™äº› senior è©å°±ä¸è©²è¢«æ“‹
-SENIOR_FOLLOWERS = [
-    "vice president", "director", "general manager", "managing director",
-    "president", "ceo", "cfo", "cto", "cmo", "coo", "chairman", "head",
-    "secretary-general",
-]
-
-# Senior æ¨™è¨˜ (anywhere in title)ï¼šç•¶ "specialist" ä¹‹é¡ skip è©å‡ºç¾æ™‚,
-# è‹¥ title ä»»ä¸€ä½ç½®æœ‰é€™äº› senior è©, å°±è¦–ç‚ºé«˜éšä¸æ“‹
-SENIOR_MARKERS_ANYWHERE = [
-    "avp", "vp", "vice president", "director", "head", "chief",
-    "senior", "staff", "principal", "lead", "managing director",
-    "general manager", "president", "ceo", "cfo", "cto", "cmo", "coo",
-    "chairman",
-]
-
-# Whitelist ç­–ç•¥: ä¸åŒ skip è©ç”¨ä¸åŒåˆ¤å®šæ–¹å¼
-# - "adjacent": skip è©å¾Œè¦**ç›´æ¥æ¥** senior è©æ‰ç®— (e.g., "Assistant VP")
-# - "anywhere": title ä»»ä¸€ä½ç½®æœ‰ senior è©å°±ç®— (e.g., "AVP, Specialist")
-WHITELIST_RULES = {
-    "assistant": "adjacent",
-    "specialist": "anywhere",
-}
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# é—œéµå­—æ¯”å°å·¥å…·
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def _make_skip_pattern(skip_words: list[str]) -> re.Pattern:
-    """ç·¨ä¸€å€‹ case-insensitiveã€word-boundary çš„ regexã€‚"""
-    escaped = [re.escape(w) for w in skip_words]
-    # \b åœ¨ "entry-level" é€™ç¨® hyphen å­—ä¸²æœƒå¤±æ•ˆï¼Œæ”¹æˆ (?<![a-z])
-    pat = r"(?<![a-z])(" + "|".join(escaped) + r")(?![a-z])"
-    return re.compile(pat, re.IGNORECASE)
-
-
-def _is_senior_assistant_title(title: str) -> bool:
-    """adjacent æ¨¡å¼: 'assistant' ç›´æ¥æ¥ senior è©æ‰ç®— senior (é¿å… 'Assistant to CEO' èª¤åˆ¤)"""
-    if not title:
-        return False
-    t = title.lower()
-    for sw in SENIOR_FOLLOWERS:
-        if f"assistant {sw}" in t or f"assistant, {sw}" in t:
-            return True
-    return False
-
-
-def _has_senior_marker_anywhere(title: str) -> bool:
-    """anywhere æ¨¡å¼: title ä»»ä¸€ä½ç½®æœ‰ senior æ¨™è¨˜å°±ç®—"""
-    if not title:
-        return False
-    t = title.lower()
-    return any(m in t for m in SENIOR_MARKERS_ANYWHERE)
-
-
-def match_skip_reason(title: str, skip_pat: re.Pattern) -> str | None:
-    """æ¨™é¡Œå‘½ä¸­ skip list å°±å›å‚³å‘½ä¸­çš„è©ï¼Œå¦å‰‡ Noneã€‚
-    æ™ºæ…§ä¾‹å¤–: assistant + senior è© (adjacent) æˆ– specialist + senior è© (anywhere) è¦–ç‚ºé«˜éšã€‚"""
-    if not title:
-        return None
-    m = skip_pat.search(title)
-    if not m:
-        return None
-    hit = m.group(1).lower()
-    rule = WHITELIST_RULES.get(hit)
-    if rule == "adjacent" and _is_senior_assistant_title(title):
-        return None
-    if rule == "anywhere" and _has_senior_marker_anywhere(title):
-        return None
-    return hit
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# è·¨ run å·²æŠ“ JD è¨˜éŒ„ (JSONL, append-only)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def jd_hash(jd_text: str) -> str:
-    return hashlib.sha256((jd_text or "").encode("utf-8")).hexdigest()[:16]
-
-
-def load_seen_ids(path: Path = Path(SEEN_FILE)) -> set[tuple[str, str]]:
-    """è®€ seen_jds.jsonlï¼Œå›å‚³ set of (source, job_id)ã€‚å£è¡Œè·³éä¸ç‚¸ã€‚
-
-    âš ï¸ è·¨ source å€åˆ†: LinkedIn / JobStreet éƒ½æ˜¯ç´”æ•¸å­—, æœƒæ’; Jora æ˜¯ 32-char hex ä¸æ’
-    èˆŠè¨˜éŒ„æ²’ source æ¬„ä½ â†’ å¾ job_id æ¨æ–·:
-      - 32-char hex â†’ "jora"
-      - ç´”æ•¸å­— â†’ "linkedin" (é è¨­, å›  2026-08-22 ä¹‹å‰éƒ½æ˜¯ LinkedIn + Jora)
-    """
-    if not path.exists():
-        return set()
-    seen = set()
-    with open(path, "r", encoding="utf-8") as f:
-        for ln, line in enumerate(f, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-                jid = row.get("job_id")
-                if not jid:
-                    continue
-                # å„ªå…ˆç”¨è¨˜éŒ„è£¡çš„ source, æ²’æœ‰å°±å¾ job_id æ¨æ–·
-                src = row.get("source")
-                if not src:
-                    if re.fullmatch(r"[a-f0-9]{32}", jid):
-                        src = "jora"
-                    elif re.fullmatch(r"\d+", jid):
-                        src = "linkedin"
-                    else:
-                        src = "unknown"
-                seen.add((src, jid))
-            except json.JSONDecodeError:
-                print(f"            (warn) seen file line {ln} å£æ‰ï¼Œè·³é")
-    return seen
-
-
-def append_seen(job_id: str, jd_hash_val: str, title: str, company: str,
-                path: Path = Path(SEEN_FILE), source: str = "linkedin") -> None:
-    record = {
-        "job_id": job_id,
-        "source": source,  # 2026-08-22 æ–°å¢, ä¹‹å¾Œå€åˆ† LinkedIn / Jora / JobStreet
-        "jd_hash": jd_hash_val,
-        "fetched_at": datetime.now(TZ_LOCAL).isoformat(timespec="seconds"),
-        "title": (title or "")[:200],
-        "company": (company or "")[:100],
-    }
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def load_jd_cache_from_jsons(pattern: str = "*_product_jobs_*_jd.json",
-                               skip_files: set[str] | None = None) -> dict:
-    """
-    å¾æ‰€æœ‰ *_jd.json æª”æ¡ˆè¼‰å…¥ JD cache: {(source, job_id): {jd_text, jd_lines, jd_hash, ...}}ã€‚
-    ç”¨ä½œ enrich_with_jd çš„è·¨ run cache ä¾†æºï¼ˆé¿å…å·²æŠ“éçš„ JD é‡æŠ“ï¼‰ã€‚
-
-    2026-08-22 æ”¹: å¾ {job_id: ...} æ”¹ç‚º {(source, job_id): ...}, é¿å… LinkedIn / JobStreet æ•¸å­— ID æ’
-
-    Args:
-        pattern: glob pattern, é è¨­æƒæ‰€æœ‰ *_jd.json
-        skip_files: è¦è·³éçš„æª”å setï¼ˆä¾‹: ç•¶å‰ run å°‡è¦è¼¸å‡ºçš„æª”æ¡ˆï¼‰
-    """
-    cache = {}
-    skip_files = skip_files or set()
-    for fp in sorted(Path(".").glob(pattern)):
-        if fp.name in skip_files:
-            continue
-        try:
-            data = json.loads(fp.read_text(encoding="utf-8"))
-        except Exception as e:
-            print(f"  (warn) {fp.name} è®€å¤±æ•—: {e}")
-            continue
-        n = 0
-        for j in data:
-            jid = j.get("job_id")
-            if not jid or not j.get("jd_text"):
-                continue
-            src = j.get("source")
-            if not src:
-                if re.fullmatch(r"[a-f0-9]{32}", jid):
-                    src = "jora"
-                elif re.fullmatch(r"\d+", jid):
-                    src = "linkedin"
-                else:
-                    src = "unknown"
-            key = (src, jid)
-            if key not in cache:  # ç¬¬ä¸€å€‹æª”æ¡ˆå„ªå…ˆ
-                cache[key] = {
-                    "jd_text": j["jd_text"],
-                    "jd_lines": j.get("jd_lines"),
-                    "jd_hash": j.get("jd_hash"),
-                }
-                n += 1
-        if n:
-            print(f"  cache {fp.name}: +{n} JDs (ç´¯è¨ˆ {len(cache)})")
-    return cache
-
-
-def reset_seen(path: Path = Path(SEEN_FILE)) -> int:
-    """åˆªæ‰ seen fileï¼Œå›å‚³è¢«åˆªé™¤çš„ç­†æ•¸ï¼ˆå¦‚æœæœ‰å‚™ä»½ï¼‰ã€‚"""
-    if not path.exists():
-        return 0
-    n = sum(1 for _ in open(path, "r", encoding="utf-8") if _.strip())
-    path.unlink()
-    return n
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Visa / Sponsorship åµæ¸¬ (K æ¬„, ä¸‰å±¤ç´š)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-_VISA_RES = {
-    level: re.compile("|".join(pats), re.IGNORECASE)
-    for level, pats in VISA_PATTERNS.items()
-}
-
-
-def detect_visa_signal(jd_text: str) -> str:
-    """æƒ JD æ‰¾ visa/sponsorship ä¿¡è™Ÿã€‚
-    å›å‚³: "" æ²’è¨Šè™Ÿ | "âš ï¸ HARD: <text>" (æ˜ç¢ºæ‹’çµ•) | "<text>" (SOFT/POSITIVE, åªè²¼åŸæ–‡)
-    """
-    if not jd_text:
-        return ""
-    for level in ("HARD", "SOFT", "POSITIVE"):
-        m = _VISA_RES[level].search(jd_text)
-        if m:
-            if level == "HARD":
-                return f"âš ï¸ HARD: {m.group(0)}"
-            # SOFT / POSITIVE ç›´æ¥å›åŸæ–‡, ä¸åŠ æ¨™ç±¤
-            return m.group(0)
-    return ""
-
-
-def extract_work_mode(jd_text: str, title: str = "") -> str:
-    """å¾ JD è·Ÿ title æŠ“ work mode (Remote / Hybrid / Onsite / ç©º)ã€‚
-    ç´” regex, ä¸æ¶ˆè€— LLM tokenã€‚
-    2026-08-23 æ”¹: çµ±ä¸€ç”¨ "Onsite" (æ²’ hyphen); é‡æ§‹æˆ list-of-patterns çµæ§‹, é‚è¼¯è·ŸåŸæœ¬ä¸€è‡´
-    å„ªå…ˆåº:
-      1) Title é–‹é ­ "Remote - ...", "Hybrid - ...", "Onsite - ..."
-      2) JD é–‹é ­ "Location: ... (hybrid)" / "on a hybrid basis" / "WORK OPTION: In Office"
-      3) ä¸­æ–‡å¸¸è¦‹ "è¿œç¨‹åŠå…¬" / "æ··åˆåŠå…¬" / "ç°åœºåŠå…¬" / "é©»åœº"
-      4) å…¨æ–‡ fallback "fully remote" / "hybrid working" / "onsite role"
-    """
-    # helper: æŠŠ match çµæœæ¨™æº–åŒ– ("on-site" / "onsite" / "in office" â†’ "Onsite"; å…¶ä»– capitalize)
-    def _norm(v: str) -> str:
-        v = v.lower().strip()
-        if v.startswith("on"):
-            return "Onsite"
-        return v.capitalize()  # Remote / Hybrid
-
-    if not jd_text and not title:
-        return ""
-
-    # 1) Title é–‹é ­
-    if title:
-        m = re.match(r"^\s*(remote|hybrid|on-site|onsite)\s*[-â€”â€“/]", title.lower().strip())
-        if m:
-            return _norm(m.group(1))
-
-    if not jd_text:
-        return ""
-
-    head = jd_text[:500]
-    full = jd_text
-
-    # 2) JD é–‹é ­ 500 chars â€” 3 å€‹ç‰¹æ®Š regex
-    head_patterns = [
-        (r"\(\s*(remote|hybrid|on-site|onsite)\s*\)", "norm", re.IGNORECASE),  # "(hybrid)"
-        (r"\bon\s+a\s+(remote|hybrid|on-site|onsite)\s+basis\b", "norm", re.IGNORECASE),  # "on a hybrid basis"
-        (r"\bwork\s+option[s]?\s*[:\-]?\s*(in\s+office|remote|hybrid|on-?site)\b", "work_option", re.IGNORECASE),
-    ]
-    for pat, mode, flags in head_patterns:
-        m = re.search(pat, head, flags)
-        if m:
-            if mode == "norm":
-                return _norm(m.group(1))
-            else:  # "work_option": "in office" / "on-site" éƒ½ç®— Onsite
-                v = m.group(1).lower().replace(" ", " ")
-                if "office" in v or v.startswith("on"):
-                    return "Onsite"
-                return v.capitalize()
-
-    # 3) ä¸­æ–‡å¸¸è¦‹ (JD é–‹é ­ 500 chars) + 4) å…¨æ–‡ fallback â€” çµ±ä¸€ list
-    all_patterns = [
-        # ä¸­æ–‡ (åªåœ¨ head æŸ¥)
-        (r"è¿œç¨‹(?:åŠå…¬|å·¥ä½œ|å²—ä½)?|åœ¨å®¶åŠå…¬|çº¿ä¸ŠåŠå…¬", "Remote", "head"),
-        (r"æ··åˆ(?:åŠå…¬|å·¥ä½œ)|çº¿ä¸Š\s*[/ï¼‹+]\s*çº¿ä¸‹|å¼¹æ€§(?:åŠå…¬|å·¥ä½œ)", "Hybrid", "head"),
-        (r"ç°åœº(?:åŠå…¬)?|é©»åœº|åˆ°å²—|åç­|çº¿ä¸‹åŠå…¬|å…¨èŒåç­", "Onsite", "head"),
-        # è‹±æ–‡ fallback (å…¨æ–‡)
-        (r"\b(fully\s+remote|100%\s+remote|work\s+from\s+home|wfh)\b", "Remote", "full"),
-        (r"\b(hybrid\s+(working|role|arrangement)|hybrid\s+work)\b", "Hybrid", "full"),
-        (r"\b(on-?site\s+(role|work|position)|on-?site\s+basis)\b", "Onsite", "full"),
-    ]
-    for pat, label, scope in all_patterns:
-        text = head if scope == "head" else full
-        if re.search(pat, text, re.IGNORECASE):
-            return label
-
-    return ""
-
-
-# å‘ä¸‹ç›¸å®¹ (èˆŠå)
-def detect_hard_blocker(jd_text: str) -> str:
-    """ä¿ç•™èˆŠå, å¯¦ä½œä¸ŠåŒ detect_visa_signal"""
-    return detect_visa_signal(jd_text)
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Google Sheet å¯«å…¥
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def extract_sheet_id(url_or_id: str) -> str:
-    """å¾å®Œæ•´ URL æˆ– raw ID æŠ“ sheet IDã€‚"""
-    m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", url_or_id)
-    if m:
-        return m.group(1)
-    if re.fullmatch(r"[a-zA-Z0-9_-]{20,}", url_or_id):
-        return url_or_id
-    raise ValueError(f"çœ‹ä¸å‡º sheet ID: {url_or_id!r}")
-
-
-def extract_gid(url_or_id: str) -> str | None:
-    m = re.search(r"[?&#]gid=(\d+)", url_or_id)
-    return m.group(1) if m else None
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Sheet å¯«å…¥è¼”åŠ©å‡½æ•¸ (2026-08-23 é‡æ§‹æŠ½å‡º, è¡Œç‚ºèˆ‡åŸæœ¬ä¸€è‡´)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def build_e_formula(source: str, job_id: str, url: str = "") -> str:
-    """æ§‹é€  sheet E æ¬„çš„ =HYPERLINK() formula, ä¾ source ä¸åŒ:
-    - linkedin:  =HYPERLINK(".../jobPosting/{id}", "{id}")
-    - jora:      =HYPERLINK("{full_jora_url}", "{full_jora_url}")
-    - jobstreet: =HYPERLINK(".../job/{id}", ".../job/{id}")  (2026-08-23 å¾ slug-id æ”¹ç´” id)
-    """
-    if source == "jora":
-        full_url = url or f"{JORA_BASE}/job/Product-Manager-{job_id}"
-    elif source == "jobstreet":
-        full_url = f"{JOBSTREET_BASE}/job/{job_id}"
-    else:  # linkedin (default)
-        full_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
-    return f'=HYPERLINK("{full_url}","{full_url}")'
-
-
-def parse_sheet_row_to_key(row: list[str]) -> tuple[str, str] | None:
-    """å¾ sheet çš„æŸ row è§£å‡º (source, job_id), ç”¨æ–¼ dedupã€‚
-
-    è¼¸å…¥ row æ ¼å¼: [A=New, B='', C=date, D=source_label, E=URL, F=company, G=title, H=JD, I=loc, J=wm, K=visa]
-    D æ¬„è§£ source: "LinkedIn / Minimax" â†’ linkedin, "Jora / Minimax" â†’ jora, "JobStreet / Minimax" â†’ jobstreet
-    E æ¬„è§£ job_id: ä¾ source ä¸åŒç”¨ä¸åŒ regex (LinkedIn digit / jobPosting/digit / Jora 32-hex / JobStreet /job/digit)
-
-    Returns None å¦‚æœ row æ²’ E æ¬„æˆ–è§£ä¸å‡º job_id (e.g. J æ¬„ç©º + æ²’ K æ¬„çš„ header row).
-    """
-    if len(row) < 5 or not row[4].strip():
-        return None
-    d_cell = row[3].strip() if len(row) > 3 else ""
-    if "JobStreet" in d_cell:
-        src = "jobstreet"
-    elif "Jora" in d_cell:
-        src = "jora"
-    else:
-        src = "linkedin"
-    cell = row[4].strip()
-    # å¾ E æ¬„è§£ job_id
-    if cell.isdigit():
-        return (src, cell)
-    # LinkedIn formula: =HYPERLINK(".../jobPosting/123","123")
-    m = re.search(r"jobPosting/(\d+)", cell)
-    if m:
-        return (src, m.group(1))
-    # Jora: 32-char hex hash åœ¨ URL å°¾
-    m = re.search(r"([a-f0-9]{32})(?:\?|$)", cell)
-    if m:
-        return ("jora", m.group(1))  # å¼·åˆ¶ jora
-    # JobStreet: /job/{digit} ç´” id (2026-08-23 æ”¹å¾Œæ ¼å¼)
-    m = re.search(r"/job/(\d+)(?:\?|$)", cell)
-    if m and "jobstreet" in cell.lower():
-        return ("jobstreet", m.group(1))
-    return None
-
-
-def push_to_sheet(jobs: list[dict], sheet_url: str,
-                  sa_key_path: str = SHEET_SA_KEY,
-                  source: str = DEFAULT_SHEET_SOURCE,
-                  dry_run: bool = False,
-                  gid: str | int | None = None,
-                  location: str = LOCATION) -> dict:
-    """
-    æŠŠ jobs å¯«åˆ° Google Sheetã€‚
-    æ¬„ä½å°æ‡‰: A=New, C=ä»Šå¤©, D=source, E=API URL hyperlink, F=å…¬å¸, G=è·ç¨±,
-              H=JD, I=åœ°é», K=hard blocker marker; B/J ç•™ç©ºã€‚
-    å»é‡: è·³éå·²å­˜åœ¨çš„ E (Job URL)ã€‚
-
-    Visa detection åªå° Singapore è·‘ (TW/CN ä¸æª¢æŸ¥, å·¥ä½œç°½é™åˆ¶ä¸å¸¸è¦‹)
-
-    gid è§£æé †åº: explicit `gid` arg > URL å…§ `#gid=` / `?gid=` > SG_RAW_GID (default)ã€‚
-    URL æ²’å¸¶ gid ä¹Ÿä¸å‚³ arg â†’ ç›´æ¥ raiseï¼ˆé¿å…é»˜é»˜å¯«åˆ°ç¬¬ä¸€å€‹ tab = jobs_rawï¼‰ã€‚
-
-    2026-08-23 é‡æ§‹: æ‹† 3 å€‹ helper å‡½æ•¸ (`_load_sheet_keys` / `_build_sheet_row` / `_write_rows_to_sheet`),
-    åŸæœ¬ 186 è¡Œçš„å–®ä¸€å‡½æ•¸, æ‹†æˆ 60+30+30 è¡Œçš„ 3 å€‹å‡½æ•¸ + 60 è¡Œçš„ orchestrator
-    """
-    from datetime import date
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    sheet_id = extract_sheet_id(sheet_url)
-    resolved_gid = gid if gid is not None else extract_gid(sheet_url)
-    if resolved_gid is None:
-        raise ValueError(
-            "âŒ æ²’å¸¶ gid æœƒæ’åˆ° jobs_raw (ç¬¬ä¸€å€‹ tab)\n"
-            "   ä¿®æ³•: URL å¸¶ #gid=<worksheet-gid>  æˆ–  --gid <worksheet-gid>  æˆ–  --to-sheet ç”¨ SG_RAW_URL"
-        )
-    gid = str(resolved_gid)
-
-    if dry_run:
-        print(f"  [DRY RUN] ä¸æœƒçœŸçš„å¯«å…¥")
-        print(f"  sheet_id: {sheet_id[:20]}...")
-        print(f"  gid: {gid}")
-        print(f"  source label = {source!r}")
-        print(f"  å…± {len(jobs)} ç­†æº–å‚™å¯«å…¥ (after skip/dedup/visa)")
-        for j in jobs[:3]:
-            e_preview = build_e_formula(j.get("source", "linkedin"), j.get("job_id", ""), j.get("url", ""))
-            print(f"    [preview] title={j.get('title','')[:35]:35}  E={e_preview}")
-        return {"written": 0, "skipped_dup": 0, "dry_run": True}
-
-    # 1) èªè­‰ + é–‹ sheet
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file(str(sa_key_path), scopes=scopes)
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(sheet_id)
-    ws = sh.get_worksheet_by_id(int(gid))
-    print(f"  å·¥ä½œè¡¨: {ws.title!r}, ç›®å‰ row_count: {ws.row_count}")
-
-    # 2) è®€ç¾æœ‰ (source, job_id) keys + æ‰¾ä¸‹ä¸€å€‹ç©ºç™½ row
-    existing = ws.get_all_values()
-    existing_keys, next_row = _load_sheet_keys(existing)
-    print(f"  æ—¢æœ‰ (source, job_id) æ•¸: {len(existing_keys)}")
-    print(f"  ä¸‹ä¸€å€‹ç©ºç™½ row: {next_row}")
-
-    # 3) çµ„ rows (dedup, visa, work mode, formula) â€” ç”¨ _build_sheet_row helper
-    new_rows = []
-    skipped_dup = 0
-    skipped_no_jd = 0
-    for j in jobs:
-        row = _build_sheet_row(j, source, location, existing_keys)
-        if row is None:
-            # åˆ¤æ–·æ˜¯ dedup é‚„æ˜¯ no_jd
-            job_id = j.get("job_id", "")
-            if job_id and (j.get("source", "linkedin"), job_id) in existing_keys:
-                skipped_dup += 1
-            else:
-                skipped_no_jd += 1
-            continue
-        new_rows.append(row)
-        existing_keys.add((j.get("source", "linkedin"), j.get("job_id", "")))  # åŒ run å…§ dedup
-
-    # 4) å¯«å…¥ (æˆ–ç„¡ rows å°±ç›´æ¥ return)
-    if not new_rows:
-        return {
-            "written": 0,
-            "skipped_dup": skipped_dup,
-            "skipped_no_jd": skipped_no_jd,
-            "next_row": next_row,
-        }
-    return _write_rows_to_sheet(ws, next_row, new_rows, skipped_dup, skipped_no_jd)
-
-
-def _load_sheet_keys(existing: list[list[str]]) -> tuple[set[tuple[str, str]], int]:
-    """å¾ sheet ç¾æœ‰ rows è§£å‡º (source, job_id) set + ä¸‹ä¸€å€‹ç©ºç™½ row ç·¨è™Ÿã€‚
-    Returns: (existing_keys, next_row)
-    """
-    existing_keys: set[tuple[str, str]] = set()
-    for row in existing[1:]:
-        key = parse_sheet_row_to_key(row)
-        if key:
-            existing_keys.add(key)
-    # æ‰¾ä¸‹ä¸€å€‹ç©ºç™½ row
-    next_row = None
-    for i, row in enumerate(existing, 1):
-        if i == 1:
-            continue
-        if not any(c.strip() for c in row):
-            next_row = i
-            break
-    if next_row is None:
-        next_row = len(existing) + 1
-    return existing_keys, next_row
-
-
-def _build_sheet_row(job: dict, source_label: str, location: str,
-                      existing_keys: set[tuple[str, str]]) -> list | None:
-    """æŠŠä¸€å€‹ job dict æ§‹é€ ç‚º 11 æ¬„ sheet rowã€‚
-
-    Returns None è¡¨ç¤ºè¦è·³é (dedup å‘½ä¸­ æˆ– æ²’ JD); å¦å‰‡å›å‚³ 11 æ¬„ listã€‚
-    è·³éåŸå› è¦å¾å‘¼å«ç«¯ç”¨ existing_keys è·Ÿ jd_text åˆ¤æ–· (é€™è£¡åªè² è²¬æ§‹é€  row)ã€‚
-    """
-    from datetime import date
-    job_id = job.get("job_id", "")
-    if not job_id:
-        return None
-    job_source = job.get("source", "linkedin")
-    if (job_source, job_id) in existing_keys:
-        return None
-    jd_text = job.get("jd_text") or ""
-    if not jd_text:
-        return None
-    # Visa detection åªå° Singapore è·‘ (TW/CN ä¸æª¢æŸ¥, å·¥ä½œç°½é™åˆ¶ä¸å¸¸è¦‹)
-    if location.lower() == "singapore":
-        visa = detect_visa_signal(jd_text)
-    else:
-        visa = ""
-    jd_oneline = re.sub(r"\s+", " ", jd_text).strip()
-    work_mode = job.get("work_mode", "") or extract_work_mode(jd_text, job.get("title", ""))
-    e_formula = build_e_formula(job_source, job_id, job.get("url", ""))
-    return [
-        "New",                                              # A
-        "",                                                 # B (ç•™ç©º)
-        date.today().isoformat(),                           # C
-        source_label,                                       # D
-        e_formula,                                          # E (å«è¶…é€£çµ)
-        job.get("company", ""),                            # F
-        job.get("title", ""),                              # G
-        jd_oneline,                                         # H (å–®è¡Œ, è‡ªå‹•è£åˆ‡)
-        job.get("location", ""),                           # I
-        work_mode,                                          # J (Remote/Hybrid/Onsite)
-        visa,                                               # K
-    ]
-
-
-def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
-                          skipped_dup: int = 0, skipped_no_jd: int = 0) -> dict:
-    """æŠŠ new_rows å¯«åˆ° sheet, å›å‚³ stats dict (è·ŸåŸæœ¬ push_to_sheet ä¸€æ¨£æ ¼å¼)ã€‚
-
-    ä¸‰æ®µå¼å¯«å…¥ (é˜² F10 å…¬å¼æ³¨å…¥ï¼Œä¸” intentional formula æœ€å¾Œæ‰å•Ÿç”¨):
-      - Phase 1: A:D ç”¨ RAW
-      - Phase 2: F:K ç”¨ RAW
-      - Phase 3: E æ¬„ hyperlink formula ç”¨ USER_ENTERED
-    åªæœ‰æˆ‘å€‘è‡ªå·±ç”Ÿæˆçš„ E æ¬„ HYPERLINK æœƒè¢«ç•¶å…¬å¼, å…¶ä»–æ‰€æœ‰å¤–éƒ¨ scraped text
-    (title / company / JD / location / source label / visa) éƒ½ä¸èƒ½è¢«ç•¶å…¬å¼åŸ·è¡Œã€‚
-    """
-    end_row = next_row + len(new_rows) - 1
-    print(f"  æº–å‚™å¯«å…¥ row {next_row}-{end_row} ({len(new_rows)} ç­†, å…©æ®µå¼å¯«å…¥é˜²å…¬å¼æ³¨å…¥)...")
-    # é˜²å‘†: è‡ªå‹•æ“´å±• sheet rows (é¿å… end_row > row_count å ± 400)
-    if end_row > ws.row_count:
-        extra = end_row - ws.row_count + 100
-        print(f"  âš ï¸  sheet åªæœ‰ {ws.row_count} rows, åŠ  {extra} rows é¿å… overflow")
-        ws.add_rows(extra)
-    # External scraped text is written first as RAW. If a later data phase fails,
-    # the E-column live formula is never activated.
-    a_d_rows = [[r[i] for i in (0, 1, 2, 3)] for r in new_rows]
-    f_k_rows = [[r[i] for i in (5, 6, 7, 8, 9, 10)] for r in new_rows]
-    e_only_rows = [[r[4]] for r in new_rows]
-    ws.update(
-        range_name=f"A{next_row}:D{end_row}",
-        values=a_d_rows,
-        value_input_option="RAW",
-    )
-    ws.update(
-        range_name=f"F{next_row}:K{end_row}",
-        values=f_k_rows,
-        value_input_option="RAW",
-    )
-    # Intentional formula is the final phase.
-    ws.update(
-        range_name=f"E{next_row}:E{end_row}",
-        values=e_only_rows,
-        value_input_option="USER_ENTERED",
-    )
-    return {
-        "written": len(new_rows),
-        "skipped_dup": skipped_dup,
-        "skipped_no_jd": skipped_no_jd,
-        "next_row": next_row,
-        "end_row": end_row,
-    }
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# åˆ—è¡¨é 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-JOB_CARD_SEL = "div.base-card"
-TITLE_SEL    = ".base-search-card__title"
-COMPANY_SEL  = "a.hidden-nested-link"
-LOC_SEL      = ".job-search-card__location"
-TIME_SEL     = "time"
-LINK_SEL     = "a.base-card__full-link"
-
-
-def _clean(text_list) -> str:
-    return " ".join(t.strip() for t in text_list if t and t.strip()).strip()
-
-
-def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
-    params = {
-        "keywords": KEYWORDS,
-        "location": location,
-        "geoId": geo_id,
-        "f_TPR": tpr,
-        "sortBy": "DD",
-        "start": str(start),
-    }
-    return (
-        "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-        "?" + urlencode(params)
-    )
-
-
-def parse_list_page(html: str) -> list[dict]:
-    page = Adaptor(html)
-    jobs = []
-    for card in page.css(JOB_CARD_SEL):
-        urn = (card.attrib.get("data-entity-urn") or "").strip()
-        job_id = urn.rsplit(":", 1)[-1] if urn else ""
-
-        title   = _clean(card.css(TITLE_SEL + "::text").getall())
-        company = _clean(card.css(COMPANY_SEL + "::text").getall())
-        loc     = _clean(card.css(LOC_SEL + "::text").getall())
-
-        time_node = card.css(TIME_SEL)
-        posted_at = ""
-        posted_ago = ""
-        if time_node:
-            t = time_node[0]
-            posted_at  = (t.attrib.get("datetime") or "").strip()
-            posted_ago = _clean(t.css("::text").getall())
-
-        link_nodes = card.css(LINK_SEL)
-        href = (link_nodes[0].attrib.get("href") if link_nodes else "") or ""
-
-        if not job_id and not title:
-            continue
-        jobs.append({
-            "job_id": job_id,
-            "title": title,
-            "company": company,
-            "location": loc,
-            "posted_at": posted_at,
-            "posted_ago": posted_ago,
-            "url": href or f"https://www.linkedin.com/jobs/view/{job_id}",
-            "source": "linkedin",  # è®“ push_to_sheet / enrich_with_jd çŸ¥é“
-        })
-    return jobs
-
-
-def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
-    r = _cc_session.get(
-        build_list_url(tpr, start, location, geo_id),
-        impersonate="chrome",
-        timeout=20,
-        headers={"Accept-Language": "en-US,en;q=0.9"},
-    )
-    r.raise_for_status()
-    return r.text
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# JD æŠ“å– (å¯é¸)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-JD_DESC_SEL = "div.description__text"
-JD_BLOCK_SEL = "div.description__text p, div.description__text li, " \
-               "div.description__text h1, div.description__text h2, " \
-               "div.description__text h3, div.description__text h4, " \
-               "div.description__text strong, div.description__text span"
-
-
-def build_jd_url(job_id: str) -> str:
-    return f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
-
-
-def fetch_jd(job_id: str) -> dict:
-    """æŠ“å–®ä¸€è·ç¼ºçš„ JD ç´”æ–‡å­—ã€‚"""
-    try:
-        r = _cc_session.get(
-            build_jd_url(job_id),
-            impersonate="chrome",
-            timeout=20,
-            headers={"Accept-Language": "en-US,en;q=0.9"},
-        )
-    except Exception as e:
-        return {"jd_text": None, "jd_html": None, "error": f"{type(e).__name__}: {e}"}
-
-    if r.status_code == 429:
-        return {"jd_text": None, "jd_html": None, "error": "429 rate limited"}
-    if r.status_code != 200:
-        return {"jd_text": None, "jd_html": None, "error": f"HTTP {r.status_code}"}
-
-    ap = Adaptor(r.text)
-    desc_nodes = ap.css(JD_DESC_SEL)
-    if not desc_nodes:
-        return {"jd_text": None, "jd_html": None, "error": "no description node found"}
-
-    desc = desc_nodes[0]
-    # â˜… æŠ“å…¨éƒ¨ ::text (åŒ…å«è£¸æ–‡å­—ç¯€é»ï¼Œä¸åª p/li/h*/strong)
-    all_text = desc.css("::text").getall()
-    lines = []
-    for t in all_text:
-        t = t.strip()
-        if t and len(t) > 1:
-            lines.append(t)
-    # çµæ§‹åŒ–ç‰ˆæœ¬ (çµ¦æƒ³çœ‹åˆ†æ®µçš„)
-    structured_lines = []
-    for p in desc.css(JD_BLOCK_SEL):
-        t = (p.css("::text").get() or "").strip()
-        if t and len(t) > 1:
-            structured_lines.append(t)
-
-    return {
-        "jd_text": "\n".join(lines) if lines else None,
-        "jd_lines": structured_lines if structured_lines else lines,
-        "jd_html": None,
-        "error": None,
-    }
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# ä¸»ç¨‹å¼
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def human_sleep(label: str = ""):
-    s = random.uniform(SLEEP_MIN, SLEEP_MAX)
-    if label:
-        print(f"            sleep {s:.1f}s ({label})", flush=True)
-    time.sleep(s)
-
-
-def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str = GEO_ID) -> list[dict]:
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-
-    for p in range(max_pages):
-        start = p * PAGE_SIZE
-        print(f"\n  [list page {p+1}] start={start}")
-        try:
-            html = fetch_list_page(tpr, start, location, geo_id)
-        except Exception as e:
-            print(f"            FAIL: {type(e).__name__}: {e}")
-            return all_jobs
-        Path(f"raw_list_{p+1}.html").write_text(html)
-        jobs = parse_list_page(html)
-        new_jobs = [j for j in jobs if j["job_id"] not in seen]
-        for j in new_jobs:
-            seen.add(j["job_id"])
-            all_jobs.append(j)
-        print(f"            æ”¶ {len(jobs)}, æ–°å¢ {len(new_jobs)}, é‡è¤‡ {len(jobs)-len(new_jobs)}, ç´¯è¨ˆ {len(all_jobs)}")
-        if not new_jobs or len(jobs) < PAGE_SIZE:
-            print("            åˆ°åº•äº†")
-            break
-        if p < max_pages - 1:
-            human_sleep("list")
-
-    return all_jobs
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Jora (sg.jora.com) - ç´” HTML parse, æ²’ API
-# ç”¨ã€Œa=Ndã€åšæ™‚é–“ filter, ã€Œp=Nã€åš page, æ¯é å›ºå®š 30 jobs
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD,
-                        location: str = JORA_LOCATION) -> str:
-    """çµ„ Jora list URLã€‚Page 1 é–‹å§‹ 1, ä¸æ˜¯ 0ã€‚"""
-    return f"{JORA_BASE}/j?a={jora_tpr}&l={location}&q={keyword.replace(' ', '+')}&p={page}"
-
-
-def parse_jora_list_page(html: str, location: str = JORA_LOCATION) -> list[dict]:
-    """å¾ Jora åˆ—è¡¨ HTML æŠ“ jobsã€‚job_id æ˜¯ URL å…§çš„ hash (32 char hex)ã€‚"""
-    ap = Adaptor(html)
-    seen: set[str] = set()
-    jobs: list[dict] = []
-    # job links: /job/{Title-slug}-{hash}?...
-    # title slug å¯èƒ½å« dash (e.g. "Product-Manager" è®Š "Product-Manager-..."), æ‰€ä»¥ anchor åœ¨æœ€å¾Œé‚£æ®µ hash
-    for href in ap.css("a[href*='/job/']::attr(href)").getall():
-        m = re.search(r'/job/.+?-([a-f0-9]{32})(?:\?|&|$)', href)
-        if not m:
-            continue
-        job_id = m.group(1)
-        if job_id in seen:
-            continue
-        seen.add(job_id)
-        # å®Œæ•´ URL (çµ¦ sheet E æ¬„ hyperlink)
-        if href.startswith('http'):
-            url = href
-        else:
-            url = f"{JORA_BASE}{href}" if href.startswith('/') else f"{JORA_BASE}/{href}"
-        # å¾ URL è§£æ¨™é¡Œ (slug çš„éƒ¨åˆ†å»æ‰ hash)
-        slug_match = re.search(r'/job/([^?]+)\?', href)
-        title_slug = slug_match.group(1) if slug_match else ''
-        title = re.sub(r'-[a-f0-9]{32}$', '', title_slug).replace('-', ' ')
-        jobs.append({
-            'job_id': job_id,
-            'title': title,
-            'company': '',  # list é æ²’é¡¯ç¤ºå…¬å¸, å¾ JD é è£œ
-            'location': location,
-            'posted_at': '',
-            'posted_ago': '',
-            'url': url,
-            'source': 'jora',  # è®“ push_to_sheet / enrich_with_jd çŸ¥é“ç”¨å“ªå€‹ fetcher è·Ÿ hyperlink æ ¼å¼
-        })
-    return jobs
-
-
-def fetch_jora_jd(url: str) -> dict:
-    """æŠ“ Jora è©³ç´°é , å¾ div.job-detail æ‹¿ JD æ–‡å­— + å…¬å¸/ä½ç½®è£œé½Šã€‚"""
-    for attempt in range(3):
-        try:
-            r = _cc_session.get(url, timeout=20, impersonate='chrome')
-        except Exception as e:
-            return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(e)}
-        if r.status_code == 200:
-            break
-        if r.status_code == 403:
-            wait = 30 * (attempt + 1)
-            print(f"            403 â†’ wait {wait}s (attempt {attempt+1}/3)")
-            time.sleep(wait)
-            continue
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    else:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'HTTP 403 é‡è©¦å¤±æ•—'}
-    if r.status_code != 200:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    ap = Adaptor(r.text)
-    # JD: ç¬¬ä¸€å€‹ job-detail div
-    jd_divs = ap.css("div[class*='job-detail']")
-    if not jd_divs:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'no job-detail div'}
-    jd_text = ' '.join(jd_divs[0].css('::text').getall()).strip()
-    jd_lines = [t.strip() for t in jd_divs[0].css('::text').getall() if t.strip() and len(t.strip()) > 1]
-    # å¾ main å€å¡ŠæŠ“ title/company/location
-    main = ap.css("main")
-    # title (h1)
-    h1 = ap.css('h1::text').getall()
-    title = h1[0].strip() if h1 else ''
-    # company/location: h1 + * å…ƒç´ å…§å®¹æ˜¯ "Company â€“ Location" æ ¼å¼ (en-dash åˆ†éš”)
-    company = ''
-    location_text = ''
-    next_el = ap.css('h1 + *')
-    if next_el:
-        meta_chunks = [t.strip() for t in next_el[0].css('::text').getall() if t.strip()]
-        if meta_chunks:
-            # éæ¿¾æ‰åˆ†éš”ç¬¦ "â€“" "/"
-            parts = [p for p in meta_chunks if p not in ('â€“', '-', '/', '|')]
-            if parts:
-                company = parts[0]
-            if len(parts) > 1:
-                location_text = parts[1]
-    # fallback: å¾ main é–‹é ­å‰å¹¾è¡ŒæŠ“
-    if not company and main:
-        for t in main[0].css('::text').getall()[:20]:
-            t = t.strip()
-            if not t: continue
-            if t in ('View or apply for job', 'Save job', 'â€“', '-', '/'): continue
-            if 'reviews at' in t.lower(): continue
-            if 1 < len(t) < 80 and not t.startswith(('4.', '5.', 'Permanent', 'Full', 'Part', 'Contract', '2d', '3d', '1d', '5d', '6d', '1w', '2w', 'Today', 'Yesterday')):
-                company = t
-                break
-    return {
-        'jd_text': jd_text if jd_text else None,
-        'jd_lines': jd_lines if jd_lines else None,
-        'jd_html': None,
-        'company': company,
-        'location': location_text,
-        'title': title,
-        'error': None if jd_text else 'empty JD',
-    }
-
-
-def crawl_jora_list(tpr: str, max_pages: int,
-                    keyword: str = JORA_KEYWORD,
-                    location: str = JORA_LOCATION) -> list[dict]:
-    """æŠ“ Jora åˆ—è¡¨ (HTML parse, æ¯é  30 jobs)ã€‚"""
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    for p in range(1, max_pages + 1):
-        print(f"\n  [jora list page {p}]")
-        # 403 retry with backoff (Jora æœƒå°çŸ­æ™‚é–“å¤§é‡ request ban session)
-        r = None
-        for attempt in range(3):
-            try:
-                url = build_jora_list_url(JORA_TPR[tpr], p, keyword, location)
-                r = _cc_session.get(url, timeout=20, impersonate='chrome')
-            except Exception as e:
-                print(f"            FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code == 200:
-                break
-            if r.status_code == 403:
-                wait = 30 * (attempt + 1)  # 30s, 60s, 90s
-                print(f"            403 â†’ wait {wait}s (attempt {attempt+1}/3)")
-                time.sleep(wait)
-                continue
-            print(f"            FAIL: HTTP {r.status_code}")
-            return all_jobs
-        if r is None or r.status_code != 200:
-            print(f"            FAIL: HTTP 403 é‡è©¦å¤±æ•—, æ”¾æ£„æ­¤é ")
-            return all_jobs
-        jobs = parse_jora_list_page(r.text, location=location)
-        new_jobs = [j for j in jobs if j['job_id'] not in seen]
-        for j in new_jobs:
-            seen.add(j['job_id'])
-            all_jobs.append(j)
-        print(f"            æ”¶ {len(jobs)}, æ–°å¢ {len(new_jobs)}, é‡è¤‡ {len(jobs)-len(new_jobs)}, ç´¯è¨ˆ {len(all_jobs)}")
-        # åˆ°åº•æ¢ä»¶: (1) 0 å€‹æ–° job, (2) page å®Œå…¨ç©º, (3) unique jobs < 10 (å°¾é )
-        # ä¹‹å‰ç”¨ < 25 æ˜¯ LinkedIn 30/page çš„æ¨™æº–, Jora å¯¦éš›åª 15 unique/page, æœƒèª¤åˆ¤
-        if not new_jobs or len(jobs) == 0 or len(new_jobs) < 10:
-            print("            åˆ°åº•äº†")
-            break
-        if p < max_pages:
-            human_sleep("list")
-    return all_jobs
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# JobStreet SG ä¾†æº (sg.jobstreet.com) â€” 2026-08-22 æ•´åˆ
-# å…¬é–‹ List API + GraphQL, ä¸éœ€ Cloudflare solve; HTML é  100% æ“‹, èµ° GraphQL æ‹¿ content
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-JOBSTREET_DETAIL_QUERY = """
-query getJobDetails($jobId: ID!) {
-  jobDetails(id: $jobId) {
-    job {
-      id
-      title
-      abstract
-      content
-      status
-      isExpired
-      createdAt { dateTimeUtc }
-      updatedAt { dateTimeUtc }
-      expiresAt { dateTimeUtc }
-      advertiser { id name }
-      location { label }
-      workTypes { label }
-    }
-  }
-}
-"""
-
-
-def build_jobstreet_list_url(keyword: str, page: int, daterange: str,
-                              worktype: str = JOBSTREET_WORKTYPE_FT,
-                              where: str = JOBSTREET_LOCATION,
-                              page_size: int = 20) -> str:
-    """çµ„ JobStreet list API URLã€‚"""
-    import urllib.parse
-    params = {
-        "siteKey": "SG-Main",
-        "keywords": keyword,
-        "where": where,
-        "worktype": worktype,
-        "daterange": str(daterange),
-        "page": str(page),
-        "pageSize": str(page_size),
-    }
-    return f"{JOBSTREET_LIST_API}?{urllib.parse.urlencode(params)}"
-
-
-def parse_jobstreet_list_page(data: dict, keyword: str) -> list[dict]:
-    """å¾ JobStreet list API JSON æŠ“ jobsã€‚"""
-    jobs_raw = data.get("data") or []
-    out = []
-    for j in jobs_raw:
-        jid = j.get("id")
-        if not jid:
-            continue
-        # å…¬å¸å„ªå…ˆç”¨ employer.name, é€€åˆ° advertiser.description
-        emp = j.get("employer") or {}
-        adv = j.get("advertiser") or {}
-        company = emp.get("name") or adv.get("description") or j.get("companyName") or ""
-        # locations â†’ ç”¨ç¬¬ä¸€å€‹ label
-        locs = j.get("locations") or []
-        loc_label = locs[0].get("label", "") if locs else ""
-        # workArrangements (Remote / Hybrid / Onsite) â€” 2026-08-23 çµ±ä¸€ "Onsite" æ²’ hyphen
-        wm = ""
-        wa = (j.get("workArrangements") or {}).get("data") or []
-        if wa and isinstance(wa, list) and wa[0].get("label"):
-            wm = wa[0]["label"].get("text", "")
-            wm = wm.replace("On-site", "Onsite")  # JobStreet API çµ¦ "On-site" çµ±ä¸€è½‰ "Onsite"
-        out.append({
-            "job_id": str(jid),
-            "title": j.get("title", ""),
-            "company": company,
-            "location": loc_label,
-            "posted_at": j.get("listingDate", ""),
-            "posted_ago": j.get("listingDateDisplay", ""),
-            "work_mode": wm,
-            "teaser": j.get("teaser", ""),
-            "url": "",  # ä¸åœ¨ list éšæ®µçµ„, enrich éšæ®µè£œ (è¦ç”¨ title slug)
-            "keyword_used": keyword,  # debug ç”¨, å“ªå€‹ keyword æ’ˆåˆ°çš„
-            "source": "jobstreet",
-        })
-    return out
-
-
-def fetch_jobstreet_jd(job_id: str) -> dict:
-    """æ‰“ GraphQL æ‹¿å–®ä¸€è·ç¼ºå®Œæ•´ content (HTML JD), BS4 è½‰ç´”æ–‡å­—ã€‚"""
-    try:
-        r = _cc_session.post(
-            JOBSTREET_GRAPHQL,
-            json={"query": JOBSTREET_DETAIL_QUERY, "variables": {"jobId": str(job_id)}},
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
-                     "Content-Type": "application/json"},
-            timeout=30,
-            impersonate="chrome",
-        )
-    except Exception as e:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(e)}
-    if r.status_code != 200:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    try:
-        data = r.json()
-    except Exception as e:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'JSON fail: {e}'}
-    if "errors" in data:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(data['errors'][:1])}
-    job = (data.get("data") or {}).get("jobDetails", {}).get("job")
-    if not job:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'no job in response'}
-    # content (HTML) â†’ plain text
-    content_html = job.get("content") or ""
-    if content_html:
-        soup = BeautifulSoup(content_html, "html.parser")
-        jd_text = re.sub(r"\s+", " ", soup.get_text(separator=" ", strip=True)).strip()
-        jd_lines = [t.strip() for t in soup.stripped_strings if len(t.strip()) > 1]
-    else:
-        jd_text = None
-        jd_lines = None
-    # å…¬å¸/ä½ç½® fallback (å¾ GraphQL è£œ)
-    adv = job.get("advertiser") or {}
-    loc = job.get("location") or {}
-    return {
-        'jd_text': jd_text,
-        'jd_lines': jd_lines,
-        'jd_html': content_html or None,
-        'company': adv.get("name", ""),
-        'location': (loc.get("label") if isinstance(loc, dict) else "") or "",
-        'title': job.get("title", ""),
-        'error': None if jd_text else 'empty JD',
-    }
-
-
-def crawl_jobstreet_list(daterange: str, max_pages: int,
-                          keywords: list[str] | None = None,
-                          worktype: str = JOBSTREET_WORKTYPE_FT) -> list[dict]:
-    """è·‘å¤šå€‹ keyword çš„ JobStreet list, è·¨ keyword dedupã€‚å›å‚³ unique jobsã€‚
-
-    50% è»Ÿåœ: æŸé  unique new jobs < pageSize * 0.5 å°±è¦–ç‚ºåˆ°å°¾ã€‚
-    """
-    if keywords is None:
-        keywords = JOBSTREET_KEYWORDS
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    for kw in keywords:
-        kw_seen: set[str] = set()
-        for p in range(1, max_pages + 1):
-            url = build_jobstreet_list_url(kw, p, daterange, worktype=worktype)
-            try:
-                r = _cc_session.get(url, timeout=20, impersonate="chrome")
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code != 200:
-                print(f"  [jobstreet {kw} p{p}] FAIL: HTTP {r.status_code}")
-                return all_jobs
-            try:
-                data = r.json()
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL JSON: {e}")
-                return all_jobs
-            jobs = parse_jobstreet_list_page(data, kw)
-            new_jobs = [j for j in jobs if j['job_id'] not in seen and j['job_id'] not in kw_seen]
-            for j in new_jobs:
-                kw_seen.add(j['job_id'])
-                seen.add(j['job_id'])
-                all_jobs.append(j)
-            total_count = data.get("totalCount", "?")
-            print(f"  [jobstreet {kw} p{p}] æ”¶ {len(jobs):3} | æ–°å¢ {len(new_jobs):3} | kw ç´¯è¨ˆ {len(kw_seen):3} | è·¨ kw ç´¯è¨ˆ {len(all_jobs):3} | totalCount={total_count}")
-            # 50% è»Ÿåœ
-            if not new_jobs or len(new_jobs) < 10 or len(jobs) == 0:
-                print(f"            50% è»Ÿåœ (æ–°å¢ < 10 æˆ– jobs ç©º)")
-                break
-            if p < max_pages:
-                human_sleep("list")
-    return all_jobs
-
-
-def enrich_with_jd(jobs: list[dict], skip_pat: re.Pattern | None = None,
-                    seen_ids: set[tuple[str, str]] | None = None,
-                    refetch: bool = False,
-                    json_cache: dict | None = None) -> tuple[list[dict], dict]:
-    """
-    æŠ“ JDã€‚å‘½ä¸­ skip é—œéµå­—çš„ä¸æŠ“ï¼›å·²æŠ“éçš„ä¹Ÿä¸æŠ“ã€‚
-
-    Cache ä¾†æº (ä¾åºæª¢æŸ¥):
-      1. in-memory jd_text: åŒä¸€å€‹ run å…§å·² enrich é
-      2. json_cache: å¾ç£ç¢Ÿ *_jd.json è¼‰å…¥çš„è·¨ run cache (load_jd_cache_from_jsons)
-      3. seen_ids (åƒ…ç”¨æ–¼æ—¥èªŒ): seen_jds.jsonl å…§è¦‹éçš„ (ä½†å¯èƒ½ cache å·²è¢«åˆª)
-
-    --refetch æ™‚è·³éæ‰€æœ‰ cacheï¼Œå¼·åˆ¶é‡æŠ“ã€‚
-
-    2026-08-22: json_cache / seen_ids éƒ½æ”¹æˆ (source, job_id) tuple, é¿å… LinkedIn / JobStreet æ•¸å­— ID æ’
-    """
-    skip_pat = skip_pat or _make_skip_pattern([])
-    seen_ids = seen_ids or set()
-    json_cache = json_cache or {}
-    n_total = len(jobs)
-
-    # çµ±è¨ˆ n_skip / n_cached / n_to_fetch
-    n_skip = 0
-    n_cached = 0
-    for j in jobs:
-        if match_skip_reason(j.get("title", ""), skip_pat):
-            n_skip += 1
-            continue
-        if refetch:
-            continue
-        jid = j.get("job_id")
-        src = j.get("source", "linkedin")
-        if j.get("jd_text"):
-            n_cached += 1
-        elif (src, jid) in json_cache:
-            n_cached += 1
-    n_to_fetch = n_total - n_skip - n_cached
-    print(f"\n=== æŠ“ JD ({n_total} ç­†) â€” skip {n_skip}, cached {n_cached}, fetch {n_to_fetch} ===")
-    if skip_pat.pattern and n_skip:
-        print(f"  skip è¦å‰‡: {skip_pat.pattern}")
-    print(f"  json_cache: {len(json_cache)} ç­† / seen file: {len(seen_ids)} ç­† / refetch={refetch}")
-
-    out = []
-    stats = {"total": n_total, "skipped": 0, "cached": 0, "fetched": 0, "failed": 0}
-    for i, j in enumerate(jobs, 1):
-        reason = match_skip_reason(j.get("title", ""), skip_pat)
-        j2 = dict(j)
-        if reason:
-            j2["jd_text"] = None
-            j2["jd_skipped"] = reason
-            stats["skipped"] += 1
-            print(f"  [{i}/{n_total}] â­  skip ({reason})  {j['title'][:55]}")
-            out.append(j2)
-            continue
-        jid = j.get("job_id")
-        src = j.get("source", "linkedin")
-        if not refetch:
-            # 1) in-memory jd_text (åŒ run å…§)
-            if j.get("jd_text"):
-                j2["jd_text"] = j["jd_text"]
-                j2["jd_lines"] = j.get("jd_lines")
-                j2["jd_hash"] = j.get("jd_hash")
-                j2["jd_cached"] = "memory"
-                stats["cached"] += 1
-                print(f"  [{i}/{n_total}] ğŸ’¾ cached (mem)  {j['title'][:55]}")
-                out.append(j2)
-                continue
-            # 2) json_cache (è·¨ run)
-            if (src, jid) in json_cache:
-                c = json_cache[(src, jid)]
-                j2["jd_text"] = c["jd_text"]
-                j2["jd_lines"] = c.get("jd_lines")
-                j2["jd_hash"] = c.get("jd_hash")
-                j2["jd_cached"] = "json"
-                stats["cached"] += 1
-                print(f"  [{i}/{n_total}] ğŸ’¾ cached (json) {j['title'][:55]}")
-                out.append(j2)
-                continue
-        # 3) æŠ“ JD (ä¾ source æ±ºå®š fetcher)
-        print(f"  [{i}/{n_total}] {j['job_id']} {j['title'][:50]}")
-        if src == "jora":
-            result = fetch_jora_jd(j.get("url", f"{JORA_BASE}/job/Product-Manager-{jid}"))
-        elif src == "jobstreet":
-            result = fetch_jobstreet_jd(jid)
-        else:
-            result = fetch_jd(jid)
-        if result.get("jd_text"):
-            j2["jd_text"] = result["jd_text"]
-            j2["jd_lines"] = result["jd_lines"]
-            j2["jd_hash"] = jd_hash(result["jd_text"])
-            # å¾ JD result è£œå…¬å¸/ä½ç½® (Jora åˆ—è¡¨é æ²’å…¬å¸, LinkedIn å·²æœ‰, ä½†å®‰å…¨èµ·è¦‹éƒ½è¦†å¯«)
-            if result.get("company"):
-                j2["company"] = result["company"]
-            if result.get("location"):
-                j2["location"] = result["location"]
-            stats["fetched"] += 1
-            print(f"            âœ“ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={j2.get('company','')[:30]}")
-            # è¨˜åˆ° seen file (åªåœ¨ seen æ²’è¨˜éŒ„æ™‚ append, é¿å…é‡è¤‡è¡Œ)
-            # refetch=True æ™‚ seen_ids æœƒæ˜¯ç©º set â†’ å…¨éƒ¨éƒ½æœƒ append (æ›´æ–° hash/timestamp)
-            seen_key = (src, jid)
-            if seen_key not in seen_ids:
-                try:
-                    append_seen(jid, j2["jd_hash"], j.get("title", ""), j2.get("company", ""), source=src)
-                except Exception as e:
-                    print(f"            (warn) å¯« seen file å¤±æ•—: {e}")
-        else:
-            j2["jd_text"] = None
-            j2["jd_error"] = result.get("error")
-            stats["failed"] += 1
-            print(f"            âœ— {result.get('error')}")
-        out.append(j2)
-        if i < n_total:
-            human_sleep("jd")
-    return out, stats
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("range", nargs="?", default=DEFAULT_TPR,
-                    choices=list(TIME_RANGES.keys()),
-                    help=f"time range (default {DEFAULT_TPR})")
-    ap.add_argument("--source", default="linkedin", choices=["linkedin", "jora", "jobstreet"],
-                    help="è³‡æ–™ä¾†æº (default: linkedin). jora=sg.jora.com (HTML parse), jobstreet=sg.jobstreet.com (API+GraphQL)")
-    ap.add_argument("--location", default=None,
-                    help=f"ç›®æ¨™åŸå¸‚/åœ‹å®¶ (default: {LOCATION}); å·²çŸ¥ preset: {', '.join(KNOWN_GEO_IDS.keys())}")
-    ap.add_argument("--geo-id", default=None,
-                    help=f"LinkedIn geoId (default: {GEO_ID}); è·Ÿ --location ä¸€èµ·çµ¦")
-    ap.add_argument("--with-jd", action="store_true",
-                    help="æŠ“å–æ¯å€‹è·ç¼ºçš„ JD å…¨æ–‡ (æœƒå¢åŠ ä¸å°‘æ™‚é–“)")
-    ap.add_argument("--max-pages", type=int, default=None,
-                    help="override é è¨­é æ•¸ä¸Šé™")
-    ap.add_argument("--skip-keywords", nargs="*", default=None,
-                    help=f"JD éšæ®µè¦è·³éçš„æ¨™é¡Œé—œéµå­—ï¼ˆè¦†å¯«é è¨­ï¼‰ã€‚"
-                         f"é è¨­: {' '.join(DEFAULT_SKIP_KEYWORDS)}")
-    ap.add_argument("--no-skip", action="store_true",
-                    help="å®Œå…¨è·³é skip éæ¿¾ï¼Œå…¨éƒ¨éƒ½æŠ“ JD")
-    ap.add_argument("--refetch", action="store_true",
-                    help="å¿½ç•¥ seen_jds.jsonlï¼Œé‡æ–°æŠ“æ‰€æœ‰ JD")
-    ap.add_argument("--reset-seen", action="store_true",
-                    help="åˆªæ‰ seen_jds.jsonl å¾ŒçµæŸï¼ˆæ¸…ç©ºç´€éŒ„ï¼‰")
-    ap.add_argument("--seen-file", default=SEEN_FILE,
-                    help=f"å·²æŠ“ JD è¨˜éŒ„æª”è·¯å¾‘ (default: {SEEN_FILE})")
-    ap.add_argument("--to-sheet", default=None, metavar="URL_OR_ID",
-                    help=f"æŠ“å®Œå¾ŒæŠŠçµæœ append åˆ° Google Sheet (URL æˆ– ID; ä¸å¸¶ gid æœƒå ±éŒ¯, è«‹ç”¨ '{SG_RAW_URL}')")
-    ap.add_argument("--gid", default=None, type=int,
-                    help=f"æŒ‡å®šè¦å¯«çš„ worksheet gid (e.g. {SG_RAW_GID}); ä¸æŒ‡å®šæ™‚ç”¨ URL å…§ #gid=")
-    ap.add_argument("--sheet-source", default=DEFAULT_SHEET_SOURCE,
-                    help=f"å¯«å…¥ Sheet çš„ Source æ¬„ä½å€¼ (default: {DEFAULT_SHEET_SOURCE})")
-    ap.add_argument("--dry-run-sheet", action="store_true",
-                    help="è·Ÿ --to-sheet ä¸€èµ·ç”¨ï¼Œåªå°å°‡å¯«å…¥ä»€éº¼ã€ä¸çœŸçš„å¯«")
-    ap.add_argument("--json-summary", action="store_true", help=argparse.SUPPRESS)
-    args = ap.parse_args()
-
-    seen_path = Path(args.seen_file)
-
-    if args.reset_seen:
-        n = reset_seen(seen_path)
-        print(f"å·²åˆªé™¤ {seen_path} ({n} ç­†ç´€éŒ„)")
-        return
-
-    tpr, default_max = TIME_RANGES[args.range]
-    if args.source == "jora":
-        default_max = JORA_MAX_PAGES[args.range]
-    elif args.source == "jobstreet":
-        default_max = JOBSTREET_MAX_PAGES[args.range]
-    max_pages = args.max_pages or default_max
-
-    skip_pat = None
-    if not args.no_skip:
-        skip_words = args.skip_keywords if args.skip_keywords is not None else DEFAULT_SKIP_KEYWORDS
-        skip_pat = _make_skip_pattern(skip_words)
-
-    # è§£æ location/geo-id (preset å„ªå…ˆ: --location å¾ KNOWN_GEO_IDS å– geo-id, æˆ–è‡ªå·±çµ¦)
-    location = args.location
-    geo_id = args.geo_id
-    if location and not geo_id and location in KNOWN_GEO_IDS:
-        geo_id, location = KNOWN_GEO_IDS[location]
-    if not location:
-        location = LOCATION
-    if not geo_id:
-        geo_id = GEO_ID
-
-    # è§£æ location/geo-id (preset å„ªå…ˆ: --location å¾ KNOWN_GEO_IDS å– geo-id, æˆ–è‡ªå·±çµ¦)
-    location = args.location
-    geo_id = args.geo_id
-    if args.source == "linkedin":
-        if location and not geo_id and location in KNOWN_GEO_IDS:
-            geo_id, location = KNOWN_GEO_IDS[location]
-        if not location:
-            location = LOCATION
-        if not geo_id:
-            geo_id = GEO_ID
-        # LinkedIn é è¨­ source label
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "LinkedIn / Minimax"
-    elif args.source == "jora":
-        if not location:
-            location = JORA_LOCATION
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "Jora / Minimax"
-    else:  # jobstreet
-        if not location:
-            location = JOBSTREET_LOCATION
-        # JobStreet ä¸éœ€è¦ geo_id
-        geo_id = None
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "JobStreet / Minimax"
-
-    if args.source == "linkedin":
-        print(f"==== LinkedIn Jobs / {location} (geoId={geo_id}) / {args.range} / f_TPR={tpr} ====")
-    elif args.source == "jora":
-        jora_tpr = JORA_TPR[args.range]
-        print(f"==== Jora Jobs / {location} / {args.range} / a={jora_tpr} ====")
-    else:
-        js_tpr = JOBSTREET_TPR[args.range]
-        print(f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ====")
-    print(f"==== MAX_PAGES = {max_pages}  (éš¨æ©Ÿ sleep {SLEEP_MIN}-{SLEEP_MAX}s) ====\n")
-    if args.with_jd and skip_pat:
-        print(f"==== JD skip è¦å‰‡: {skip_pat.pattern} ====")
-        if args.skip_keywords is not None:
-            print(f"     (ä½¿ç”¨è€…è¦†å¯«: {args.skip_keywords})")
-    elif args.with_jd and args.no_skip:
-        print("==== JD skip è¦å‰‡: <disabled> ====")
-
-    # 0) è¼‰å…¥ seen_ids (è·¨ run dedup)
-    seen_ids = load_seen_ids(seen_path) if args.with_jd and not args.refetch else set()
-    if seen_ids:
-        print(f"==== è¼‰å…¥ {len(seen_ids)} ç­† seen job_ids (refetch={args.refetch}) ====")
-
-    # 1) æŠ“åˆ—è¡¨
-    if args.source == "jora":
-        jobs = crawl_jora_list(args.range, max_pages)
-    elif args.source == "jobstreet":
-        js_tpr = JOBSTREET_TPR[args.range]
-        jobs = crawl_jobstreet_list(js_tpr, max_pages, keywords=JOBSTREET_KEYWORDS)
-    else:
-        jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
-    if not jobs:
-        print("\nç„¡è³‡æ–™ï¼ŒçµæŸã€‚")
-        if args.json_summary:
-            print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
-                "jobs_found": 0, "jobs_enriched": 0, "jobs_failed": 0,
-                "output_file": None, "written": 0, "skipped_dup": 0,
-                "skipped_no_jd": 0,
-            }, ensure_ascii=False, separators=(",", ":")))
-        return
-
-    # 1.5) è¼‰å…¥ JD cache (è·¨ run å¾ *_jd.json æŠ“)ï¼Œè·³éç•¶å‰å°‡è¼¸å‡ºçš„æª”
-    suffix = f"_{args.range}{'_jd' if args.with_jd else ''}"
-    # æª”åä»¥ source + location ç‚º prefix (sg_product_jobs, tw_, jora_sg_), é¿å…è·¨æº/è·¨åœ‹ cache æ±¡æŸ“
-    location_short = location.lower().replace(' ', '')
-    short_names = {
-        "singapore": "sg", "taiwan": "tw", "hongkong": "hk", "japan": "jp",
-    }
-    loc_prefix = short_names.get(location_short, location_short)
-    # å„ source cache ç¨ç«‹ prefix (sg_, jora_sg_, jobstreet_sg_), é¿å…è·¨æº/è·¨åœ‹ cache æ±¡æŸ“
-    if args.source == "jora":
-        prefix = f"jora_{loc_prefix}"
-    elif args.source == "jobstreet":
-        prefix = f"jobstreet_{loc_prefix}"
-    else:
-        prefix = loc_prefix
-    out = Path(f"{prefix}_product_jobs{suffix}.json")
-    json_cache = {}
-    if args.with_jd and not args.refetch:
-        print(f"\n==== è¼‰å…¥ JD cache (æ’é™¤ {out.name}) ====")
-        json_cache = load_jd_cache_from_jsons(skip_files={out.name})
-
-    # 2) æŠ“ JD (å¯é¸)
-    stats = None
-    if args.with_jd:
-        jobs, stats = enrich_with_jd(jobs, skip_pat=skip_pat,
-                                    seen_ids=seen_ids, refetch=args.refetch,
-                                    json_cache=json_cache)
-
-    # 3) å­˜æª”
-    out.write_text(json.dumps(jobs, ensure_ascii=False, indent=2))
-    print(f"\n==== å¯«åˆ° {out.resolve()} ({len(jobs)} ç­†) ====")
-    if stats:
-        print(f"     JD: skip={stats['skipped']}  cached={stats['cached']}  "
-              f"fetched={stats['fetched']}  failed={stats['failed']}")
-    if seen_path.exists() and args.with_jd:
-        total = sum(1 for _ in open(seen_path, "r", encoding="utf-8") if _.strip())
-        print(f"     seen file: {seen_path} ({total} ç­†ç´¯è¨ˆ)")
-
-    # 4) å¯«åˆ° Google Sheet (å¯é¸)
-    sheet_stats = {"written": 0, "skipped_dup": 0, "skipped_no_jd": 0}
-    if args.to_sheet:
-        if not args.with_jd:
-            print("\nâš ï¸  --to-sheet éœ€è¦ --with-jd æ‰èƒ½å¡« JD å…§å®¹ (column H)")
-            print("    è·³é sheet å¯«å…¥")
-        else:
-            print(f"\n==== å¯«åˆ° Google Sheet: {args.to_sheet[:50]}... ====")
-            sheet_stats = push_to_sheet(
-                jobs, args.to_sheet,
-                sa_key_path=SHEET_SA_KEY,
-                source=args.sheet_source,
-                dry_run=args.dry_run_sheet,
-                gid=args.gid,
-                location=location,
-            )
-            print(f"\n  çµæœ: {sheet_stats}")
-
-    if args.json_summary:
-        print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
-            "jobs_found": len(jobs),
-            "jobs_enriched": ((stats.get("cached", 0) + stats.get("fetched", 0)) if stats else 0),
-            "jobs_failed": (stats.get("failed", 0) if stats else 0),
-            "output_file": str(out.resolve()),
-            "written": int(sheet_stats.get("written", 0)),
-            "skipped_dup": int(sheet_stats.get("skipped_dup", 0)),
-            "skipped_no_jd": int(sheet_stats.get("skipped_no_jd", 0)),
-        }, ensure_ascii=False, separators=(",", ":")))
-
-
-if __name__ == "__main__":
-    main()
+        r"ä¸(?:éœ€|ç”¨)è¦ÊŠÎ¹£ä9/¦ß:/©¹ä!ŠO×ÊŠÎ¹ì/z+b_š\Ø_9méy/g:+bJH‹ˆˆ¹.#JÎº ï_9cëù.éJWÊŠÎ¹£ä9/¦ß:/©¹ä!ŠWÊŠÎ¹ì/z+b_š\Ø_9méy/g:+b_T
+H‹ˆˆ¹cì9àhÊÎ¹.®Ÿ9ak9¬$JO×Ê¹a*¹ab‹ˆÈÚ[˜HÈÚ[™ÚZBˆˆÚ[™\ÙWÊÊÎ˜Ú]^™[œÏß˜][Û˜[ÏÊWÊÜ™Y™\œ™Y‹ˆˆŠÎ¹i)úfn9.+yfï_9i)úfaŠWÊŠÎ¹.®Ÿ9ak9¬$_9g"ù¬$JO×ÊŠÎ¹a*¹ab9/&9ab
+H‹ˆˆ¹§+9g,9.®×ÊŠÎ¹a*¹ab9/&9ab
+H‹ˆˆ¹.+yg"ÊÎ¹.®Ÿ9ak9¬$_9g"ù¬$JWÊŠÎ¹a*¹ab9/&9ab
+H‹ˆKˆ”ÔÒUU‘HˆÂˆÈ[™Û\Ú8 %9¦#¹è®º*ª¹§ ÈÜÛœÛÜ‚ˆˆš\ØWÊÜÜÛœÛÜœÚ\ÊÊÎš\×ÊÊOÊÎ˜]˜Z[X›_›İšYYÙ™™\™Y
+H‹ˆˆœÜÛœÛÜœÚ\ÊÊÎš\×ÊÊOØ]˜Z[X›H‹ˆˆÙWÊÊÎ™×ÊÊOÜÜÛœÛÜˆ‹ˆˆÙWÊÜ›İšYWÊÊÎš\ØWÊÊOÜÜÛœÛÜœÚ\‹ˆˆ¹§ ÊÎ¹£ä9/¦ß:/©¹ä!ŠWÊŠÎ¹ì/z+b_š\Ø_9méy/g:+b_T
+H‹ˆKŸB‚‘QUSÔÒQUÔÓÕTÑHH“[šÙY[ˆÈZ[š[X^‚‚ˆÈ:h$:*+HÛÛÙÛHÚY]9æë¹ª&H
+˜Z[XÛÜÙYˆ9¬¤º*+H[ˆ9¦`ˆÚY]QÑÒQ9åfyên‹ˆÈ9kêùaiKú+ 9cå¹méyamùoázh"9fç¹h,HÓÓ‘’Q×ÓRTÔÒS‘È9íd9©âùc%ºc+ú*©9.#ycëÈ˜[˜XÚÈ9b,]]Üˆ9æ¡ÚY]
+BˆÈ9cëú(ªÈÒQUÒQÈÒQUÑÒQ[ˆ˜\ˆ:)¡¹kêÈ
+:)¢ù."ºghˆ[ˆ:+ 9cå¹c`9hbŠB”Ñ×ÔU×ÑÒQH[
+ÒQUÑÒQÓÕ‘T”’QJHYˆÒQUÑÒQÓÕ‘T”’QKš\ÙYÚ]
+
+H[ÙH”Ñ×ÔU×ÔÒQUÒQHÒQUÒQÓÕ‘T”’QHÜˆˆ‚”Ñ×ÔU×ÕT“H
+ˆˆšÎ‹ËÙØÜË™ÛÛÙÛK˜ÛÛKÜÜ™XYÚY]ËÙŞÔÑ×ÔU×ÔÒQUÒQH‚ˆˆ‹ÙY]ÙÚY^ÔÑ×ÔU×ÑÒQHÙÚY^ÔÑ×ÔU×ÑÒQH‚ŠBˆÈÚ[˜KT˜]È
+Ú[™ÚZH9å*9æ¡\Ù\ˆŒ‹LLŒH9nîŠBÒSWÔU×ÑÒQHÍLÍÎBÒSWÔU×ÕT“H
+ˆˆšÎ‹ËÙØÜË™ÛÛÙÛK˜ÛÛKÜÜ™XYÚY]ËÙŞÔÑ×ÔU×ÔÒQUÒQH‚ˆˆ‹ÙY]ÙÚY^ĞÒSWÔU×ÑÒQHÙÚY^ĞÒSWÔU×ÑÒQH‚ŠB‚ˆÈ‘9¢¤ùcå¹bcyæ¡9ª&zhc:eç:cmykeú`c¹¯ïˆ
+9ç zaczhcJBˆÈ9ç"ùb,:`&y.¦ú*g¹l,z-ìú`c¹.#y¢¤È‘;ï&ù«å9l#yå*ÛÜ™X›İ[™\H
+ÈØ\ÙKZ[œÙ[œÚ]]™B‘QUSÔÒÒTÒÑVUÓÔ‘ÈHÂˆÈ9¦#¹è®¹i*º#çˆš[\›ˆ‹š[\›œÚ\‹˜Z[™YH‹™Ü˜YX]H‹™Ü˜Y‹ˆ™[H‹™[H]™[‹™[K[]™[‹š[š[Üˆ‹šœˆ‹ˆÈ9bªyä!‹ù¥+ù£í8 %9/aˆ˜\ÜÚ\İ[ˆ9§"HÙ[š[Üˆ9 áyh È
+U”Ğ\Üİ\™XİÜŠK9å*Ú][\İ:$âú`c‚ˆ˜\ÜÚ\İ[‹œİ\Ü‹˜ÛÛÜ™[˜]Üˆ‹˜YZ[š\İ˜]Üˆ‹˜Û\šÈ‹œÙXÜ™]\H‹ˆÈ[˜[\İÈX\šÙ][™È˜XÚÈ
+9§"Hœ›ÙXİˆ9/a¹am¹ké¹.#y¦+ÈJBˆœ›ÙXİX\šÙ][™È‹œ›ÙXİ[˜[\İ‹ˆÈ9®+:*iˆÈPBˆœXH‹\İ‹œ]X[]H\Üİ\˜[˜ÙH‹ˆÈØ[\ÈÈ‘ÈQBˆœØ[\È‹˜\Ú[™\ÜÈ]™[ÜY[‹˜XØÛİ[^Xİ]]™H‹ˆÈÜXÚX[\İ9`cÈPÂˆœÜXÚX[\İ‹ˆÈ9çëKú!ê9¦`‚ˆ[\‹[\Ü˜\H‹˜ÛÛ˜Xİ‹—B‚ˆÈÙ[š[ÜˆÚ][\İˆ9§ä9.¦ú*gºfå¹á-¹g*ÚÚ\\İ9/aº"éyo£:gh¹£©z`&y.¦ÈÙ[š[Üˆ:*g¹l,y.#z*lº(ªù¤âÂ”ÑS’SÔ—Ñ“ÓÕÑT”ÈHÂˆšXÙH™\ÚY[‹™\™XİÜˆ‹™Ù[™\˜[X[˜YÙ\ˆ‹›X[˜YÚ[™È\™XİÜˆ‹ˆœ™\ÚY[‹˜Ù[È‹˜Ù›È‹˜İÈ‹˜Û[È‹˜ÛÛÈ‹˜ÚZ\›X[ˆ‹šXY‹ˆœÙXÜ™]\KYÙ[™\˜[‹—B‚ˆÈÙ[š[Üˆ9ª&z*&
+[]Ú\™H[ˆ]J{ï&¹åmˆœÜXÚX[\İˆ9.búhgˆÚÚ\:*g¹aî¹ãï¹¦`‹ˆÈ:"éH]H9.îù. 9/cyïk¹§"z`&y.¦ÈÙ[š[Üˆ:*g‹9l,z)¥¹à®ºjæ:f£¹.#y¤âÂ”ÑS’SÔ—ÓPT’ÑT”×ĞS–UÒT‘HHÂˆ˜]œ‹œ‹šXÙH™\ÚY[‹™\™XİÜˆ‹šXY‹˜ÚYYˆ‹ˆœÙ[š[Üˆ‹œİY™ˆ‹œš[˜Ú\[‹›XY‹›X[˜YÚ[™È\™XİÜˆ‹ˆ™Ù[™\˜[X[˜YÙ\ˆ‹œ™\ÚY[‹˜Ù[È‹˜Ù›È‹˜İÈ‹˜Û[È‹˜ÛÛÈ‹ˆ˜ÚZ\›X[ˆ‹—B‚ˆÈÚ][\İ9ëe¹åiNˆ9.#yd#ÚÚ\:*g¹å*9.#yd#9b)9k¦¹¥®yo#ÂˆÈH˜Y˜XÙ[ˆÚÚ\:*g¹o£:) JŠ¹æí9£©y£©JŠˆÙ[š[Üˆ:*g¹¢cyë¥È
+K™Ë‹\ÜÚ\İ[”ŠBˆÈH˜[]Ú\™Hˆ]H9.îù. 9/cyïk¹§"HÙ[š[Üˆ:*g¹l,yë¥È
+K™Ë‹U”ÜXÚX[\İŠB•ÒUSTÕÔ•STÈHÂˆ˜\ÜÚ\İ[ˆ˜Y˜XÙ[‹ˆœÜXÚX[\İˆ˜[]Ú\™H‹ŸB‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ:eç:cmykeù«å9l#yméyamÂˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™YˆÛXZÙWÜÚÚ\Ü]\›ŠÚÚ\İÛÜ™Îˆ\İÜİ—JHOˆ™K”]\›‚ˆˆˆ¹íê9. 9`"ÈØ\ÙKZ[œÙ[œÚ]]™xà ]ÛÜ™X›İ[™\H9æ¡™YÙ^8à ˆˆˆ‚ˆ\ØØ\YHÜ™K™\ØØ\JÊH›ÜˆÈ[ˆÚÚ\İÛÜ™×BˆÈˆ9g*™[K[]™[ˆ:`&yê+ˆ\[ˆ9keù.,¹§ ùi,y¥b;ï#9¥.y¢$
+ÏVØK^—JBˆ]HˆŠÏVØK^—JJˆ
+ÈŸ‹š›Ú[Š\ØØ\Y
+H
+ÈˆŠJÈVØK^—JH‚ˆ™]\›ˆ™K˜ÛÛ\[J]™K’QÓ“Ô‘PĞTÑJB‚‚™YˆÚ\×ÜÙ[š[Ü—Ø\ÜÚ\İ[İ]J]NˆİŠHOˆ›ÛÛ‚ˆˆˆ˜Y˜XÙ[9ª(yo#Îˆ	Ø\ÜÚ\İ[	È9æí9£©y£©HÙ[š[Üˆ:*g¹¢cyë¥ÈÙ[š[Üˆ
+:`oùacH	Ğ\ÜÚ\İ[ÈÑSÉÈ:*©9b)
+Hˆˆ‚ˆYˆ›İ]N‚ˆ™]\›ˆ˜[ÙBˆH]K›İÙ\Š
+Bˆ›ÜˆİÈ[ˆÑS’SÔ—Ñ“ÓÕÑT”Î‚ˆYˆˆ˜\ÜÚ\İ[ÜİßHˆ[ˆÜˆˆ˜\ÜÚ\İ[ÜİßHˆ[ˆ‚ˆ™]\›ˆYBˆ™]\›ˆ˜[ÙB‚‚™YˆÚ\×ÜÙ[š[Ü—ÛX\šÙ\—Ø[]Ú\™J]NˆİŠHOˆ›ÛÛ‚ˆˆˆ˜[]Ú\™H9ª(yo#Îˆ]H9.îù. 9/cyïk¹§"HÙ[š[Üˆ9ª&z*&9l,yë¥Èˆˆ‚ˆYˆ›İ]N‚ˆ™]\›ˆ˜[ÙBˆH]K›İÙ\Š
+Bˆ™]\›ˆ[JH[ˆ›ÜˆH[ˆÑS’SÔ—ÓPT’ÑT”×ĞS–UÒT‘JB‚‚™YˆX]ÚÜÚÚ\Ü™X\ÛÛŠ]Nˆİ‹ÚÚ\Ü]ˆ™K”]\›ŠHOˆİˆ›Û™N‚ˆˆˆ¹ª&zhc9doy.+HÚÚ\\İ9l,yfç¹`¬ùdoy.+yæ¡:*g»ï#9d)¹baÈ›Û™xà ‚ˆ9¦n¹¡iù/¢ùi%ˆ\ÜÚ\İ[
+ÈÙ[š[Üˆ:*gˆ
+Y˜XÙ[
+H9¢%ˆÜXÚX[\İ
+ÈÙ[š[Üˆ:*gˆ
+[]Ú\™JH:)¥¹à®ºjæ:f£¸à ˆˆˆ‚ˆYˆ›İ]N‚ˆ™]\›ˆ›Û™BˆHHÚÚ\Ü]œÙX\˜Ú
+]JBˆYˆ›İN‚ˆ™]\›ˆ›Û™Bˆ]HK™Ü›İ\
+JK›İÙ\Š
+Bˆ[HHÒUSTÕÔ•STË™Ù]
+]
+BˆYˆ[HOH˜Y˜XÙ[ˆ[™Ú\×ÜÙ[š[Ü—Ø\ÜÚ\İ[İ]J]JN‚ˆ™]\›ˆ›Û™BˆYˆ[HOH˜[]Ú\™Hˆ[™Ú\×ÜÙ[š[Ü—ÛX\šÙ\—Ø[]Ú\™J]JN‚ˆ™]\›ˆ›Û™Bˆ™]\›ˆ]‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ:-ê[ˆ9mì¹¢¤È‘:*&:c!
+”ÓÓ“\[™[Û›JBˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™Yˆ™Ú\Ú
+™İ^ˆİŠHOˆİ‚ˆ™]\›ˆ\ÚX‹œÚLMŠ
+™İ^ÜˆˆŠK™[˜ÛÙJ]‹NŠJKš^YÙ\İ
+
+VÎŒM—B‚‚™YˆØYÜÙY[—ÚYÊ]ˆ]H]
+ÑQS—Ñ’SJJHOˆÙ]İ\VÜİ‹İ—WN‚ˆˆˆº+ ÙY[—Ú™ËšœÛÛ›;ï#9fç¹`¬ÈÙ]Ùˆ
+Ûİ\˜ÙK›Ø—ÚY
+xà ¹hçº(c:-ìú`c¹.#yà®8à ‚‚ˆ8¦¨;î#È:-êÛİ\˜ÙH9c`9b!ˆ[šÙY[ˆÈ›Ø”İ™Y]:`ïy¦+ùí%9¥n9keË9§ ù¤§È›Ü˜H9¦+ÈÌ‹XÚ\ˆ^9.#y¤§‚ˆ:""º*&:c!9¬¤ˆÛİ\˜ÙH9«!9/cH8¡¤ˆ9o§ˆ›Ø—ÚY9£ª9¥­Î‚ˆHÌ‹XÚ\ˆ^8¡¤ˆš›Ü˜H‚ˆH9í%9¥n9keÈ8¡¤ˆ›[šÙY[ˆˆ
+:h$:*+K9fèŒ‹LLŒˆ9.bùbcz`ïy¦+È[šÙY[ˆ
+È›Ü˜JBˆˆˆ‚ˆYˆ›İ]™^\İÊ
+N‚ˆ™]\›ˆÙ]
+
+BˆÙY[ˆHÙ]
+
+BˆÚ]Ü[Š]œˆ‹[˜ÛÙ[™ÏH]‹NŠH\È‚ˆ›Üˆ‹[™H[ˆ[[Y\˜]J‹JN‚ˆ[™HH[™Kœİš\
+
+BˆYˆ›İ[™N‚ˆÛÛ[YBˆN‚ˆ›İÈHœÛÛ‹›ØYÊ[™JBˆšYH›İË™Ù]
+š›Ø—ÚYŠBˆYˆ›İšY‚ˆÛÛ[YBˆÈ9a*¹ab9å*:*&:c!:(èyæ¡Ûİ\˜ÙK9¬¤¹§"yl,yo§ˆ›Ø—ÚY9£ª9¥­ÂˆÜ˜ÈH›İË™Ù]
+œÛİ\˜ÙHŠBˆYˆ›İÜ˜Î‚ˆYˆ™K™[X]Ú
+ˆ–ØKYŒNW^ÌÌŸH‹šY
+N‚ˆÜ˜ÈHš›Ü˜H‚ˆ[Yˆ™K™[X]Ú
+ˆ—
+È‹šY
+N‚ˆÜ˜ÈH›[šÙY[ˆ‚ˆ[ÙN‚ˆÜ˜ÈH[šÛ›İÛˆ‚ˆÙY[‹˜Y
+
+Ü˜ËšY
+JBˆ^Ù\œÛÛ‹’”ÓÓ‘XÛÙQ\œ›Ü‚ˆš[
+ˆˆ
+Ø\›ŠHÙY[ˆš[H[™HÛŸH9hç¹£¢{ï#:-ìú`cˆŠBˆ™]\›ˆÙY[‚‚‚™Yˆ\[™ÜÙY[Š›Ø—ÚYˆİ‹™Ú\Úİ˜[ˆİ‹]Nˆİ‹ÛÛ\[Nˆİ‹ˆ]ˆ]H]
+ÑQS—Ñ’SJKÛİ\˜ÙNˆİˆH›[šÙY[ˆŠHOˆ›Û™N‚ˆ™XÛÜ™HÂˆš›Ø—ÚYˆ›Ø—ÚYˆœÛİ\˜ÙHˆÛİ\˜ÙKÈŒ‹LLŒˆ9¥¬9h§‹9.bùo£9c`9b!ˆ[šÙY[ˆÈ›Ü˜HÈ›Ø”İ™Y]ˆš™Ú\Úˆ™Ú\Úİ˜[ˆ™™]ÚYØ]ˆ]][YK››İÊ—ÓĞĞS
+Kš\ÛÙ›Ü›X]
+[Y\ÜXÏHœÙXÛÛ™ÈŠKˆ]Hˆ
+]HÜˆˆŠVÎŒŒKˆ˜ÛÛ\[Hˆ
+ÛÛ\[HÜˆˆŠVÎŒLKˆBˆÚ]Ü[Š]˜H‹[˜ÛÙ[™ÏH]‹NŠH\È‚ˆ‹Üš]JœÛÛ‹™[\Ê™XÛÜ™[œİ\™WØ\ØÚZOQ˜[ÙJH
+È—ˆŠB‚‚™YˆØYÚ™ØØXÚWÙœ›ÛWÚœÛÛœÊ]\›ˆİˆHŠ—Ü›ÙXİÚ›Øœ×Ê—Ú™šœÛÛˆ‹ˆÚÚ\Ùš[\ÎˆÙ]Üİ—H›Û™HH›Û™JHOˆXİ‚ˆˆˆ‚ˆ9o§¹¢`9§"H
+—Ú™šœÛÛˆ9ª¥9¨b:/"yaiH‘ØXÚNˆÊÛİ\˜ÙK›Ø—ÚY
+NˆÚ™İ^™Û[™\Ë™Ú\Ú‹‹Ÿ_xà ‚ˆ9å*9/g[œšXÚİÚ]Ú™9æ¡:-ê[ˆØXÚH9/¡¹®¤;ï":`oùacymì¹¢¤ú`c¹æ¡‘:aãy¢¤ûï"xà ‚‚ˆŒ‹LLŒˆ9¥.Nˆ9o§ˆÚ›Ø—ÚYˆ‹‹ŸH9¥.yà®ˆÊÛİ\˜ÙK›Ø—ÚY
+Nˆ‹‹ŸK:`oùacH[šÙY[ˆÈ›Ø”İ™Y]9¥n9keÈQ9¤§‚‚ˆ\™ÜÎ‚ˆ]\›ˆÛØˆ]\›‹:h$:*+y£ ù¢`9§"H
+—Ú™šœÛÛ‚ˆÚÚ\Ùš[\Îˆ:) z-ìú`c¹æ¡9ª¥9d#HÙ];ï"9/¢Îˆ9åm¹bcH[ˆ9l!ú) z/.9aî¹æ¡9ª¥9¨b;ï"Bˆˆˆ‚ˆØXÚHHßBˆÚÚ\Ùš[\ÈHÚÚ\Ùš[\ÈÜˆÙ]
+
+Bˆ›Üˆœ[ˆÛÜY
+]
+‹ˆŠK™ÛØŠ]\›ŠJN‚ˆYˆœ›˜[YH[ˆÚÚ\Ùš[\Î‚ˆÛÛ[YBˆN‚ˆ]HHœÛÛ‹›ØYÊœœ™XYİ^
+[˜ÛÙ[™ÏH]‹NŠJBˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆ
+Ø\›ŠHÙœ›˜[Y_H:+ 9i,y¥eÎˆÙ_HŠBˆÛÛ[YBˆˆHˆ›Üˆˆ[ˆ]N‚ˆšYH‹™Ù]
+š›Ø—ÚYŠBˆYˆ›İšYÜˆ›İ‹™Ù]
+š™İ^ŠN‚ˆÛÛ[YBˆÜ˜ÈH‹™Ù]
+œÛİ\˜ÙHŠBˆYˆ›İÜ˜Î‚ˆYˆ™K™[X]Ú
+ˆ–ØKYŒNW^ÌÌŸH‹šY
+N‚ˆÜ˜ÈHš›Ü˜H‚ˆ[Yˆ™K™[X]Ú
+ˆ—
+È‹šY
+N‚ˆÜ˜ÈH›[šÙY[ˆ‚ˆ[ÙN‚ˆÜ˜ÈH[šÛ›İÛˆ‚ˆÙ^HH
+Ü˜ËšY
+BˆYˆÙ^H›İ[ˆØXÚNˆÈ9ë+9. 9`"ùª¥9¨b9a*¹abˆØXÚVÚÙ^WHHÂˆš™İ^ˆ–Èš™İ^—Kˆš™Û[™\Èˆ‹™Ù]
+š™Û[™\ÈŠKˆš™Ú\Úˆ‹™Ù]
+š™Ú\ÚŠKˆBˆˆ
+ÏHBˆYˆ‚ˆš[
+ˆˆØXÚHÙœ›˜[Y_Nˆ
+ŞÛŸH‘È
+9í+ú*"Û[ŠØXÚJ_JHŠBˆ™]\›ˆØXÚB‚‚™Yˆ™\Ù]ÜÙY[Š]ˆ]H]
+ÑQS—Ñ’SJJHOˆ[‚ˆˆˆ¹b*¹£¢HÙY[ˆš[{ï#9fç¹`¬ú(ªùb*ºfi9æ¡9ëa¹¥n;ï"9i ¹§§9§"y`¦y.ï{ï"xà ˆˆˆ‚ˆYˆ›İ]™^\İÊ
+N‚ˆ™]\›ˆˆˆHİ[JH›ÜˆÈ[ˆÜ[Š]œˆ‹[˜ÛÙ[™ÏH]‹NŠHYˆËœİš\
+
+JBˆ][›[šÊ
+Bˆ™]\›ˆ‚‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈš\ØHÈÜÛœÛÜœÚ\9`my®+
+È9«!9."yli9í&ŠBˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ —Õ’TĞWÔ‘TÈHÂˆ]™[ˆ™K˜ÛÛ\[JŸ‹š›Ú[Š]ÊK™K’QÓ“Ô‘PĞTÑJBˆ›Üˆ]™[]È[ˆ’TĞWÔUT“”Ëš][\Ê
+BŸB‚‚™Yˆ]Xİİš\ØWÜÚYÛ˜[
+™İ^ˆİŠHOˆİ‚ˆˆˆ¹£ È‘9¢oˆš\ØKÜÜÛœÛÜœÚ\9/èz&gøà ‚ˆ9fç¹`¬Îˆˆˆ9¬¤º*"º&gÈ¸¦¨;î#ÈT‘ˆ^ˆˆ
+9¦#¹è®¹¢ä¹íeJH^ˆˆ
+ÓÑ•ÔÔÒUU‘K9cêº,¯9c§ù¥¡ÊBˆˆˆ‚ˆYˆ›İ™İ^‚ˆ™]\›ˆˆ‚ˆ›Üˆ]™[[ˆ
+’T‘‹”ÓÑ•‹”ÔÒUU‘HŠN‚ˆHHÕ’TĞWÔ‘TÖÛ]™[KœÙX\˜Ú
+™İ^
+BˆYˆN‚ˆYˆ]™[OH’T‘‚ˆ™]\›ˆˆ¸¦¨;î#ÈT‘ˆÛK™Ü›İ\
+
+_H‚ˆÈÓÑ•ÈÔÒUU‘H9æí9£©yfç¹c§ù¥¡Ë9.#yb¨9ª&yìiˆ™]\›ˆK™Ü›İ\
+
+Bˆ™]\›ˆˆ‚‚‚™Yˆ^˜XİİÛÜš×Û[ÙJ™İ^ˆİ‹]NˆİˆHˆŠHOˆİ‚ˆˆˆ¹o§ˆ‘:-çÈ]H9¢¤ÈÛÜšÈ[ÙH
+™[[İHÈXœšYÈÛœÚ]HÈ9ênŠxà ‚ˆ9í%™YÙ^9.#y­¢: %ÈHÚÙ[¸à ‚ˆŒ‹LLŒÈ9¥.Nˆ9íly. 9å*“ÛœÚ]Hˆ
+9¬¤ˆ\[ŠNÈ:aãy©âù¢$\İ[Ù‹\]\›œÈ9íd9©âË:`£ú/+ú-çùc§ù§+9. :!íˆ9a*¹ab9n£Î‚ˆJH]H:e¢úh+H”™[[İHH‹‹ˆ‹’XœšYH‹‹ˆ‹“ÛœÚ]HH‹‹ˆ‚ˆŠH‘:e¢úh+H“ØØ][Ûˆ‹‹ˆ
+XœšY
+HˆÈ›ÛˆHXœšY˜\Ú\ÈˆÈ•ÓÔ’ÈÔSÓˆ[ˆÙ™šXÙH‚ˆÊH9.+y¥¡ùn.:)¢Èº/ç9ê"ùb§¹akˆÈ¹­íùd"9b§¹akˆÈ¹ã¬9g.¹b§¹akˆÈºjnùg.ˆ‚ˆ
+H9aj9¥¡È˜[˜XÚÈ™[H™[[İHˆÈšXœšYÛÜšÚ[™ÈˆÈ›ÛœÚ]H›ÛH‚ˆˆˆ‚ˆÈ[\ˆ9¢¢ˆX]Ú9íd9§§9ª&y®¥¹c%ˆ
+›Û‹\Ú]HˆÈ›ÛœÚ]HˆÈš[ˆÙ™šXÙHˆ8¡¤ˆ“ÛœÚ]HÈ9am¹.åˆØ\][^™JBˆYˆÛ›Ü›JˆİŠHOˆİ‚ˆˆH‹›İÙ\Š
+Kœİš\
+
+BˆYˆ‹œİ\İÚ]
+›ÛˆŠN‚ˆ™]\›ˆ“ÛœÚ]H‚ˆ™]\›ˆ‹˜Ø\][^™J
+HÈ™[[İHÈXœšY‚ˆYˆ›İ™İ^[™›İ]N‚ˆ™]\›ˆˆ‚‚ˆÈJH]H:e¢úh+BˆYˆ]N‚ˆHH™K›X]Ú
+ˆ——ÊŠ™[[İ_XœšYÛ‹\Ú]_ÛœÚ]JWÊ–Ëx %8 $Ë×H‹]K›İÙ\Š
+Kœİš\
+
+JBˆYˆN‚ˆ™]\›ˆÛ›Ü›JK™Ü›İ\
+JJB‚ˆYˆ›İ™İ^‚ˆ™]\›ˆˆ‚‚ˆXYH™İ^ÎLBˆ[H™İ^‚ˆÈŠH‘:e¢úh+HLÚ\œÈ8 %È9`"ùâny«¢ˆ™YÙ^ˆXYÜ]\›œÈHÂˆ
+ˆ—
+ÊŠ™[[İ_XœšYÛ‹\Ú]_ÛœÚ]JWÊ—
+H‹››Ü›H‹™K’QÓ“Ô‘PĞTÑJKÈŠXœšY
+H‚ˆ
+ˆ—›Û—ÊØWÊÊ™[[İ_XœšYÛ‹\Ú]_ÛœÚ]JWÊØ˜\Ú\×ˆ‹››Ü›H‹™K’QÓ“Ô‘PĞTÑJKÈ›ÛˆHXœšY˜\Ú\È‚ˆ
+ˆ—ÛÜš×ÊÛÜ[Û–Ü×O×Ê–Î—WO×ÊŠ[—ÊÛÙ™šXÙ_™[[İ_XœšYÛ‹OÜÚ]JWˆ‹ÛÜš×ÛÜ[Ûˆ‹™K’QÓ“Ô‘PĞTÑJKˆBˆ›Üˆ][ÙK›YÜÈ[ˆXYÜ]\›œÎ‚ˆHH™KœÙX\˜Ú
+]XY›YÜÊBˆYˆN‚ˆYˆ[ÙHOH››Ü›H‚ˆ™]\›ˆÛ›Ü›JK™Ü›İ\
+JJBˆ[ÙNˆÈÛÜš×ÛÜ[Ûˆˆš[ˆÙ™šXÙHˆÈ›Û‹\Ú]Hˆ:`ïyë¥ÈÛœÚ]BˆˆHK™Ü›İ\
+JK›İÙ\Š
+Kœ™\XÙJˆ‹ˆŠBˆYˆ›Ù™šXÙHˆ[ˆˆÜˆ‹œİ\İÚ]
+›ÛˆŠN‚ˆ™]\›ˆ“ÛœÚ]H‚ˆ™]\›ˆ‹˜Ø\][^™J
+B‚ˆÈÊH9.+y¥¡ùn.:)¢È
+‘:e¢úh+HLÚ\œÊH
+È
+H9aj9¥¡È˜[˜XÚÈ8 %9íly. \İˆ[Ü]\›œÈHÂˆÈ9.+y¥¡È
+9cê¹g*XY9§éJBˆ
+ˆº/ç9ê"ÊÎ¹b§¹ak9méy/g9l¥ù/cJOß9g*9k­¹b§¹ak9î¯ù."¹b§¹ak‹”™[[İH‹šXYŠKˆ
+ˆ¹­íùd"
+Î¹b§¹ak9méy/g
+_9î¯ù."—Ê–Ëûï"Ê×WÊ¹î¯ù."ß9o.y )ÊÎ¹b§¹ak9méy/g
+H‹’XœšY‹šXYŠKˆ
+ˆ¹ã¬9g.ŠÎ¹b§¹ak
+Oß:jnùg.Ÿ9b,9l¥ß9gd9ãë_9î¯ù."ùb§¹ak9aj: c9gd9ãëH‹“ÛœÚ]H‹šXYŠKˆÈ:"ìy¥¡È˜[˜XÚÈ
+9aj9¥¡ÊBˆ
+ˆ—Š[WÊÜ™[[İ_L	WÊÜ™[[İ_ÛÜš×ÊÙœ›ÛWÊÚÛY_Ùš
+Wˆ‹”™[[İH‹™[ŠKˆ
+ˆ—ŠXœšYÊÊÛÜšÚ[™ß›Û_\œ˜[™Ù[Y[
+_XœšYÊİÛÜšÊWˆ‹’XœšY‹™[ŠKˆ
+ˆ—ŠÛ‹OÜÚ]WÊÊ›Û_ÛÜšßÜÚ][ÛŠ_Û‹OÜÚ]WÊØ˜\Ú\ÊWˆ‹“ÛœÚ]H‹™[ŠKˆBˆ›Üˆ]X™[ØÛÜH[ˆ[Ü]\›œÎ‚ˆ^HXYYˆØÛÜHOHšXYˆ[ÙH[ˆYˆ™KœÙX\˜Ú
+]^™K’QÓ“Ô‘PĞTÑJN‚ˆ™]\›ˆX™[‚ˆ™]\›ˆˆ‚‚‚ˆÈ9d$y."ùæî9k®H
+:""¹d#JB™Yˆ]XİÚ\™Ø›ØÚÙ\Š™İ^ˆİŠHOˆİ‚ˆˆˆ¹/çyåfz""¹d#K9ké¹/g9."¹d#]Xİİš\ØWÜÚYÛ˜[ˆˆ‚ˆ™]\›ˆ]Xİİš\ØWÜÚYÛ˜[
+™İ^
+B‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈÛÛÙÛHÚY]9kêùaiBˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™Yˆ^˜XİÜÚY]ÚY
+\›ÛÜ—ÚYˆİŠHOˆİ‚ˆˆˆ¹o§¹k£9¥mT“9¢%ˆ˜]ÈQ9¢¤ÈÚY]Q8à ˆˆˆ‚ˆHH™KœÙX\˜Ú
+ˆ‹ÜÜ™XYÚY]ËÙÊØK^KVŒNWËWJÊH‹\›ÛÜ—ÚY
+BˆYˆN‚ˆ™]\›ˆK™Ü›İ\
+JBˆYˆ™K™[X]Ú
+ˆ–ØK^KVŒNWËW^ÌŒH‹\›ÛÜ—ÚY
+N‚ˆ™]\›ˆ\›ÛÜ—ÚYˆ˜Z\ÙH˜[YQ\œ›ÜŠˆ¹ç"ù.#yaîˆÚY]Qˆİ\›ÛÜ—ÚY\ŸHŠB‚‚™Yˆ^˜XİÙÚY
+\›ÛÜ—ÚYˆİŠHOˆİˆ›Û™N‚ˆHH™KœÙX\˜Ú
+ˆ–ÏÉˆ×YÚYJ
+ÊH‹\›ÛÜ—ÚY
+Bˆ™]\›ˆK™Ü›İ\
+JHYˆH[ÙH›Û™B‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈÚY]9kêùaiz/%9bªyaïy¥n
+Œ‹LLŒÈ:aãy©âù¢¯yaî‹:(c9à®º"!ùc§ù§+9. :!í
+BˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™YˆZ[ÙWÙ›Ü›][JÛİ\˜ÙNˆİ‹›Ø—ÚYˆİ‹\›ˆİˆHˆŠHOˆİ‚ˆˆˆ¹©âú`(ÚY]H9«!9æ¡RTT“S’Ê
+H›Ü›][K9/§HÛİ\˜ÙH9.#yd#‚ˆH[šÙY[ˆRTT“S’Ê‹‹‹‹Ú›Ø”Üİ[™ËŞÚYH‹ÚYHŠBˆH›Ü˜NˆRTT“S’ÊÙ[Ú›Ü˜Wİ\›H‹Ù[Ú›Ü˜Wİ\›HŠBˆH›Øœİ™Y]ˆRTT“S’Ê‹‹‹‹Ú›Ø‹ŞÚYH‹‹‹‹‹Ú›Ø‹ŞÚYHŠH
+Œ‹LLŒÈ9o§ˆÛYËZY9¥.yí%Y
+Bˆˆˆ‚ˆYˆÛİ\˜ÙHOHš›Ü˜H‚ˆ[İ\›H\›ÜˆˆÒ“ÔWĞTÑ_KÚ›Ø‹Ô›ÙXİSX[˜YÙ\‹^Ú›Ø—ÚYH‚ˆ[YˆÛİ\˜ÙHOHš›Øœİ™Y]‚ˆ[İ\›HˆÒ“Ğ”Õ‘QUĞTÑ_KÚ›Ø‹ŞÚ›Ø—ÚYH‚ˆ[ÙNˆÈ[šÙY[ˆ
+Y˜][
+Bˆ[İ\›HˆšÎ‹ËİİİË›[šÙY[‹˜ÛÛKÚ›ØœËYİY\İÚ›ØœËØ\KÚ›Ø”Üİ[™ËŞÚ›Ø—ÚYH‚ˆ™]\›ˆ‰ÏRTT“S’ÊÙ[İ\›H‹Ù[İ\›HŠIÂ‚‚™Yˆ\œÙWÜÚY]Ü›İ×İ×ÚÙ^J›İÎˆ\İÜİ—JHOˆ\VÜİ‹İ—H›Û™N‚ˆˆˆ¹o§ˆÚY]9æ¡9§ä›İÈ:)èùaîˆ
+Ûİ\˜ÙK›Ø—ÚY
+K9å*9¥¯Y\8à ‚‚ˆ:/.9aiH›İÈ9¨/9o#ÎˆĞOS™]ËIÉËÏY]K\Ûİ\˜ÙWÛX™[OUT“XÛÛ\[KÏ]]KR‘O[ØË]ÛKÏ]š\ØWBˆ9«!:)èÈÛİ\˜ÙNˆ“[šÙY[ˆÈZ[š[X^ˆ8¡¤ˆ[šÙY[‹’›Ü˜HÈZ[š[X^ˆ8¡¤ˆ›Ü˜K’›Ø”İ™Y]ÈZ[š[X^ˆ8¡¤ˆ›Øœİ™Y]ˆH9«!:)èÈ›Ø—ÚYˆ9/§HÛİ\˜ÙH9.#yd#9å*9.#yd#™YÙ^
+[šÙY[ˆYÚ]È›Ø”Üİ[™ËÙYÚ]È›Ü˜HÌ‹Z^È›Ø”İ™Y]Ú›Ø‹ÙYÚ]
+B‚ˆ™]\›œÈ›Û™H9i ¹§§›İÈ9¬¤ˆH9«!9¢%º)èù.#yaîˆ›Ø—ÚY
+K™Ëˆˆ9«!9ênˆ
+È9¬¤ˆÈ9«!9æ¡XY\ˆ›İÊK‚ˆˆˆ‚ˆYˆ[Š›İÊHHÜˆ›İ›İÖÍKœİš\
+
+N‚ˆ™]\›ˆ›Û™BˆØÙ[H›İÖÌ×Kœİš\
+
+HYˆ[Š›İÊHˆÈ[ÙHˆ‚ˆYˆ’›Ø”İ™Y]ˆ[ˆØÙ[‚ˆÜ˜ÈHš›Øœİ™Y]‚ˆ[Yˆ’›Ü˜Hˆ[ˆØÙ[‚ˆÜ˜ÈHš›Ü˜H‚ˆ[ÙN‚ˆÜ˜ÈH›[šÙY[ˆ‚ˆÙ[H›İÖÍKœİš\
+
+BˆÈ9o§ˆH9«!:)èÈ›Ø—ÚYˆYˆÙ[š\ÙYÚ]
+
+N‚ˆ™]\›ˆ
+Ü˜ËÙ[
+BˆÈ[šÙY[ˆ›Ü›][NˆRTT“S’Ê‹‹‹‹Ú›Ø”Üİ[™ËÌLŒÈ‹ŒLŒÈŠBˆHH™KœÙX\˜Ú
+ˆš›Ø”Üİ[™ËÊ
+ÊH‹Ù[
+BˆYˆN‚ˆ™]\›ˆ
+Ü˜ËK™Ü›İ\
+JJBˆÈ›Ü˜NˆÌ‹XÚ\ˆ^\Ú9g*T“9l/‚ˆHH™KœÙX\˜Ú
+ˆŠØKYŒNW^ÌÌŸJJÎ—ß	
+H‹Ù[
+BˆYˆN‚ˆ™]\›ˆ
+š›Ü˜H‹K™Ü›İ\
+JJHÈ9o-ùb-ˆ›Ü˜BˆÈ›Ø”İ™Y]ˆÚ›Ø‹ŞÙYÚ]H9í%Y
+Œ‹LLŒÈ9¥.yo£9¨/9o#ÊBˆHH™KœÙX\˜Ú
+ˆ‹Ú›Ø‹Ê
+ÊJÎ—ß	
+H‹Ù[
+BˆYˆH[™š›Øœİ™Y]ˆ[ˆÙ[›İÙ\Š
+N‚ˆ™]\›ˆ
+š›Øœİ™Y]‹K™Ü›İ\
+JJBˆ™]\›ˆ›Û™B‚‚™Yˆ\Úİ×ÜÚY]
+›ØœÎˆ\İÙXİKÚY]İ\›ˆİ‹ˆØWÚÙ^WÜ]ˆİˆHÒQUÔĞWÒÑVKˆÛİ\˜ÙNˆİˆHQUSÔÒQUÔÓÕTÑKˆWÜ[ˆ›ÛÛH˜[ÙKˆÚYˆİˆ[›Û™HH›Û™KˆØØ][ÛˆİˆHĞĞUSÓŠHOˆXİ‚ˆˆˆ‚ˆ9¢¢ˆ›ØœÈ9kêùb,ÛÛÙÛHÚY]8à ‚ˆ9«!9/cyl#y¡âNˆOS™]ËÏy.â¹i*K\Ûİ\˜ÙKOPTHT“\\›[šËyak9cîÏz mùê,KˆR‘Oyg,:nç‹ÏZ\™›ØÚÙ\ˆX\šÙ\È‹Òˆ9åfyên¸à ‚ˆ9c®úaãNˆ:-ìú`c¹mì¹kf9g*9æ¡H
+›ØˆT“
+xà ‚‚ˆš\ØH]Xİ[Ûˆ9cê¹l#HÚ[™Ø\Ü™H:-äH
+ËĞÓˆ9.#yª¨¹§éK9méy/g9ì/zfd9b-¹.#yn.:)¢ÊB‚ˆÚY:)èù§¤:h!¹n£Îˆ^XÚ]ÚY\™ÈˆT“9aiÈÙÚYXÈÙÚYXˆÑ×ÔU×ÑÒQ
+Y˜][
+xà ‚ˆT“9¬¤¹n-ˆÚY9.gù.#y`¬È\™È8¡¤ˆ9æí9£©H˜Z\Ù{ï":`oùacznæ:næ9kêùb,9ë+9. 9`"ÈXˆH›Øœ×Ü˜]ûï"xà ‚‚ˆŒ‹LLŒÈ:aãy©âÎˆ9¢áˆÈ9`"È[\ˆ9aïy¥n
+ÛØYÜÚY]ÚÙ^\ØÈØZ[ÜÚY]Ü›İØÈİÜš]WÜ›İÜ×İ×ÜÚY]
+Kˆ9c§ù§+Nˆ:(c9æ¡9e«¹. 9aïy¥n9¢á¹¢$Œ
+ÌÌ
+ÌÌ:(c9æ¡È9`"ùaïy¥n
+ÈŒ:(c9æ¡Ü˜Ú\İ˜]Ü‚ˆˆˆ‚ˆœ›ÛH]][YH[\Ü]Bˆ[\ÜÜÜ™XYˆœ›ÛHÛÛÙÛK›Ø]]‹œÙ\šXÙWØXØÛİ[[\ÜÜ™Y[X[Â‚ˆÚY]ÚYH^˜XİÜÚY]ÚY
+ÚY]İ\›
+Bˆ™\ÛÛ™YÙÚYHÚYYˆÚY\È›İ›Û™H[ÙH^˜XİÙÚY
+ÚY]İ\›
+BˆYˆ™\ÛÛ™YÙÚY\È›Û™N‚ˆ˜Z\ÙH˜[YQ\œ›ÜŠˆ¸§c9¬¤¹n-ˆÚY9§ ù¤§¹b,›Øœ×Ü˜]È
+9ë+9. 9`"ÈXŠWˆ‚ˆˆ9/ë¹¬åNˆT“9n-ˆÙÚYOÛÜšÜÚY]YÚYˆ9¢%ˆKYÚYÛÜšÜÚY]YÚYˆ9¢%ˆK]Ë\ÚY]9å*Ñ×ÔU×ÕT“‚ˆ
+BˆÚYHİŠ™\ÛÛ™YÙÚY
+B‚ˆYˆWÜ[‚ˆš[
+ˆˆÑ–H•S—H9.#y§ ùç'ùæ¡9kêùaiHŠBˆš[
+ˆˆÚY]ÚYˆÜÚY]ÚYÎŒŒ_K‹‹ˆŠBˆš[
+ˆˆÚYˆÙÚYHŠBˆš[
+ˆˆÛİ\˜ÙHX™[HÜÛİ\˜ÙH\ŸHŠBˆš[
+ˆˆ9alHÛ[Š›ØœÊ_H9ëa¹®¥¹`¦ykêùaiH
+Y\ˆÚÚ\ÙY\İš\ØJHŠBˆ›Üˆˆ[ˆ›ØœÖÎŒ×N‚ˆWÜ™]šY]ÈHZ[ÙWÙ›Ü›][J‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠK‹™Ù]
+š›Ø—ÚY‹ˆŠK‹™Ù]
+\›‹ˆŠJBˆš[
+ˆˆÜ™]šY]×H]O^Ú‹™Ù]
+	İ]IË	ÉÊVÎŒÍWNŒÍ_HO^ÙWÜ™]šY]ßHŠBˆ™]\›ˆÈÜš][ˆˆœÚÚ\YÙ\ˆ™WÜ[ˆˆY_B‚ˆÈJH:*£z+bH
+È:e¢ÈÚY]ˆØÛÜ\ÈHÈšÎ‹ËİİİË™ÛÛÙÛX\\Ë˜ÛÛKØ]]ÜÜ™XYÚY]È—BˆÜ™YÈHÜ™Y[X[Ë™œ›ÛWÜÙ\šXÙWØXØÛİ[Ùš[JİŠØWÚÙ^WÜ]
+KØÛÜ\Ï\ØÛÜ\ÊBˆØÈHÜÜ™XY˜]]Üš^™JÜ™YÊBˆÚHØË›Ü[—ØWÚÙ^JÚY]ÚY
+BˆÜÈHÚ™Ù]İÛÜšÜÚY]ØWÚY
+[
+ÚY
+JBˆš[
+ˆˆ9méy/g:(jˆİÜË]H\ŸK9æë¹bcH›İ×ØÛİ[ˆİÜËœ›İ×ØÛİ[HŠB‚ˆÈŠH:+ 9ãï¹§"H
+Ûİ\˜ÙK›Ø—ÚY
+HÙ^\È
+È9¢o¹."ù. 9`"ùên¹æoH›İÂˆ^\İ[™ÈHÜË™Ù]Ø[İ˜[Y\Ê
+Bˆ^\İ[™×ÚÙ^\Ë™^Ü›İÈHÛØYÜÚY]ÚÙ^\Ê^\İ[™ÊBˆš[
+ˆˆ9¥è¹§"H
+Ûİ\˜ÙK›Ø—ÚY
+H9¥nˆÛ[Š^\İ[™×ÚÙ^\Ê_HŠBˆš[
+ˆˆ9."ù. 9`"ùên¹æoH›İÎˆÛ™^Ü›İßHŠB‚ˆÈÊH9ía›İÜÈ
+Y\š\ØKÛÜšÈ[ÙK›Ü›][JH8 %9å*ØZ[ÜÚY]Ü›İÈ[\‚ˆ™]×Ü›İÜÈH×BˆÚÚ\YÙ\HˆÚÚ\YÛ›×Ú™Hˆ›Üˆˆ[ˆ›ØœÎ‚ˆ›İÈHØZ[ÜÚY]Ü›İÊ‹Ûİ\˜ÙKØØ][Û‹^\İ[™×ÚÙ^\ÊBˆYˆ›İÈ\È›Û™N‚ˆÈ9b)9¥­ù¦+ÈY\:`¡9¦+È›×Ú™ˆ›Ø—ÚYH‹™Ù]
+š›Ø—ÚY‹ˆŠBˆYˆ›Ø—ÚY[™
+‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠK›Ø—ÚY
+H[ˆ^\İ[™×ÚÙ^\Î‚ˆÚÚ\YÙ\
+ÏHBˆ[ÙN‚ˆÚÚ\YÛ›×Ú™
+ÏHBˆÛÛ[YBˆ™]×Ü›İÜË˜\[™
+›İÊBˆ^\İ[™×ÚÙ^\Ë˜Y
+
+‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠK‹™Ù]
+š›Ø—ÚY‹ˆŠJJHÈ9d#[ˆ9aiÈY\‚ˆÈ
+H9kêùaiH
+9¢%¹á(H›İÜÈ9l,yæí9£©H™]\›ŠBˆYˆ›İ™]×Ü›İÜÎ‚ˆ™]\›ˆÂˆÜš][ˆˆˆœÚÚ\YÙ\ˆÚÚ\YÙ\ˆœÚÚ\YÛ›×Ú™ˆÚÚ\YÛ›×Ú™ˆ›™^Ü›İÈˆ™^Ü›İËˆBˆ™]\›ˆİÜš]WÜ›İÜ×İ×ÜÚY]
+ÜË™^Ü›İË™]×Ü›İÜËÚÚ\YÙ\ÚÚ\YÛ›×Ú™
+B‚‚™YˆÛØYÜÚY]ÚÙ^\Ê^\İ[™Îˆ\İÛ\İÜİ—WJHOˆ\VÜÙ]İ\VÜİ‹İ—WK[N‚ˆˆˆ¹o§ˆÚY]9ãï¹§"H›İÜÈ:)èùaîˆ
+Ûİ\˜ÙK›Ø—ÚY
+HÙ]
+È9."ù. 9`"ùên¹æoH›İÈ9íê:&gøà ‚ˆ™]\›œÎˆ
+^\İ[™×ÚÙ^\Ë™^Ü›İÊBˆˆˆ‚ˆ^\İ[™×ÚÙ^\ÎˆÙ]İ\VÜİ‹İ—WHHÙ]
+
+Bˆ›Üˆ›İÈ[ˆ^\İ[™ÖÌN—N‚ˆÙ^HH\œÙWÜÚY]Ü›İ×İ×ÚÙ^J›İÊBˆYˆÙ^N‚ˆ^\İ[™×ÚÙ^\Ë˜Y
+Ù^JBˆÈ9¢o¹."ù. 9`"ùên¹æoH›İÂˆ™^Ü›İÈH›Û™Bˆ›ÜˆK›İÈ[ˆ[[Y\˜]J^\İ[™ËJN‚ˆYˆHOHN‚ˆÛÛ[YBˆYˆ›İ[JËœİš\
+
+H›ÜˆÈ[ˆ›İÊN‚ˆ™^Ü›İÈHBˆœ™XZÂˆYˆ™^Ü›İÈ\È›Û™N‚ˆ™^Ü›İÈH[Š^\İ[™ÊH
+ÈBˆ™]\›ˆ^\İ[™×ÚÙ^\Ë™^Ü›İÂ‚‚™YˆØZ[ÜÚY]Ü›İÊ›ØˆXİÛİ\˜ÙWÛX™[ˆİ‹ØØ][Ûˆİ‹ˆ^\İ[™×ÚÙ^\ÎˆÙ]İ\VÜİ‹İ—WJHOˆ\İ›Û™N‚ˆˆˆ¹¢¢¹. 9`"È›ØˆXİ9©âú`(9à®ˆLH9«!ÚY]›İøà ‚‚ˆ™]\›œÈ›Û™H:(j9é.º) z-ìú`cˆ
+Y\9doy.+H9¢%ˆ9¬¤ˆ‘
+NÈ9d)¹baùfç¹`¬ÈLH9«!\İ8à ‚ˆ:-ìú`c¹c§ùfè:) yo§¹do9cêùêëùå*^\İ[™×ÚÙ^\È:-çÈ™İ^9b)9¥­È
+:`&z(èycêº,¨:,«9©âú`(›İÊxà ‚ˆˆˆ‚ˆœ›ÛH]][YH[\Ü]Bˆ›Ø—ÚYH›Ø‹™Ù]
+š›Ø—ÚY‹ˆŠBˆYˆ›İ›Ø—ÚY‚ˆ™]\›ˆ›Û™Bˆ›Ø—ÜÛİ\˜ÙHH›Ø‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠBˆYˆ
+›Ø—ÜÛİ\˜ÙK›Ø—ÚY
+H[ˆ^\İ[™×ÚÙ^\Î‚ˆ™]\›ˆ›Û™Bˆ™İ^H›Ø‹™Ù]
+š™İ^ŠHÜˆˆ‚ˆYˆ›İ™İ^‚ˆ™]\›ˆ›Û™BˆÈš\ØH]Xİ[Ûˆ9cê¹l#HÚ[™Ø\Ü™H:-äH
+ËĞÓˆ9.#yª¨¹§éK9méy/g9ì/zfd9b-¹.#yn.:)¢ÊBˆYˆØØ][Û‹›İÙ\Š
+HOHœÚ[™Ø\Ü™H‚ˆš\ØHH]Xİİš\ØWÜÚYÛ˜[
+™İ^
+Bˆ[ÙN‚ˆš\ØHHˆ‚ˆ™ÛÛ™[[™HH™KœİXŠˆ—ÊÈ‹ˆ‹™İ^
+Kœİš\
+
+BˆÛÜš×Û[ÙHH›Ø‹™Ù]
+ÛÜš×Û[ÙH‹ˆŠHÜˆ^˜XİİÛÜš×Û[ÙJ™İ^›Ø‹™Ù]
+]H‹ˆŠJBˆWÙ›Ü›][HHZ[ÙWÙ›Ü›][J›Ø—ÜÛİ\˜ÙK›Ø—ÚY›Ø‹™Ù]
+\›‹ˆŠJBˆ™]\›ˆÂˆ“™]È‹ÈBˆˆ‹Èˆ
+9åfyênŠBˆ]KÙ^J
+Kš\ÛÙ›Ü›X]
+
+KÈÂˆÛİ\˜ÙWÛX™[ÈˆWÙ›Ü›][KÈH
+9d*ú-¡z`(ùíd
+Bˆ›Ø‹™Ù]
+˜ÛÛ\[H‹ˆŠKÈ‚ˆ›Ø‹™Ù]
+]H‹ˆŠKÈÂˆ™ÛÛ™[[™KÈ
+9e«º(c:!ê¹båz(àyb!ÊBˆ›Ø‹™Ù]
+›ØØ][Ûˆ‹ˆŠKÈBˆÛÜš×Û[ÙKÈˆ
+™[[İKÒXœšYÓÛœÚ]JBˆš\ØKÈÂˆB‚‚™YˆİÜš]WÜ›İÜ×İ×ÜÚY]
+ÜË™^Ü›İÎˆ[™]×Ü›İÜÎˆ\İÛ\İKˆÚÚ\YÙ\ˆ[HÚÚ\YÛ›×Ú™ˆ[H
+HOˆXİ‚ˆˆˆ¹¢¢ˆ™]×Ü›İÜÈ9kêùb,ÚY]9fç¹`¬Èİ]ÈXİ
+:-çùc§ù§+\Úİ×ÜÚY]9. 9ª(ù¨/9o#Êxà ‚‚ˆ9."y«­yo#ùkêùaiH
+:f,ˆŒL9ak9o#ù¬ê9ai{ï#9.%[[[Û˜[›Ü›][H9§ 9o£9¢cyegùå*
+N‚ˆH\ÙHNˆN‘9å*UÂˆH\ÙHˆ’È9å*UÂˆH\ÙHÎˆH9«!\\›[šÈ›Ü›][H9å*TÑT—ÑS•T‘Qˆ9cê¹§"y¢$y`$z!ê¹mìyå'ù¢$9æ¡H9«!TT“S’È9§ ú(ªùåm¹ak9o#Ë9am¹.å¹¢`9§"yi%º`êØÜ˜\Y^ˆ
+]HÈÛÛ\[HÈ‘ÈØØ][ÛˆÈÛİ\˜ÙHX™[Èš\ØJH:`ïy.#z ïz(ªùåm¹ak9o#ùgíú(c8à ‚ˆˆˆ‚ˆ[™Ü›İÈH™^Ü›İÈ
+È[Š™]×Ü›İÜÊHHBˆš[
+ˆˆ9®¥¹`¦ykêùaiH›İÈÛ™^Ü›İßK^Ù[™Ü›İßH
+Û[Š™]×Ü›İÜÊ_H9ëa‹9ajy«­yo#ùkêùaizf,¹ak9o#ù¬ê9aiJK‹‹ˆŠBˆÈ:f,¹daˆ:!ê¹båy¤í9leHÚY]›İÜÈ
+:`oùacH[™Ü›İÈˆ›İ×ØÛİ[9h,H
+BˆYˆ[™Ü›İÈˆÜËœ›İ×ØÛİ[‚ˆ^˜HH[™Ü›İÈHÜËœ›İ×ØÛİ[
+ÈLˆš[
+ˆˆ8¦¨;î#ÈÚY]9cê¹§"HİÜËœ›İ×ØÛİ[H›İÜË9b¨Ù^˜_H›İÜÈ:`oùacHİ™\™›İÈŠBˆÜË˜YÜ›İÜÊ^˜JBˆÈ^\›˜[ØÜ˜\Y^\ÈÜš][ˆš\œİ\ÈUËˆYˆH]\ˆ]H\ÙH˜Z[ËˆÈHKXÛÛ[[ˆ]™H›Ü›][H\È™]™\ˆXİ]˜]Y‚ˆWÙÜ›İÜÈHÖÜ–ÚWH›ÜˆH[ˆ
+K‹ÊWH›Üˆˆ[ˆ™]×Ü›İÜ×Bˆ—Ú×Ü›İÜÈHÖÜ–ÚWH›ÜˆH[ˆ
+K‹ËKL
+WH›Üˆˆ[ˆ™]×Ü›İÜ×BˆWÛÛ›WÜ›İÜÈHÖÜ–ÍWH›Üˆˆ[ˆ™]×Ü›İÜ×BˆÜË\]Jˆ˜[™ÙWÛ˜[YOYˆ^Û™^Ü›İßN‘Ù[™Ü›İßH‹ˆ˜[Y\ÏXWÙÜ›İÜËˆ˜[YWÚ[œ]ÛÜ[ÛH”UÈ‹ˆ
+BˆÜË\]Jˆ˜[™ÙWÛ˜[YOYˆ‘Û™^Ü›İßN’ŞÙ[™Ü›İßH‹ˆ˜[Y\ÏY—Ú×Ü›İÜËˆ˜[YWÚ[œ]ÛÜ[ÛH”UÈ‹ˆ
+BˆÈ[[[Û˜[›Ü›][H\ÈHš[˜[\ÙK‚ˆÜË\]Jˆ˜[™ÙWÛ˜[YOYˆ‘^Û™^Ü›İßN‘^Ù[™Ü›İßH‹ˆ˜[Y\ÏYWÛÛ›WÜ›İÜËˆ˜[YWÚ[œ]ÛÜ[ÛH•TÑT—ÑS•T‘Q‹ˆ
+Bˆ™]\›ˆÂˆÜš][ˆˆ[Š™]×Ü›İÜÊKˆœÚÚ\YÙ\ˆÚÚ\YÙ\ˆœÚÚ\YÛ›×Ú™ˆÚÚ\YÛ›×Ú™ˆ›™^Ü›İÈˆ™^Ü›İËˆ™[™Ü›İÈˆ[™Ü›İËˆB‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ[šÙY[ˆÛÛ\]Xš[]Hİ\™˜XÙBˆÈ[\[Y[][ÛˆİÛ™\ˆ›Øœ×ÜØÜ˜\\‹œÛİ\˜Ù\Ë›[šÙY[‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ’“Ğ—ĞĞT‘ÔÑSH[šÙY[—ÜÛİ\˜ÙK’“Ğ—ĞĞT‘ÔÑS•UWÔÑSH[šÙY[—ÜÛİ\˜ÙK•UWÔÑSÓÓTS–WÔÑSH[šÙY[—ÜÛİ\˜ÙKÓÓTS–WÔÑS“Ğ×ÔÑSH[šÙY[—ÜÛİ\˜ÙK“Ğ×ÔÑS•SQWÔÑSH[šÙY[—ÜÛİ\˜ÙK•SQWÔÑS“S’×ÔÑSH[šÙY[—ÜÛİ\˜ÙK“S’×ÔÑS’‘ÑTĞ×ÔÑSH[šÙY[—ÜÛİ\˜ÙK’‘ÑTĞ×ÔÑS’‘Ğ“ĞÒ×ÔÑSH[šÙY[—ÜÛİ\˜ÙK’‘Ğ“ĞÒ×ÔÑS—ØÛX[ˆH[šÙY[—ÜÛİ\˜ÙK—ØÛX[‚‚‚™YˆZ[Û\İİ\›
+ˆİ‹İ\ˆ[ØØ][ÛˆİˆHĞĞUSÓ‹Ù[×ÚYˆİˆHÑS×ÒQ
+HOˆİ‚ˆ™]\›ˆ[šÙY[—ÜÛİ\˜ÙK˜Z[Û\İİ\›
+ˆ‹İ\ØØ][Û‹Ù[×ÚYÙ^]ÛÜ™ÏRÑVUÓÔ‘Ëˆ
+B‚‚™Yˆ\œÙWÛ\İÜYÙJ[ˆİŠHOˆ\İÙXİN‚ˆ™]\›ˆ[šÙY[—ÜÛİ\˜ÙKœ\œÙWÛ\İÜYÙJ[
+B‚‚™Yˆ™]ÚÛ\İÜYÙJˆİ‹İ\ˆ[ØØ][ÛˆİˆHĞĞUSÓ‹Ù[×ÚYˆİˆHÑS×ÒQ
+HOˆİ‚ˆ™]\›ˆ[šÙY[—ÜÛİ\˜ÙK™™]ÚÛ\İÜYÙJˆØØ×ÜÙ\ÜÚ[Û‹‹İ\ØØ][Û‹Ù[×ÚYÙ^]ÛÜ™ÏRÑVUÓÔ‘Ëˆ
+B‚‚™YˆZ[Ú™İ\›
+›Ø—ÚYˆİŠHOˆİ‚ˆ™]\›ˆ[šÙY[—ÜÛİ\˜ÙK˜Z[Ú™İ\›
+›Ø—ÚY
+B‚‚™Yˆ™]ÚÚ™
+›Ø—ÚYˆİŠHOˆXİ‚ˆ™]\›ˆ[šÙY[—ÜÛİ\˜ÙK™™]ÚÚ™
+ØØ×ÜÙ\ÜÚ[Û‹›Ø—ÚY
+B‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ9..ùê"ùo#ÂˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™Yˆ[X[—ÜÛY\
+X™[ˆİˆHˆŠN‚ˆÈH˜[™ÛK[šY›Ü›JÓQTÓRS‹ÓQTÓPV
+BˆYˆX™[‚ˆš[
+ˆˆÛY\ÜÎ‹ŒYŸ\È
+ÛX™[JH‹›\ÚUYJBˆ[YKœÛY\
+ÊB‚‚™YˆÜ˜]ÛÛ\İ
+ˆİ‹X^ÜYÙ\Îˆ[ØØ][ÛˆİˆHĞĞUSÓ‹Ù[×ÚYˆİˆHÑS×ÒQ
+HOˆ\İÙXİN‚ˆÙY[ˆÙ]Üİ—HHÙ]
+
+Bˆ[Ú›ØœÎˆ\İÙXİHH×B‚ˆ›Üˆ[ˆ˜[™ÙJX^ÜYÙ\ÊN‚ˆİ\H
+ˆQÑWÔÒV‘Bˆš[
+ˆ—ˆÛ\İYÙHÜ
+Ì_WHİ\^Üİ\HŠBˆN‚ˆ[H™]ÚÛ\İÜYÙJ‹İ\ØØ][Û‹Ù[×ÚY
+Bˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆRSˆİ\JJK—×Û˜[YW×ßNˆÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆ]
+ˆœ˜]×Û\İŞÜ
+Ì_Kš[ŠKÜš]Wİ^
+[
+Bˆ›ØœÈH\œÙWÛ\İÜYÙJ[
+Bˆ™]×Ú›ØœÈHÚˆ›Üˆˆ[ˆ›ØœÈYˆ–Èš›Ø—ÚY—H›İ[ˆÙY[—Bˆ›Üˆˆ[ˆ™]×Ú›ØœÎ‚ˆÙY[‹˜Y
+–Èš›Ø—ÚY—JBˆ[Ú›ØœË˜\[™
+ŠBˆš[
+ˆˆ9¥-ˆÛ[Š›ØœÊ_K9¥¬9h§ˆÛ[Š™]×Ú›ØœÊ_K:aãz)!ÈÛ[Š›ØœÊK[[Š™]×Ú›ØœÊ_K9í+ú*"Û[Š[Ú›ØœÊ_HŠBˆYˆ›İ™]×Ú›ØœÈÜˆ[Š›ØœÊHQÑWÔÒV‘N‚ˆš[
+ˆ9b,9n¥y.¡ˆŠBˆœ™XZÂˆYˆX^ÜYÙ\ÈHN‚ˆ[X[—ÜÛY\
+›\İŠB‚ˆ™]\›ˆ[Ú›ØœÂ‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ›Ü˜H
+ÙËš›Ü˜K˜ÛÛJHH9í%S\œÙK9¬¤ˆTBˆÈ9å*8à#OS™8à#y`f¹¦`ºe¤Èš[\‹8à#S¸à#y`fˆYÙK9«ãúh yfî¹k¦ˆÌ›ØœÂˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ™YˆZ[Ú›Ü˜WÛ\İİ\›
+›Ü˜Wİˆİ‹YÙNˆ[Ù^]ÛÜ™ˆİˆH“ÔWÒÑVUÓÔ‘ˆØØ][ÛˆİˆH“ÔWÓĞĞUSÓŠHOˆİ‚ˆˆˆ¹ía›Ü˜H\İT“8à ”YÙHH:e¢ùiâÈK9.#y¦+È8à ˆˆˆ‚ˆ™]\›ˆˆÒ“ÔWĞTÑ_KÚØO^Ú›Ü˜WİŸI›^ÛØØ][ÛŸIœO^ÚÙ^]ÛÜ™œ™\XÙJ	È	Ë	ÊÉÊ_Iœ^ÜYÙ_H‚‚‚™Yˆ\œÙWÚ›Ü˜WÛ\İÜYÙJ[ˆİ‹ØØ][ÛˆİˆH“ÔWÓĞĞUSÓŠHOˆ\İÙXİN‚ˆˆˆ¹o§ˆ›Ü˜H9b%ú(jS9¢¤È›Øœøà š›Ø—ÚY9¦+ÈT“9aiùæ¡\Ú
+ÌˆÚ\ˆ^
+xà ˆˆˆ‚ˆ\HY\ÜŠ[
+BˆÙY[ˆÙ]Üİ—HHÙ]
+
+Bˆ›ØœÎˆ\İÙXİHH×BˆÈ›Øˆ[šÜÎˆÚ›Ø‹ŞÕ]K\ÛYßK^Ú\ÚOË‹‹‚ˆÈ]HÛYÈ9cëú ïyd*È\Ú
+K™Ëˆ”›ÙXİSX[˜YÙ\ˆˆ:+¢ˆ”›ÙXİSX[˜YÙ\‹K‹‹ˆŠK9¢`9.éH[˜ÚÜˆ9g*9§ 9o£:`¨ù«­H\Úˆ›Üˆ™Yˆ[ˆ\˜ÜÜÊ˜VÚ™YŠIËÚ›Ø‹É×N˜]Š™YŠHŠK™Ù][
+
+N‚ˆHH™KœÙX\˜Ú
+‰ËÚ›Ø‹ËŠÏËJØKYŒNW^ÌÌŸJJÎ—ß	Ÿ	
+IË™YŠBˆYˆ›İN‚ˆÛÛ[YBˆ›Ø—ÚYHK™Ü›İ\
+JBˆYˆ›Ø—ÚY[ˆÙY[‚ˆÛÛ[YBˆÙY[‹˜Y
+›Ø—ÚY
+BˆÈ9k£9¥mT“
+9íiˆÚY]H9«!\\›[šÊBˆYˆ™Y‹œİ\İÚ]
+	Ú	ÊN‚ˆ\›H™Y‚ˆ[ÙN‚ˆ\›HˆÒ“ÔWĞTÑ_^Ú™YŸHˆYˆ™Y‹œİ\İÚ]
+	ËÉÊH[ÙHˆÒ“ÔWĞTÑ_KŞÚ™YŸH‚ˆÈ9o§ˆT“:)èùª&zhc
+ÛYÈ9æ¡:`ê9b!¹c®ù£¢H\Ú
+BˆÛY×ÛX]ÚH™KœÙX\˜Ú
+‰ËÚ›Ø‹Ê××JÊWÉË™YŠBˆ]WÜÛYÈHÛY×ÛX]Ú™Ü›İ\
+JHYˆÛY×ÛX]Ú[ÙH	ÉÂˆ]HH™KœİXŠ‰ËVØKYŒNW^ÌÌŸI	Ë	ÉË]WÜÛYÊKœ™\XÙJ	ËIË	È	ÊBˆ›ØœË˜\[™
+Âˆ	Ú›Ø—ÚY	Îˆ›Ø—ÚYˆ	İ]IÎˆ]Kˆ	ØÛÛ\[IÎˆ	ÉËÈ\İ:h y¬¤ºhkùé.¹ak9cî9o§ˆ‘:h z(çˆ	ÛØØ][Û‰ÎˆØØ][Û‹ˆ	ÜÜİYØ]	Îˆ	ÉËˆ	ÜÜİYØYÛÉÎˆ	ÉËˆ	İ\›	Îˆ\›ˆ	ÜÛİ\˜ÙIÎˆ	Ú›Ü˜IËÈ:+¤È\Úİ×ÜÚY]È[œšXÚİÚ]Ú™9çéz`dùå*9dê¹`"È™]Ú\ˆ:-çÈ\\›[šÈ9¨/9o#ÂˆJBˆ™]\›ˆ›ØœÂ‚‚™Yˆ™]ÚÚ›Ü˜WÚ™
+\›ˆİŠHOˆXİ‚ˆˆˆ¹¢¤È›Ü˜H:*lùí,:h K9o§ˆ]‹š›Ø‹Y]Z[9¢ïÈ‘9¥¡ùkeÈ
+È9ak9cîù/cyïkº(ç:ob¸à ˆˆˆ‚ˆ›Üˆ][\[ˆ˜[™ÙJÊN‚ˆN‚ˆˆHØØ×ÜÙ\ÜÚ[Û‹™Ù]
+\›[Y[İ]LŒ[\\œÛÛ˜]OIØÚ›ÛYIÊBˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰ÎˆİŠJ_BˆYˆ‹œİ]\×ØÛÙHOHŒ‚ˆœ™XZÂˆYˆ‹œİ]\×ØÛÙHOHÎ‚ˆØZ]HÌ
+ˆ
+][\
+ÈJBˆš[
+ˆˆÈ8¡¤ˆØZ]İØZ]\È
+][\Ø][\
+Ì_KÌÊHŠBˆ[YKœÛY\
+ØZ]
+BˆÛÛ[YBˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰Îˆ‰ÒÜ‹œİ]\×ØÛÙ_IßBˆ[ÙN‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰Îˆ	ÒÈ:aãz*i¹i,y¥eÉßBˆYˆ‹œİ]\×ØÛÙHOHŒ‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰Îˆ‰ÒÜ‹œİ]\×ØÛÙ_IßBˆ\HY\ÜŠ‹^
+BˆÈ‘ˆ9ë+9. 9`"È›Ø‹Y]Z[]‚ˆ™Ù]œÈH\˜ÜÜÊ™]–ØÛ\ÜÊIÚ›Ø‹Y]Z[	×HŠBˆYˆ›İ™Ù]œÎ‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰Îˆ	Û›È›Ø‹Y]Z[]‰ßBˆ™İ^H	È	Ëš›Ú[Š™Ù]œÖÌK˜ÜÜÊ	Î^	ÊK™Ù][
+
+JKœİš\
+
+Bˆ™Û[™\ÈHİœİš\
+
+H›Üˆ[ˆ™Ù]œÖÌK˜ÜÜÊ	Î^	ÊK™Ù][
+
+HYˆœİš\
+
+H[™[Šœİš\
+
+JHˆWBˆÈ9o§ˆXZ[ˆ9c`9hb¹¢¤È]KØÛÛ\[KÛØØ][Û‚ˆXZ[ˆH\˜ÜÜÊ›XZ[ˆŠBˆÈ]H
+JBˆHH\˜ÜÜÊ	ÚN^	ÊK™Ù][
+
+Bˆ]HHVÌKœİš\
+
+HYˆH[ÙH	ÉÂˆÈÛÛ\[KÛØØ][ÛˆH
+È
+ˆ9a`ùí(9aiùk®y¦+ÈÛÛ\[H8 $ÈØØ][Ûˆˆ9¨/9o#È
+[‹Y\Ú9b!ºf¥
+BˆÛÛ\[HH	ÉÂˆØØ][Û—İ^H	ÉÂˆ™^Ù[H\˜ÜÜÊ	ÚH
+È
+‰ÊBˆYˆ™^Ù[‚ˆY]WØÚ[šÜÈHİœİš\
+
+H›Üˆ[ˆ™^Ù[ÌK˜ÜÜÊ	Î^	ÊK™Ù][
+
+HYˆœİš\
+
+WBˆYˆY]WØÚ[šÜÎ‚ˆÈ:`c¹¯ï¹£¢yb!ºf¥9ë)ˆ¸ $Èˆ‹È‚ˆ\ÈHÜ›Üˆ[ˆY]WØÚ[šÜÈYˆ›İ[ˆ
+	ø $ÉË	ËIË	ËÉË	ß	ÊWBˆYˆ\Î‚ˆÛÛ\[HH\ÖÌBˆYˆ[Š\ÊHˆN‚ˆØØ][Û—İ^H\ÖÌWBˆÈ˜[˜XÚÎˆ9o§ˆXZ[ˆ:e¢úh+ybcynoº(c9¢¤ÂˆYˆ›İÛÛ\[H[™XZ[‚ˆ›Üˆ[ˆXZ[–ÌK˜ÜÜÊ	Î^	ÊK™Ù][
+
+VÎŒŒN‚ˆHœİš\
+
+BˆYˆ›İˆÛÛ[YBˆYˆ[ˆ
+	ÕšY]ÈÜˆ\H›Üˆ›Ø‰Ë	ÔØ]™H›Ø‰Ë	ø $ÉË	ËIË	ËÉÊNˆÛÛ[YBˆYˆ	Ü™]šY]ÜÈ]	È[ˆ›İÙ\Š
+NˆÛÛ[YBˆYˆH[Š
+H[™›İœİ\İÚ]
+
+	Í‰Ë	ÍK‰Ë	Ô\›X[™[	Ë	Ñ[	Ë	Ô\	Ë	ĞÛÛ˜Xİ	Ë	Ì™	Ë	ÌÙ	Ë	ÌY	Ë	ÍY	Ë	Í™	Ë	Ì]ÉË	ÌÉË	ÕÙ^IË	ÖY\İ\™^IÊJN‚ˆÛÛ\[HHˆœ™XZÂˆ™]\›ˆÂˆ	Ú™İ^	Îˆ™İ^Yˆ™İ^[ÙH›Û™Kˆ	Ú™Û[™\ÉÎˆ™Û[™\ÈYˆ™Û[™\È[ÙH›Û™Kˆ	Ú™Ú[	Îˆ›Û™Kˆ	ØÛÛ\[IÎˆÛÛ\[Kˆ	ÛØØ][Û‰ÎˆØØ][Û—İ^ˆ	İ]IÎˆ]Kˆ	Ù\œ›Ü‰Îˆ›Û™HYˆ™İ^[ÙH	Ù[\H‘	ËˆB‚‚™YˆÜ˜]ÛÚ›Ü˜WÛ\İ
+ˆİ‹X^ÜYÙ\Îˆ[ˆÙ^]ÛÜ™ˆİˆH“ÔWÒÑVUÓÔ‘ˆØØ][ÛˆİˆH“ÔWÓĞĞUSÓŠHOˆ\İÙXİN‚ˆˆˆ¹¢¤È›Ü˜H9b%ú(j
+S\œÙK9«ãúh HÌ›ØœÊxà ˆˆˆ‚ˆÙY[ˆÙ]Üİ—HHÙ]
+
+Bˆ[Ú›ØœÎˆ\İÙXİHH×Bˆ›Üˆ[ˆ˜[™ÙJKX^ÜYÙ\È
+ÈJN‚ˆš[
+ˆ—ˆÚ›Ü˜H\İYÙHÜWHŠBˆÈÈ™]HÚ]˜XÚÛÙ™ˆ
+›Ü˜H9§ ùl#yçëy¦`ºe¤ùi)úaãÈ™\]Y\İ˜[ˆÙ\ÜÚ[ÛŠBˆˆH›Û™Bˆ›Üˆ][\[ˆ˜[™ÙJÊN‚ˆN‚ˆ\›HZ[Ú›Ü˜WÛ\İİ\›
+“ÔWÕ–İ—KÙ^]ÛÜ™ØØ][ÛŠBˆˆHØØ×ÜÙ\ÜÚ[Û‹™Ù]
+\›[Y[İ]LŒ[\\œÛÛ˜]OIØÚ›ÛYIÊBˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆRSˆİ\JJK—×Û˜[YW×ßNˆÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆYˆ‹œİ]\×ØÛÙHOHŒ‚ˆœ™XZÂˆYˆ‹œİ]\×ØÛÙHOHÎ‚ˆØZ]HÌ
+ˆ
+][\
+ÈJHÈÌËŒËLÂˆš[
+ˆˆÈ8¡¤ˆØZ]İØZ]\È
+][\Ø][\
+Ì_KÌÊHŠBˆ[YKœÛY\
+ØZ]
+BˆÛÛ[YBˆš[
+ˆˆRSˆÜ‹œİ]\×ØÛÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆYˆˆ\È›Û™HÜˆ‹œİ]\×ØÛÙHOHŒ‚ˆš[
+ˆˆRSˆÈ:aãz*i¹i,y¥eË9¥/¹¨á9«i:h HŠBˆ™]\›ˆ[Ú›ØœÂˆ›ØœÈH\œÙWÚ›Ü˜WÛ\İÜYÙJ‹^ØØ][Û[ØØ][ÛŠBˆ™]×Ú›ØœÈHÚˆ›Üˆˆ[ˆ›ØœÈYˆ–ÉÚ›Ø—ÚY	×H›İ[ˆÙY[—Bˆ›Üˆˆ[ˆ™]×Ú›ØœÎ‚ˆÙY[‹˜Y
+–ÉÚ›Ø—ÚY	×JBˆ[Ú›ØœË˜\[™
+ŠBˆš[
+ˆˆ9¥-ˆÛ[Š›ØœÊ_K9¥¬9h§ˆÛ[Š™]×Ú›ØœÊ_K:aãz)!ÈÛ[Š›ØœÊK[[Š™]×Ú›ØœÊ_K9í+ú*"Û[Š[Ú›ØœÊ_HŠBˆÈ9b,9n¥y¨§y.íˆ
+JH9`"ù¥¬›Ø‹
+ŠHYÙH9k£9aj9ên‹
+ÊH[š\]YH›ØœÈL
+9l/ºh JBˆÈ9.bùbcyå*H9¦+È[šÙY[ˆÌÜYÙH9æ¡9ª&y®¥‹›Ü˜H9kéºf¦ùcêˆMH[š\]YKÜYÙK9§ ú*©9b)ˆYˆ›İ™]×Ú›ØœÈÜˆ[Š›ØœÊHOHÜˆ[Š™]×Ú›ØœÊHL‚ˆš[
+ˆ9b,9n¥y.¡ˆŠBˆœ™XZÂˆYˆX^ÜYÙ\Î‚ˆ[X[—ÜÛY\
+›\İŠBˆ™]\›ˆ[Ú›ØœÂ‚‚ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ˆÈ›Ø”İ™Y]ÑÈ9/¡¹®¤
+ÙËš›Øœİ™Y]˜ÛÛJH8 %Œ‹LLŒˆ9¥m9d"ˆÈ9ak:e¢È\İTH
+ÈÜ˜\S9.#zg ÛİY›\™HÛÛ™NÈS:h HL	H9¤âË:-lÜ˜\S9¢ïÈÛÛ[ˆÈ8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ 8¥ ’“Ğ”Õ‘QUÑURSÔUQT–HHˆˆ‚œ]Y\HÙ]›Ø‘]Z[Ê	›Ø’YˆQJHÂˆ›Ø‘]Z[ÊYˆ	›Ø’Y
+HÂˆ›ØˆÂˆYˆ]BˆXœİ˜XİˆÛÛ[ˆİ]\Âˆ\Ñ^\™YˆÜ™X]Y]È]U[YU]ÈBˆ\]Y]È]U[YU]ÈBˆ^\™\Ğ]È]U[YU]ÈBˆY™\\Ù\ˆÈY˜[YHBˆØØ][ÛˆÈX™[BˆÛÜšÕ\\ÈÈX™[BˆBˆBŸBˆˆˆ‚‚‚™YˆZ[Ú›Øœİ™Y]Û\İİ\›
+Ù^]ÛÜ™ˆİ‹YÙNˆ[]\˜[™ÙNˆİ‹ˆÛÜšİ\NˆİˆH“Ğ”Õ‘QUÕÓÔ’ÕTWÑ•ˆÚ\™NˆİˆH“Ğ”Õ‘QUÓĞĞUSÓ‹ˆYÙWÜÚ^™Nˆ[HŒ
+HOˆİ‚ˆˆˆ¹ía›Ø”İ™Y]\İTHT“8à ˆˆˆ‚ˆ[\Ü\›X‹œ\œÙBˆ\˜[\ÈHÂˆœÚ]RÙ^Hˆ”ÑËSXZ[ˆ‹ˆšÙ^]ÛÜ™ÈˆÙ^]ÛÜ™ˆÚ\™HˆÚ\™KˆÛÜšİ\HˆÛÜšİ\Kˆ™]\˜[™ÙHˆİŠ]\˜[™ÙJKˆœYÙHˆİŠYÙJKˆœYÙTÚ^™HˆİŠYÙWÜÚ^™JKˆBˆ™]\›ˆˆÒ“Ğ”Õ‘QUÓTÕĞT_OŞİ\›X‹œ\œÙK\›[˜ÛÙJ\˜[\Ê_H‚‚‚™Yˆ\œÙWÚ›Øœİ™Y]Û\İÜYÙJ]NˆXİÙ^]ÛÜ™ˆİŠHOˆ\İÙXİN‚ˆˆˆ¹o§ˆ›Ø”İ™Y]\İTH”ÓÓˆ9¢¤È›Øœøà ˆˆˆ‚ˆ›Øœ×Ü˜]ÈH]K™Ù]
+™]HŠHÜˆ×Bˆİ]H×Bˆ›Üˆˆ[ˆ›Øœ×Ü˜]Î‚ˆšYH‹™Ù]
+šYŠBˆYˆ›İšY‚ˆÛÛ[YBˆÈ9ak9cî9a*¹ab9å*[\ŞY\‹›˜[YK:` 9b,Y™\\Ù\‹™\ØÜš\[Û‚ˆ[\H‹™Ù]
+™[\ŞY\ˆŠHÜˆßBˆYˆH‹™Ù]
+˜Y™\\Ù\ˆŠHÜˆßBˆÛÛ\[HH[\™Ù]
+›˜[YHŠHÜˆY‹™Ù]
+™\ØÜš\[ÛˆŠHÜˆ‹™Ù]
+˜ÛÛ\[S˜[YHŠHÜˆˆ‚ˆÈØØ][ÛœÈ8¡¤ˆ9å*9ë+9. 9`"ÈX™[ˆØÜÈH‹™Ù]
+›ØØ][ÛœÈŠHÜˆ×BˆØ×ÛX™[HØÜÖÌK™Ù]
+›X™[‹ˆŠHYˆØÜÈ[ÙHˆ‚ˆÈÛÜšĞ\œ˜[™Ù[Y[È
+™[[İHÈXœšYÈÛœÚ]JH8 %Œ‹LLŒÈ9íly. “ÛœÚ]Hˆ9¬¤ˆ\[‚ˆÛHHˆ‚ˆØHH
+‹™Ù]
+ÛÜšĞ\œ˜[™Ù[Y[ÈŠHÜˆßJK™Ù]
+™]HŠHÜˆ×BˆYˆØH[™\Ú[œİ[˜ÙJØK\İ
+H[™ØVÌK™Ù]
+›X™[ŠN‚ˆÛHHØVÌVÈ›X™[—K™Ù]
+^‹ˆŠBˆÛHHÛKœ™\XÙJ“Û‹\Ú]H‹“ÛœÚ]HŠHÈ›Ø”İ™Y]TH9íiˆ“Û‹\Ú]Hˆ9íly. :/bH“ÛœÚ]H‚ˆİ]˜\[™
+Âˆš›Ø—ÚYˆİŠšY
+Kˆ]Hˆ‹™Ù]
+]H‹ˆŠKˆ˜ÛÛ\[HˆÛÛ\[Kˆ›ØØ][ÛˆˆØ×ÛX™[ˆœÜİYØ]ˆ‹™Ù]
+›\İ[™Ñ]H‹ˆŠKˆœÜİYØYÛÈˆ‹™Ù]
+›\İ[™Ñ]Q\Ü^H‹ˆŠKˆÛÜš×Û[ÙHˆÛKˆX\Ù\ˆˆ‹™Ù]
+X\Ù\ˆ‹ˆŠKˆ\›ˆˆ‹È9.#yg*\İ:f£¹«­yía[œšXÚ:f£¹«­z(ç
+:) yå*]HÛYÊBˆšÙ^]ÛÜ™İ\ÙYˆÙ^]ÛÜ™ÈXYÈ9å*9dê¹`"ÈÙ^]ÛÜ™9¤¢9b,9æ¡ˆœÛİ\˜ÙHˆš›Øœİ™Y]‹ˆJBˆ™]\›ˆİ]‚‚™Yˆ™]ÚÚ›Øœİ™Y]Ú™
+›Ø—ÚYˆİŠHOˆXİ‚ˆˆˆ¹¢dÈÜ˜\S9¢ïùe«¹. : mùï.¹k£9¥mÛÛ[
+S‘
+K”Í:/byí%9¥¡ùkeøà ˆˆˆ‚ˆN‚ˆˆHØØ×ÜÙ\ÜÚ[Û‹œÜİ
+ˆ“Ğ”Õ‘QUÑÔTSˆœÛÛ^Èœ]Y\Hˆ“Ğ”Õ‘QUÑURSÔUQT–K˜\šXX›\ÈˆÈš›Ø’YˆİŠ›Ø—ÚY
+__KˆXY\œÏ^È•\Ù\‹PYÙ[ˆ“[Şš[KÍKŒ‹XØÙ\ˆ˜\XØ][Û‹ÚœÛÛˆ‹ˆÛÛ[U\Hˆ˜\XØ][Û‹ÚœÛÛˆŸKˆ[Y[İ]LÌˆ[\\œÛÛ˜]OH˜Ú›ÛYH‹ˆ
+Bˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰ÎˆİŠJ_BˆYˆ‹œİ]\×ØÛÙHOHŒ‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰Îˆ‰ÒÜ‹œİ]\×ØÛÙ_IßBˆN‚ˆ]HH‹šœÛÛŠ
+Bˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉÉË	Ù\œ›Ü‰Îˆ‰Ò”ÓÓˆ˜Z[ˆÙ_IßBˆYˆ™\œ›ÜœÈˆ[ˆ]N‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉË	Ù\œ›Ü‰ÎˆİŠ]VÉÙ\œ›ÜœÉ×VÎŒWJ_Bˆ›ØˆH
+]K™Ù]
+™]HŠHÜˆßJK™Ù]
+š›Ø‘]Z[È‹ßJK™Ù]
+š›ØˆŠBˆYˆ›İ›Ø‚ˆ™]\›ˆÉÚ™İ^	Îˆ›Û™K	Ú™Û[™\ÉÎˆ›Û™K	Ú™Ú[	Îˆ›Û™K	ØÛÛ\[IÎˆ	ÉË	ÛØØ][Û‰Îˆ	ÉË	İ]IÎˆ	ÉÉË	Ù\œ›Ü‰Îˆ	Û›È›Øˆ[ˆ™\ÜÛœÙIßBˆÈÛÛ[
+S
+x¡¤ˆZ[ˆ^ˆÛÛ[Ú[H›Ø‹™Ù]
+˜ÛÛ[ŠHÜˆˆ‚ˆYˆÛÛ[Ú[‚ˆÛİ\H™X]]Y[Ûİ\
+ÛÛ[Ú[š[œ\œÙ\ˆŠBˆ™İ^H™KœİXŠˆ—ÊÈ‹ˆ‹Ûİ\™Ù]İ^
+Ù\\˜]ÜHˆ‹İš\UYJJKœİš\
+
+Bˆ™Û[™\ÈHİœİš\
+
+H›Üˆ[ˆÛİ\œİš\YÜİš[™ÜÈYˆ[Šœİš\
+
+JHˆWBˆ[ÙN‚ˆ™İ^H›Û™Bˆ™Û[™\ÈH›Û™BˆÈ9ak9cîù/cyïkˆ˜[˜XÚÈ
+9o§ˆÜ˜\S:(ç
+BˆYˆH›Ø‹™Ù]
+˜Y™\\Ù\ˆŠHÜˆßBˆØÈH›Ø‹™Ù]
+›ØØ][ÛˆŠHÜˆßBˆ™]\›ˆÂˆ	Ú™İ^	Îˆ™İ^ˆ	Ú™Û[™\ÉÎˆ™Û[™\Ëˆ	Ú™Ú[	ÎˆÛÛ[Ú[Üˆ›Û™Kˆ	ØÛÛ\[IÎˆY‹™Ù]
+›˜[YH‹ˆŠKˆ	ÛØØ][Û‰Îˆ
+ØË™Ù]
+›X™[ŠHYˆ\Ú[œİ[˜ÙJØËXİ
+H[ÙHˆŠHÜˆˆ‹ˆ	İ]IÎˆ›Ø‹™Ù]
+]H‹ˆŠKˆ	Ù\œ›Ü‰Îˆ›Û™HYˆ™İ^[ÙH	Ù[\H‘	ËˆB‚‚™YˆÜ˜]ÛÚ›Øœİ™Y]Û\İ
+]\˜[™ÙNˆİ‹X^ÜYÙ\Îˆ[ˆÙ^]ÛÜ™Îˆ\İÜİ—H›Û™HH›Û™KˆÛÜšİ\NˆİˆH“Ğ”Õ‘QUÕÓÔ’ÕTWÑ•
+HOˆ\İÙXİN‚ˆˆˆº-äyi&¹`"ÈÙ^]ÛÜ™9æ¡›Ø”İ™Y]\İ:-êÙ^]ÛÜ™Y\8à ¹fç¹`¬È[š\]YH›Øœøà ‚‚ˆL	H:.çù`gˆ9§ä:h H[š\]YH™]È›ØœÈYÙTÚ^™H
+ˆH9l,z)¥¹à®¹b,9l/¸à ‚ˆˆˆ‚ˆYˆÙ^]ÛÜ™È\È›Û™N‚ˆÙ^]ÛÜ™ÈH“Ğ”Õ‘QUÒÑVUÓÔ‘ÂˆÙY[ˆÙ]Üİ—HHÙ]
+
+Bˆ[Ú›ØœÎˆ\İÙXİHH×Bˆ›ÜˆİÈ[ˆÙ^]ÛÜ™Î‚ˆİ×ÜÙY[ˆÙ]Üİ—HHÙ]
+
+Bˆ›Üˆ[ˆ˜[™ÙJKX^ÜYÙ\È
+ÈJN‚ˆ\›HZ[Ú›Øœİ™Y]Û\İİ\›
+İË]\˜[™ÙKÛÜšİ\O]ÛÜšİ\JBˆN‚ˆˆHØØ×ÜÙ\ÜÚ[Û‹™Ù]
+\›[Y[İ]LŒ[\\œÛÛ˜]OH˜Ú›ÛYHŠBˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆÚ›Øœİ™Y]ÚİßHÜWHRSˆİ\JJK—×Û˜[YW×ßNˆÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆYˆ‹œİ]\×ØÛÙHOHŒ‚ˆš[
+ˆˆÚ›Øœİ™Y]ÚİßHÜWHRSˆÜ‹œİ]\×ØÛÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆN‚ˆ]HH‹šœÛÛŠ
+Bˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆÚ›Øœİ™Y]ÚİßHÜWHRS”ÓÓˆÙ_HŠBˆ™]\›ˆ[Ú›ØœÂˆ›ØœÈH\œÙWÚ›Øœİ™Y]Û\İÜYÙJ]KİÊBˆ™]×Ú›ØœÈHÚˆ›Üˆˆ[ˆ›ØœÈYˆ–ÉÚ›Ø—ÚY	×H›İ[ˆÙY[ˆ[™–ÉÚ›Ø—ÚY	×H›İ[ˆİ×ÜÙY[—Bˆ›Üˆˆ[ˆ™]×Ú›ØœÎ‚ˆİ×ÜÙY[‹˜Y
+–ÉÚ›Ø—ÚY	×JBˆÙY[‹˜Y
+–ÉÚ›Ø—ÚY	×JBˆ[Ú›ØœË˜\[™
+ŠBˆİ[ØÛİ[H]K™Ù]
+İ[Ûİ[‹ÈŠBˆš[
+ˆˆÚ›Øœİ™Y]ÚİßHÜWH9¥-ˆÛ[Š›ØœÊNŒßH9¥¬9h§ˆÛ[Š™]×Ú›ØœÊNŒßHİÈ9í+ú*"Û[Šİ×ÜÙY[ŠNŒßH:-êİÈ9í+ú*"Û[Š[Ú›ØœÊNŒßHİ[Ûİ[^İİ[ØÛİ[HŠBˆÈL	H:.çù`gˆYˆ›İ™]×Ú›ØœÈÜˆ[Š™]×Ú›ØœÊHLÜˆ[Š›ØœÊHOH‚ˆš[
+ˆˆL	H:.çù`g
+9¥¬9h§ˆL9¢%ˆ›ØœÈ9ênŠHŠBˆœ™XZÂˆYˆX^ÜYÙ\Î‚ˆ[X[—ÜÛY\
+›\İŠBˆ™]\›ˆ[Ú›ØœÂ‚‚™Yˆ[œšXÚİÚ]Ú™
+›ØœÎˆ\İÙXİKÚÚ\Ü]ˆ™K”]\›ˆ›Û™HH›Û™KˆÙY[—ÚYÎˆÙ]İ\VÜİ‹İ—WH›Û™HH›Û™Kˆ™Y™]Úˆ›ÛÛH˜[ÙKˆœÛÛ—ØØXÚNˆXİ›Û™HH›Û™JHOˆ\VÛ\İÙXİKXİN‚ˆˆˆ‚ˆ9¢¤È‘8à ¹doy.+HÚÚ\:eç:cmykeùæ¡9.#y¢¤ûï&ùmì¹¢¤ú`c¹æ¡9.gù.#y¢¤øà ‚‚ˆØXÚH9/¡¹®¤
+9/§yn£ùª¨¹§éJN‚ˆKˆ[‹[Y[[ÜH™İ^ˆ9d#9. 9`"È[ˆ9aiùmìˆ[œšXÚ:`c‚ˆ‹ˆœÛÛ—ØØXÚNˆ9o§¹èàyè§È
+—Ú™šœÛÛˆ:/"yaiyæ¡:-ê[ˆØXÚH
+ØYÚ™ØØXÚWÙœ›ÛWÚœÛÛœÊBˆËˆÙY[—ÚYÈ
+9`áyå*9¥¯9¥éz*£
+NˆÙY[—Ú™ËšœÛÛ›9aiú)¢ú`c¹æ¡
+9/a¹cëú ïHØXÚH9mìº(ªùb*ŠB‚ˆK\™Y™]Ú9¦`º-ìú`c¹¢`9§"HØXÚ{ï#9o-ùb-ºaãy¢¤øà ‚‚ˆŒ‹LLŒˆœÛÛ—ØØXÚHÈÙY[—ÚYÈ:`ïy¥.y¢$
+Ûİ\˜ÙK›Ø—ÚY
+H\K:`oùacH[šÙY[ˆÈ›Ø”İ™Y]9¥n9keÈQ9¤§‚ˆˆˆ‚ˆÚÚ\Ü]HÚÚ\Ü]ÜˆÛXZÙWÜÚÚ\Ü]\›Š×JBˆÙY[—ÚYÈHÙY[—ÚYÈÜˆÙ]
+
+BˆœÛÛ—ØØXÚHHœÛÛ—ØØXÚHÜˆßBˆ—İİ[H[Š›ØœÊB‚ˆÈ9ílz*"—ÜÚÚ\È—ØØXÚYÈ—İ×Ù™]Úˆ—ÜÚÚ\Hˆ—ØØXÚYHˆ›Üˆˆ[ˆ›ØœÎ‚ˆYˆX]ÚÜÚÚ\Ü™X\ÛÛŠ‹™Ù]
+]H‹ˆŠKÚÚ\Ü]
+N‚ˆ—ÜÚÚ\
+ÏHBˆÛÛ[YBˆYˆ™Y™]Ú‚ˆÛÛ[YBˆšYH‹™Ù]
+š›Ø—ÚYŠBˆÜ˜ÈH‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠBˆYˆ‹™Ù]
+š™İ^ŠN‚ˆ—ØØXÚY
+ÏHBˆ[Yˆ
+Ü˜ËšY
+H[ˆœÛÛ—ØØXÚN‚ˆ—ØØXÚY
+ÏHBˆ—İ×Ù™]ÚH—İİ[H—ÜÚÚ\H—ØØXÚYˆš[
+ˆ—OOH9¢¤È‘
+Û—İİ[H9ëaŠH8 %ÚÚ\Û—ÜÚÚ\KØXÚYÛ—ØØXÚYK™]ÚÛ—İ×Ù™]ÚHOOHŠBˆYˆÚÚ\Ü]œ]\›ˆ[™—ÜÚÚ\‚ˆš[
+ˆˆÚÚ\:)£ùbaÎˆÜÚÚ\Ü]œ]\›ŸHŠBˆš[
+ˆˆœÛÛ—ØØXÚNˆÛ[ŠœÛÛ—ØØXÚJ_H9ëaˆÈÙY[ˆš[NˆÛ[ŠÙY[—ÚYÊ_H9ëaˆÈ™Y™]Ú^Ü™Y™]ÚHŠB‚ˆİ]H×Bˆİ]ÈHÈİ[ˆ—İİ[œÚÚ\Yˆ˜ØXÚYˆ™™]ÚYˆ™˜Z[YˆBˆ›ÜˆKˆ[ˆ[[Y\˜]J›ØœËJN‚ˆ™X\ÛÛˆHX]ÚÜÚÚ\Ü™X\ÛÛŠ‹™Ù]
+]H‹ˆŠKÚÚ\Ü]
+BˆŒˆHXİ
+ŠBˆYˆ™X\ÛÛ‚ˆŒ–Èš™İ^—HH›Û™BˆŒ–Èš™ÜÚÚ\Y—HH™X\ÛÛ‚ˆİ]ÖÈœÚÚ\Y—H
+ÏHBˆš[
+ˆˆŞÚ_KŞÛ—İİ[WH8£ëHÚÚ\
+Ü™X\ÛÛŸJHÚ–Éİ]I×VÎMW_HŠBˆİ]˜\[™
+ŒŠBˆÛÛ[YBˆšYH‹™Ù]
+š›Ø—ÚYŠBˆÜ˜ÈH‹™Ù]
+œÛİ\˜ÙH‹›[šÙY[ˆŠBˆYˆ›İ™Y™]Ú‚ˆÈJH[‹[Y[[ÜH™İ^
+9d#[ˆ9aiÊBˆYˆ‹™Ù]
+š™İ^ŠN‚ˆŒ–Èš™İ^—HH–Èš™İ^—BˆŒ–Èš™Û[™\È—HH‹™Ù]
+š™Û[™\ÈŠBˆŒ–Èš™Ú\Ú—HH‹™Ù]
+š™Ú\ÚŠBˆŒ–Èš™ØØXÚY—HH›Y[[ÜH‚ˆİ]ÖÈ˜ØXÚY—H
+ÏHBˆš[
+ˆˆŞÚ_KŞÛ—İİ[WH<'ä¯ˆØXÚY
+Y[JHÚ–Éİ]I×VÎMW_HŠBˆİ]˜\[™
+ŒŠBˆÛÛ[YBˆÈŠHœÛÛ—ØØXÚH
+:-ê[ŠBˆYˆ
+Ü˜ËšY
+H[ˆœÛÛ—ØØXÚN‚ˆÈHœÛÛ—ØØXÚVÊÜ˜ËšY
+WBˆŒ–Èš™İ^—HHÖÈš™İ^—BˆŒ–Èš™Û[™\È—HHË™Ù]
+š™Û[™\ÈŠBˆŒ–Èš™Ú\Ú—HHË™Ù]
+š™Ú\ÚŠBˆŒ–Èš™ØØXÚY—HHšœÛÛˆ‚ˆİ]ÖÈ˜ØXÚY—H
+ÏHBˆš[
+ˆˆŞÚ_KŞÛ—İİ[WH<'ä¯ˆØXÚY
+œÛÛŠHÚ–Éİ]I×VÎMW_HŠBˆİ]˜\[™
+ŒŠBˆÛÛ[YBˆÈÊH9¢¤È‘
+9/§HÛİ\˜ÙH9¬n¹k¦ˆ™]Ú\ŠBˆš[
+ˆˆŞÚ_KŞÛ—İİ[WHÚ–ÉÚ›Ø—ÚY	×_HÚ–Éİ]I×VÎL_HŠBˆYˆÜ˜ÈOHš›Ü˜H‚ˆ™\İ[H™]ÚÚ›Ü˜WÚ™
+‹™Ù]
+\›‹ˆÒ“ÔWĞTÑ_KÚ›Ø‹Ô›ÙXİSX[˜YÙ\‹^ÚšYHŠJBˆ[YˆÜ˜ÈOHš›Øœİ™Y]‚ˆ™\İ[H™]ÚÚ›Øœİ™Y]Ú™
+šY
+Bˆ[ÙN‚ˆ™\İ[H™]ÚÚ™
+šY
+BˆYˆ™\İ[™Ù]
+š™İ^ŠN‚ˆŒ–Èš™İ^—HH™\İ[Èš™İ^—BˆŒ–Èš™Û[™\È—HH™\İ[Èš™Û[™\È—BˆŒ–Èš™Ú\Ú—HH™Ú\Ú
+™\İ[Èš™İ^—JBˆÈ9o§ˆ‘™\İ[:(ç9ak9cîù/cyïkˆ
+›Ü˜H9b%ú(j:h y¬¤¹ak9cî[šÙY[ˆ9mì¹§"K9/a¹k¢yaj:-mú)¢ú`ïz)¡¹kêÊBˆYˆ™\İ[™Ù]
+˜ÛÛ\[HŠN‚ˆŒ–È˜ÛÛ\[H—HH™\İ[È˜ÛÛ\[H—BˆYˆ™\İ[™Ù]
+›ØØ][ÛˆŠN‚ˆŒ–È›ØØ][Ûˆ—HH™\İ[È›ØØ][Ûˆ—Bˆİ]ÖÈ™™]ÚY—H
+ÏHBˆš[
+ˆˆ8§$ÈÛ[Š™\İ[ÉÚ™İ^	×J_HÚ\œÈÈÛ[Š™\İ[ÉÚ™Û[™\É×J_H[™\ÈÈÛÏ^ÚŒ‹™Ù]
+	ØÛÛ\[IË	ÉÊVÎŒÌ_HŠBˆÈ:*&9b,ÙY[ˆš[H
+9cê¹g*ÙY[ˆ9¬¤º*&:c!9¦`ˆ\[™:`oùaczaãz)!ú(c
+BˆÈ™Y™]ÚUYH9¦`ˆÙY[—ÚYÈ9§ ù¦+ùênˆÙ]8¡¤ˆ9aj:`ê:`ïy§ È\[™
+9¦í9¥¬\Úİ[Y\İ[\
+BˆÙY[—ÚÙ^HH
+Ü˜ËšY
+BˆYˆÙY[—ÚÙ^H›İ[ˆÙY[—ÚYÎ‚ˆN‚ˆ\[™ÜÙY[ŠšYŒ–Èš™Ú\Ú—K‹™Ù]
+]H‹ˆŠKŒ‹™Ù]
+˜ÛÛ\[H‹ˆŠKÛİ\˜ÙO\Ü˜ÊBˆ^Ù\^Ù\[Ûˆ\ÈN‚ˆš[
+ˆˆ
+Ø\›ŠH9kêÈÙY[ˆš[H9i,y¥eÎˆÙ_HŠBˆ[ÙN‚ˆŒ–Èš™İ^—HH›Û™BˆŒ–Èš™Ù\œ›Üˆ—HH™\İ[™Ù]
+™\œ›ÜˆŠBˆİ]ÖÈ™˜Z[Y—H
+ÏHBˆš[
+ˆˆ8§%ÈÜ™\İ[™Ù]
+	Ù\œ›Ü‰Ê_HŠBˆİ]˜\[™
+ŒŠBˆYˆH—İİ[‚ˆ[X[—ÜÛY\
+š™ŠBˆ™]\›ˆİ]İ]Â‚‚™YˆXZ[Š
+N‚ˆ\H\™Ü\œÙK\™İ[Y[\œÙ\Š
+Bˆ\˜YØ\™İ[Y[
+œ˜[™ÙH‹˜\™ÜÏHÈ‹Y˜][QQUSÕ‹ˆÚÚXÙ\Ï[\İ
+SQWÔS‘ÑTËšÙ^\Ê
+JKˆ[Yˆ[YH˜[™ÙH
+Y˜][ÑQUSÕŸJHŠBˆ\˜YØ\™İ[Y[
+‹K\Ûİ\˜ÙH‹Y˜][H›[šÙY[ˆ‹ÚÚXÙ\ÏVÈ›[šÙY[ˆ‹š›Ü˜H‹š›Øœİ™Y]—Kˆ[Hº,áù¥¦y/¡¹®¤
+Y˜][ˆ[šÙY[ŠKˆ›Ü˜O\ÙËš›Ü˜K˜ÛÛH
+S\œÙJK›Øœİ™Y]\ÙËš›Øœİ™Y]˜ÛÛH
+TJÑÜ˜\S
+HŠBˆ\˜YØ\™İ[Y[
+‹K[ØØ][Ûˆ‹Y˜][S›Û™Kˆ[Yˆ¹æë¹ª&ygã¹n ‹ùg"ùk­ˆ
+Y˜][ˆÓĞĞUSÓŸJNÈ9mì¹çéH™\Ù]ˆÉË	Ëš›Ú[ŠÓ“ÕÓ—ÑÑS×ÒQËšÙ^\Ê
+J_HŠBˆ\˜YØ\™İ[Y[
+‹KYÙ[ËZY‹Y˜][S›Û™Kˆ[Yˆ“[šÙY[ˆÙ[ÒY
+Y˜][ˆÑÑS×ÒQJNÈ:-çÈK[ØØ][Ûˆ9. :-mùíiˆŠBˆ\˜YØ\™İ[Y[
+‹K]Ú]Z™‹Xİ[ÛHœİÜ™WİYH‹ˆ[H¹¢¤ùcå¹«ãù`"ú mùï.¹æ¡‘9aj9¥¡È
+9§ ùh§¹b¨9.#yl$y¦`ºe¤ÊHŠBˆ\˜YØ\™İ[Y[
+‹K[X^\YÙ\È‹\OZ[Y˜][S›Û™Kˆ[H›İ™\œšYH:h$:*+zh y¥n9."ºfdŠBˆ\˜YØ\™İ[Y[
+‹K\ÚÚ\ZÙ^]ÛÜ™È‹˜\™ÜÏHŠˆ‹Y˜][S›Û™Kˆ[Yˆ’‘:f£¹«­z) z-ìú`c¹æ¡9ª&zhc:eç:cmykeûï":)¡¹kêúh$:*+{ï"xà ˆ‚ˆˆºh$:*+NˆÉÈ	Ëš›Ú[ŠQUSÔÒÒTÒÑVUÓÔ‘Ê_HŠBˆ\˜YØ\™İ[Y[
+‹K[›Ë\ÚÚ\‹Xİ[ÛHœİÜ™WİYH‹ˆ[H¹k£9aj:-ìú`cˆÚÚ\:`c¹¯ï»ï#9aj:`ê:`ïy¢¤È‘ŠBˆ\˜YØ\™İ[Y[
+‹K\™Y™]Ú‹Xİ[ÛHœİÜ™WİYH‹ˆ[H¹oïyåiHÙY[—Ú™ËšœÛÛ›;ï#:aãy¥¬9¢¤ù¢`9§"H‘ŠBˆ\˜YØ\™İ[Y[
+‹K\™\Ù]\ÙY[ˆ‹Xİ[ÛHœİÜ™WİYH‹ˆ[H¹b*¹£¢HÙY[—Ú™ËšœÛÛ›9o£9íd9§gûï"9®!yên¹í :c!;ï"HŠBˆ\˜YØ\™İ[Y[
+‹K\ÙY[‹Yš[H‹Y˜][TÑQS—Ñ’SKˆ[Yˆ¹mì¹¢¤È‘:*&:c!9ª¥:-ëùo¤H
+Y˜][ˆÔÑQS—Ñ’S_JHŠBˆ\˜YØ\™İ[Y[
+‹K]Ë\ÚY]‹Y˜][S›Û™KY]]˜\H•T“ÓÔ—ÒQ‹ˆ[Yˆ¹¢¤ùk£9o£9¢¢¹íd9§§\[™9b,ÛÛÙÛHÚY]
+T“9¢%ˆQÈ9.#yn-ˆÚY9§ ùh,zc+Ë:*âùå*	ŞÔÑ×ÔU×ÕT“IÊHŠBˆ\˜YØ\™İ[Y[
+‹KYÚY‹Y˜][S›Û™K\OZ[ˆ[Yˆ¹£!ùk¦º) ykêùæ¡ÛÜšÜÚY]ÚY
+K™ËˆÔÑ×ÔU×ÑÒQJNÈ9.#y£!ùk¦¹¦`¹å*T“9aiÈÙÚYHŠBˆ\˜YØ\™İ[Y[
+‹K\ÚY]\Ûİ\˜ÙH‹Y˜][QQUSÔÒQUÔÓÕTÑKˆ[Yˆ¹kêùaiHÚY]9æ¡Ûİ\˜ÙH9«!9/cy`/
+Y˜][ˆÑQUSÔÒQUÔÓÕTÑ_JHŠBˆ\˜YØ\™İ[Y[
+‹KYK\[‹\ÚY]‹Xİ[ÛHœİÜ™WİYH‹ˆ[Hº-çÈK]Ë\ÚY]9. :-mùå*;ï#9cê¹cl9l!ùkêùaiy.à:n¯8à y.#yç'ùæ¡9kêÈŠBˆ\˜YØ\™İ[Y[
+‹KZœÛÛ‹\İ[[X\H‹Xİ[ÛHœİÜ™WİYH‹[X\™Ü\œÙK”ÕT‘TÔÊBˆ\™ÜÈH\œ\œÙWØ\™ÜÊ
+B‚ˆÙY[—Ü]H]
+\™ÜËœÙY[—Ùš[JB‚ˆYˆ\™ÜËœ™\Ù]ÜÙY[‚ˆˆH™\Ù]ÜÙY[ŠÙY[—Ü]
+Bˆš[
+ˆ¹mì¹b*ºfiÜÙY[—Ü]H
+ÛŸH9ëa¹í :c!
+HŠBˆ™]\›‚‚ˆ‹Y˜][ÛX^HSQWÔS‘ÑTÖØ\™ÜËœ˜[™ÙWBˆYˆ\™ÜËœÛİ\˜ÙHOHš›Ü˜H‚ˆY˜][ÛX^H“ÔWÓPVÔQÑTÖØ\™ÜËœ˜[™ÙWBˆ[Yˆ\™ÜËœÛİ\˜ÙHOHš›Øœİ™Y]‚ˆY˜][ÛX^H“Ğ”Õ‘QUÓPVÔQÑTÖØ\™ÜËœ˜[™ÙWBˆX^ÜYÙ\ÈH\™ÜË›X^ÜYÙ\ÈÜˆY˜][ÛX^‚ˆÚÚ\Ü]H›Û™BˆYˆ›İ\™ÜË››×ÜÚÚ\‚ˆÚÚ\İÛÜ™ÈH\™ÜËœÚÚ\ÚÙ^]ÛÜ™ÈYˆ\™ÜËœÚÚ\ÚÙ^]ÛÜ™È\È›İ›Û™H[ÙHQUSÔÒÒTÒÑVUÓÔ‘ÂˆÚÚ\Ü]HÛXZÙWÜÚÚ\Ü]\›ŠÚÚ\İÛÜ™ÊB‚ˆÈ:)èù§¤ØØ][Û‹ÙÙ[ËZY
+™\Ù]9a*¹abˆK[ØØ][Ûˆ9o§ˆÓ“ÕÓ—ÑÑS×ÒQÈ9cåˆÙ[ËZY9¢%º!ê¹mìyíiŠBˆØØ][ÛˆH\™ÜË›ØØ][Û‚ˆÙ[×ÚYH\™ÜË™Ù[×ÚYˆYˆØØ][Ûˆ[™›İÙ[×ÚY[™ØØ][Ûˆ[ˆÓ“ÕÓ—ÑÑS×ÒQÎ‚ˆÙ[×ÚYØØ][ÛˆHÓ“ÕÓ—ÑÑS×ÒQÖÛØØ][Û—BˆYˆ›İØØ][Û‚ˆØØ][ÛˆHĞĞUSÓ‚ˆYˆ›İÙ[×ÚY‚ˆÙ[×ÚYHÑS×ÒQ‚ˆÈ:)èù§¤ØØ][Û‹ÙÙ[ËZY
+™\Ù]9a*¹abˆK[ØØ][Ûˆ9o§ˆÓ“ÕÓ—ÑÑS×ÒQÈ9cåˆÙ[ËZY9¢%º!ê¹mìyíiŠBˆØØ][ÛˆH\™ÜË›ØØ][Û‚ˆÙ[×ÚYH\™ÜË™Ù[×ÚYˆYˆ\™ÜËœÛİ\˜ÙHOH›[šÙY[ˆ‚ˆYˆØØ][Ûˆ[™›İÙ[×ÚY[™ØØ][Ûˆ[ˆÓ“ÕÓ—ÑÑS×ÒQÎ‚ˆÙ[×ÚYØØ][ÛˆHÓ“ÕÓ—ÑÑS×ÒQÖÛØØ][Û—BˆYˆ›İØØ][Û‚ˆØØ][ÛˆHĞĞUSÓ‚ˆYˆ›İÙ[×ÚY‚ˆÙ[×ÚYHÑS×ÒQˆÈ[šÙY[ˆ:h$:*+HÛİ\˜ÙHX™[ˆYˆ\™ÜËœÚY]ÜÛİ\˜ÙHOHQUSÔÒQUÔÓÕTÑN‚ˆ\™ÜËœÚY]ÜÛİ\˜ÙHH“[šÙY[ˆÈZ[š[X^‚ˆ[Yˆ\™ÜËœÛİ\˜ÙHOHš›Ü˜H‚ˆYˆ›İØØ][Û‚ˆØØ][ÛˆH“ÔWÓĞĞUSÓ‚ˆYˆ\™ÜËœÚY]ÜÛİ\˜ÙHOHQUSÔÒQUÔÓÕTÑN‚ˆ\™ÜËœÚY]ÜÛİ\˜ÙHH’›Ü˜HÈZ[š[X^‚ˆ[ÙNˆÈ›Øœİ™Y]ˆYˆ›İØØ][Û‚ˆØØ][ÛˆH“Ğ”Õ‘QUÓĞĞUSÓ‚ˆÈ›Ø”İ™Y]9.#zg :) HÙ[×ÚYˆÙ[×ÚYH›Û™BˆYˆ\™ÜËœÚY]ÜÛİ\˜ÙHOHQUSÔÒQUÔÓÕTÑN‚ˆ\™ÜËœÚY]ÜÛİ\˜ÙHH’›Ø”İ™Y]ÈZ[š[X^‚‚ˆYˆ\™ÜËœÛİ\˜ÙHOH›[šÙY[ˆ‚ˆš[
+ˆOOOH[šÙY[ˆ›ØœÈÈÛØØ][ÛŸH
+Ù[ÒY^ÙÙ[×ÚYJHÈØ\™ÜËœ˜[™Ù_HÈ—Õ^İŸHOOOHŠBˆ[Yˆ\™ÜËœÛİ\˜ÙHOHš›Ü˜H‚ˆ›Ü˜WİˆH“ÔWÕ–Ø\™ÜËœ˜[™ÙWBˆš[
+ˆOOOH›Ü˜H›ØœÈÈÛØØ][ÛŸHÈØ\™ÜËœ˜[™Ù_HÈO^Ú›Ü˜WİŸHOOOHŠBˆ[ÙN‚ˆœ×İˆH“Ğ”Õ‘QUÕ–Ø\™ÜËœ˜[™ÙWBˆš[
+ˆOOOH›Ø”İ™Y]›ØœÈÈÛØØ][ÛŸHÈØ\™ÜËœ˜[™Ù_HÈ]\˜[™ÙO^Úœ×İŸH
+][KZÙ^]ÛÜ™^Û[Š“Ğ”Õ‘QUÒÑVUÓÔ‘Ê_JHOOOHŠBˆš[
+ˆOOOHPVÔQÑTÈHÛX^ÜYÙ\ßH
+:fª9ªgÈÛY\ÔÓQTÓRSŸK^ÔÓQTÓPV\ÊHOOOWˆŠBˆYˆ\™ÜËÚ]Ú™[™ÚÚ\Ü]‚ˆš[
+ˆOOOH‘ÚÚ\:)£ùbaÎˆÜÚÚ\Ü]œ]\›ŸHOOOHŠBˆYˆ\™ÜËœÚÚ\ÚÙ^]ÛÜ™È\È›İ›Û™N‚ˆš[
+ˆˆ
+9/oùå*: !z)¡¹kêÎˆØ\™ÜËœÚÚ\ÚÙ^]ÛÜ™ßJHŠBˆ[Yˆ\™ÜËÚ]Ú™[™\™ÜË››×ÜÚÚ\‚ˆš[
+OOOH‘ÚÚ\:)£ùbaÎˆ\ØX›YˆOOOHŠB‚ˆÈ
+H:/"yaiHÙY[—ÚYÈ
+:-ê[ˆY\
+BˆÙY[—ÚYÈHØYÜÙY[—ÚYÊÙY[—Ü]
+HYˆ\™ÜËÚ]Ú™[™›İ\™ÜËœ™Y™]Ú[ÙHÙ]
+
+BˆYˆÙY[—ÚYÎ‚ˆš[
+ˆOOOH:/"yaiHÛ[ŠÙY[—ÚYÊ_H9ëaˆÙY[ˆ›Ø—ÚYÈ
+™Y™]Ú^Ø\™ÜËœ™Y™]ÚJHOOOHŠB‚ˆÈJH9¢¤ùb%ú(jˆYˆ\™ÜËœÛİ\˜ÙHOHš›Ü˜H‚ˆ›ØœÈHÜ˜]ÛÚ›Ü˜WÛ\İ
+\™ÜËœ˜[™ÙKX^ÜYÙ\ÊBˆ[Yˆ\™ÜËœÛİ\˜ÙHOHš›Øœİ™Y]‚ˆœ×İˆH“Ğ”Õ‘QUÕ–Ø\™ÜËœ˜[™ÙWBˆ›ØœÈHÜ˜]ÛÚ›Øœİ™Y]Û\İ
+œ×İ‹X^ÜYÙ\ËÙ^]ÛÜ™ÏR“Ğ”Õ‘QUÒÑVUÓÔ‘ÊBˆ[ÙN‚ˆ›ØœÈHÜ˜]ÛÛ\İ
+‹X^ÜYÙ\ËØØ][Û[ØØ][Û‹Ù[×ÚYYÙ[×ÚY
+BˆYˆ›İ›ØœÎ‚ˆš[
+—¹á(z,áù¥¦{ï#9íd9§gøà ˆŠBˆYˆ\™ÜËšœÛÛ—Üİ[[X\N‚ˆš[
+’“Ğ”×ÔĞÔTT—ÔÕSSPT–OHˆ
+ÈœÛÛ‹™[\ÊÂˆš›Øœ×Ù›İ[™ˆš›Øœ×Ù[œšXÚYˆš›Øœ×Ù˜Z[Yˆˆ›İ]]Ùš[Hˆ›Û™KÜš][ˆˆœÚÚ\YÙ\ˆˆœÚÚ\YÛ›×Ú™ˆˆK[œİ\™WØ\ØÚZOQ˜[ÙKÙ\\˜]ÜœÏJ‹‹ˆŠJJBˆ™]\›‚‚ˆÈKJH:/"yaiH‘ØXÚH
+:-ê[ˆ9o§ˆ
+—Ú™šœÛÛˆ9¢¤Ê{ï#:-ìú`c¹åm¹bcyl!ú/.9aî¹æ¡9ª¥ˆİY™š^Hˆ—ŞØ\™ÜËœ˜[™Ù_^É×Ú™	ÈYˆ\™ÜËÚ]Ú™[ÙH	ÉßH‚ˆÈ9ª¥9d#y.éHÛİ\˜ÙH
+ÈØØ][Ûˆ9à®ˆ™Yš^
+Ù×Ü›ÙXİÚ›ØœË×Ë›Ü˜WÜÙ×ÊK:`oùacz-ê9®¤ú-ê9g"ÈØXÚH9¬hy§äÂˆØØ][Û—ÜÚÜHØØ][Û‹›İÙ\Š
+Kœ™\XÙJ	È	Ë	ÉÊBˆÚÜÛ˜[Y\ÈHÂˆœÚ[™Ø\Ü™HˆœÙÈ‹Z]Ø[ˆˆÈ‹šÛ™ÚÛÛ™ÈˆšÈ‹š˜\[ˆˆšœ‹ˆBˆØ×Ü™Yš^HÚÜÛ˜[Y\Ë™Ù]
+ØØ][Û—ÜÚÜØØ][Û—ÜÚÜ
+BˆÈ9d!Ûİ\˜ÙHØXÚH9ãj9êâÈ™Yš^
+Ù×Ë›Ü˜WÜÙ×Ë›Øœİ™Y]ÜÙ×ÊK:`oùacz-ê9®¤ú-ê9g"ÈØXÚH9¬hy§äÂˆYˆ\™ÜËœÛİ\˜ÙHOHš›Ü˜H‚ˆ™Yš^Hˆš›Ü˜WŞÛØ×Ü™Yš^H‚ˆ[Yˆ\™ÜËœÛİ\˜ÙHOHš›Øœİ™Y]‚ˆ™Yš^Hˆš›Øœİ™Y]ŞÛØ×Ü™Yš^H‚ˆ[ÙN‚ˆ™Yš^HØ×Ü™Yš^ˆİ]H]
+ˆÜ™Yš^WÜ›ÙXİÚ›ØœŞÜİY™š^KšœÛÛˆŠBˆœÛÛ—ØØXÚHHßBˆYˆ\™ÜËÚ]Ú™[™›İ\™ÜËœ™Y™]Ú‚ˆš[
+ˆ—OOOH:/"yaiH‘ØXÚH
+9£¤ºfiÛİ]›˜[Y_JHOOOHŠBˆœÛÛ—ØØXÚHHØYÚ™ØØXÚWÙœ›ÛWÚœÛÛœÊÚÚ\Ùš[\Ï^Ûİ]›˜[Y_JB‚ˆÈŠH9¢¤È‘
+9cëú`n
+Bˆİ]ÈH›Û™BˆYˆ\™ÜËÚ]Ú™‚ˆ›ØœËİ]ÈH[œšXÚİÚ]Ú™
+›ØœËÚÚ\Ü]\ÚÚ\Ü]ˆÙY[—ÚYÏ\ÙY[—ÚYË™Y™]ÚX\™ÜËœ™Y™]ÚˆœÛÛ—ØØXÚOZœÛÛ—ØØXÚJB‚ˆÈÊH9kf9ª¥ˆİ]Üš]Wİ^
+œÛÛ‹™[\Ê›ØœË[œİ\™WØ\ØÚZOQ˜[ÙK[™[LŠJBˆš[
+ˆ—OOOH9kêùb,Ûİ]œ™\ÛÛ™J
+_H
+Û[Š›ØœÊ_H9ëaŠHOOOHŠBˆYˆİ]Î‚ˆš[
+ˆˆ‘ˆÚÚ\^Üİ]ÖÉÜÚÚ\Y	×_HØXÚY^Üİ]ÖÉØØXÚY	×_H‚ˆˆ™™]ÚY^Üİ]ÖÉÙ™]ÚY	×_H˜Z[Y^Üİ]ÖÉÙ˜Z[Y	×_HŠBˆYˆÙY[—Ü]™^\İÊ
+H[™\™ÜËÚ]Ú™‚ˆİ[Hİ[JH›ÜˆÈ[ˆÜ[ŠÙY[—Ü]œˆ‹[˜ÛÙ[™ÏH]‹NŠHYˆËœİš\
+
+JBˆš[
+ˆˆÙY[ˆš[NˆÜÙY[—Ü]H
+İİ[H9ëa¹í+ú*"
+HŠB‚ˆÈ
+H9kêùb,ÛÛÙÛHÚY]
+9cëú`n
+BˆÚY]Üİ]ÈHÈÜš][ˆˆœÚÚ\YÙ\ˆœÚÚ\YÛ›×Ú™ˆBˆYˆ\™ÜË×ÜÚY]‚ˆYˆ›İ\™ÜËÚ]Ú™‚ˆš[
+—¸¦¨;î#ÈK]Ë\ÚY]:g :) HK]Ú]Z™9¢cz ïyhjÈ‘9aiùk®H
+ÛÛ[[ˆ
+HŠBˆš[
+ˆ:-ìú`cˆÚY]9kêùaiHŠBˆ[ÙN‚ˆš[
+ˆ—OOOH9kêùb,ÛÛÙÛHÚY]ˆØ\™ÜË×ÜÚY]ÎL_K‹‹ˆOOOHŠBˆÚY]Üİ]ÈH\Úİ×ÜÚY]
+ˆ›ØœË\™ÜË×ÜÚY]ˆØWÚÙ^WÜ]TÒQUÔĞWÒÑVKˆÛİ\˜ÙOX\™ÜËœÚY]ÜÛİ\˜ÙKˆWÜ[X\™ÜË™WÜ[—ÜÚY]ˆÚYX\™ÜË™ÚYˆØØ][Û[ØØ][Û‹ˆ
+Bˆš[
+ˆ—ˆ9íd9§§ˆÜÚY]Üİ]ßHŠB‚ˆYˆ\™ÜËšœÛÛ—Üİ[[X\N‚ˆš[
+’“Ğ”×ÔĞÔTT—ÔÕSSPT–OHˆ
+ÈœÛÛ‹™[\ÊÂˆš›Øœ×Ù›İ[™ˆ[Š›ØœÊKˆš›Øœ×Ù[œšXÚYˆ
+
+İ]Ë™Ù]
+˜ØXÚY‹
+H
+Èİ]Ë™Ù]
+™™]ÚY‹
+JHYˆİ]È[ÙH
+Kˆš›Øœ×Ù˜Z[Yˆ
+İ]Ë™Ù]
+™˜Z[Y‹
+HYˆİ]È[ÙH
+Kˆ›İ]]Ùš[HˆİŠİ]œ™\ÛÛ™J
+JKˆÜš][ˆˆ[
+ÚY]Üİ]Ë™Ù]
+Üš][ˆ‹
+JKˆœÚÚ\YÙ\ˆ[
+ÚY]Üİ]Ë™Ù]
+œÚÚ\YÙ\‹
+JKˆœÚÚ\YÛ›×Ú™ˆ[
+ÚY]Üİ]Ë™Ù]
+œÚÚ\YÛ›×Ú™‹
+JKˆK[œİ\™WØ\ØÚZOQ˜[ÙKÙ\\˜]ÜœÏJ‹‹ˆŠJJB‚‚šYˆ×Û˜[YW×ÈOH—×ÛXZ[—×È‚ˆXZ[Š
+B
