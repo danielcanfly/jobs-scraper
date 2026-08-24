@@ -43,6 +43,7 @@ from urllib.parse import urlencode
 from curl_cffi import requests as cc_requests
 from scrapling.parser import Adaptor
 from bs4 import BeautifulSoup
+from jobs_scraper.sources import jora as jora_source
 from jobs_scraper.sources import linkedin as linkedin_source
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
@@ -916,160 +917,32 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
 
 
 # ─────────────────────────────────────────────────────────────
-# Jora (sg.jora.com) - 純 HTML parse, 沒 API
-# 用「a=Nd」做時間 filter, 「p=N」做 page, 每頁固定 30 jobs
+# Jora compatibility surface
+# Implementation owner: jobs_scraper.sources.jora
 # ─────────────────────────────────────────────────────────────
 def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD,
                         location: str = JORA_LOCATION) -> str:
-    """組 Jora list URL。Page 1 開始 1, 不是 0。"""
-    return f"{JORA_BASE}/j?a={jora_tpr}&l={location}&q={keyword.replace(' ', '+')}&p={page}"
+    return jora_source.build_list_url(jora_tpr, page, keyword, location)
 
 
 def parse_jora_list_page(html: str, location: str = JORA_LOCATION) -> list[dict]:
-    """從 Jora 列表 HTML 抓 jobs。job_id 是 URL 內的 hash (32 char hex)。"""
-    ap = Adaptor(html)
-    seen: set[str] = set()
-    jobs: list[dict] = []
-    # job links: /job/{Title-slug}-{hash}?...
-    # title slug 可能含 dash (e.g. "Product-Manager" 變 "Product-Manager-..."), 所以 anchor 在最後那段 hash
-    for href in ap.css("a[href*='/job/']::attr(href)").getall():
-        m = re.search(r'/job/.+?-([a-f0-9]{32})(?:\?|&|$)', href)
-        if not m:
-            continue
-        job_id = m.group(1)
-        if job_id in seen:
-            continue
-        seen.add(job_id)
-        # 完整 URL (給 sheet E 欄 hyperlink)
-        if href.startswith('http'):
-            url = href
-        else:
-            url = f"{JORA_BASE}{href}" if href.startswith('/') else f"{JORA_BASE}/{href}"
-        # 從 URL 解標題 (slug 的部分去掉 hash)
-        slug_match = re.search(r'/job/([^?]+)\?', href)
-        title_slug = slug_match.group(1) if slug_match else ''
-        title = re.sub(r'-[a-f0-9]{32}$', '', title_slug).replace('-', ' ')
-        jobs.append({
-            'job_id': job_id,
-            'title': title,
-            'company': '',  # list 頁沒顯示公司, 從 JD 頁補
-            'location': location,
-            'posted_at': '',
-            'posted_ago': '',
-            'url': url,
-            'source': 'jora',  # 讓 push_to_sheet / enrich_with_jd 知道用哪個 fetcher 跟 hyperlink 格式
-        })
-    return jobs
+    return jora_source.parse_list_page(html, location=location)
 
 
 def fetch_jora_jd(url: str) -> dict:
-    """抓 Jora 詳細頁, 從 div.job-detail 拿 JD 文字 + 公司/位置補齊。"""
-    for attempt in range(3):
-        try:
-            r = _cc_session.get(url, timeout=20, impersonate='chrome')
-        except Exception as e:
-            return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(e)}
-        if r.status_code == 200:
-            break
-        if r.status_code == 403:
-            wait = 30 * (attempt + 1)
-            print(f"            403 → wait {wait}s (attempt {attempt+1}/3)")
-            time.sleep(wait)
-            continue
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    else:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'HTTP 403 重試失敗'}
-    if r.status_code != 200:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    ap = Adaptor(r.text)
-    # JD: 第一個 job-detail div
-    jd_divs = ap.css("div[class*='job-detail']")
-    if not jd_divs:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'no job-detail div'}
-    jd_text = ' '.join(jd_divs[0].css('::text').getall()).strip()
-    jd_lines = [t.strip() for t in jd_divs[0].css('::text').getall() if t.strip() and len(t.strip()) > 1]
-    # 從 main 區塊抓 title/company/location
-    main = ap.css("main")
-    # title (h1)
-    h1 = ap.css('h1::text').getall()
-    title = h1[0].strip() if h1 else ''
-    # company/location: h1 + * 元素內容是 "Company – Location" 格式 (en-dash 分隔)
-    company = ''
-    location_text = ''
-    next_el = ap.css('h1 + *')
-    if next_el:
-        meta_chunks = [t.strip() for t in next_el[0].css('::text').getall() if t.strip()]
-        if meta_chunks:
-            # 過濾掉分隔符 "–" "/"
-            parts = [p for p in meta_chunks if p not in ('–', '-', '/', '|')]
-            if parts:
-                company = parts[0]
-            if len(parts) > 1:
-                location_text = parts[1]
-    # fallback: 從 main 開頭前幾行抓
-    if not company and main:
-        for t in main[0].css('::text').getall()[:20]:
-            t = t.strip()
-            if not t: continue
-            if t in ('View or apply for job', 'Save job', '–', '-', '/'): continue
-            if 'reviews at' in t.lower(): continue
-            if 1 < len(t) < 80 and not t.startswith(('4.', '5.', 'Permanent', 'Full', 'Part', 'Contract', '2d', '3d', '1d', '5d', '6d', '1w', '2w', 'Today', 'Yesterday')):
-                company = t
-                break
-    return {
-        'jd_text': jd_text if jd_text else None,
-        'jd_lines': jd_lines if jd_lines else None,
-        'jd_html': None,
-        'company': company,
-        'location': location_text,
-        'title': title,
-        'error': None if jd_text else 'empty JD',
-    }
+    return jora_source.fetch_jd(_cc_session, url, sleep_fn=time.sleep)
 
 
 def crawl_jora_list(tpr: str, max_pages: int,
                     keyword: str = JORA_KEYWORD,
                     location: str = JORA_LOCATION) -> list[dict]:
-    """抓 Jora 列表 (HTML parse, 每頁 30 jobs)。"""
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    for p in range(1, max_pages + 1):
-        print(f"\n  [jora list page {p}]")
-        # 403 retry with backoff (Jora 會對短時間大量 request ban session)
-        r = None
-        for attempt in range(3):
-            try:
-                url = build_jora_list_url(JORA_TPR[tpr], p, keyword, location)
-                r = _cc_session.get(url, timeout=20, impersonate='chrome')
-            except Exception as e:
-                print(f"            FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code == 200:
-                break
-            if r.status_code == 403:
-                wait = 30 * (attempt + 1)  # 30s, 60s, 90s
-                print(f"            403 → wait {wait}s (attempt {attempt+1}/3)")
-                time.sleep(wait)
-                continue
-            print(f"            FAIL: HTTP {r.status_code}")
-            return all_jobs
-        if r is None or r.status_code != 200:
-            print(f"            FAIL: HTTP 403 重試失敗, 放棄此頁")
-            return all_jobs
-        jobs = parse_jora_list_page(r.text, location=location)
-        new_jobs = [j for j in jobs if j['job_id'] not in seen]
-        for j in new_jobs:
-            seen.add(j['job_id'])
-            all_jobs.append(j)
-        print(f"            收 {len(jobs)}, 新增 {len(new_jobs)}, 重複 {len(jobs)-len(new_jobs)}, 累計 {len(all_jobs)}")
-        # 到底條件: (1) 0 個新 job, (2) page 完全空, (3) unique jobs < 10 (尾頁)
-        # 之前用 < 25 是 LinkedIn 30/page 的標準, Jora 實際只 15 unique/page, 會誤判
-        if not new_jobs or len(jobs) == 0 or len(new_jobs) < 10:
-            print("            到底了")
-            break
-        if p < max_pages:
-            human_sleep("list")
-    return all_jobs
+    return jora_source.crawl_list(
+        _cc_session, tpr, max_pages,
+        tpr_map=JORA_TPR,
+        keyword=keyword,
+        location=location,
+        sleep_fn=human_sleep,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
