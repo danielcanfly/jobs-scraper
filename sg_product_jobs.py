@@ -228,8 +228,7 @@ SG_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid
 CHINA_RAW_GID = 488353479
 CHINA_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid={CHINA_RAW_GID}#gid={CHINA_RAW_GID}"
 
-# JD 抓取前的標題關鍵字過濾 (省配額)
-# 看到這些詞就跳過不抓 JD；比對用 word-boundary + case-insensitive
+# v1.1.1 frozen-equivalence fixture. Not used as the active runtime default after v1.2.1.
 DEFAULT_SKIP_KEYWORDS = [
     # 明確太菜
     "intern",
@@ -267,6 +266,9 @@ DEFAULT_SKIP_KEYWORDS = [
     "temporary",
     "contract",
 ]
+
+# Public default policy: no title skip filter unless users opt in with --skip-keywords.
+ACTIVE_DEFAULT_SKIP_KEYWORDS: list[str] = []
 
 # Senior whitelist: 某些詞雖然在 skip list, 但若後面接這些 senior 詞就不該被擋
 SENIOR_FOLLOWERS = [
@@ -323,6 +325,8 @@ WHITELIST_RULES = {
 # ─────────────────────────────────────────────────────────────
 def _make_skip_pattern(skip_words: list[str]) -> re.Pattern:
     """編一個 case-insensitive、word-boundary 的 regex。"""
+    if not skip_words:
+        return re.compile(r"a^")
     escaped = [re.escape(w) for w in skip_words]
     # \b 在 "entry-level" 這種 hyphen 字串會失效，改成 (?<![a-z])
     pat = r"(?<![a-z])(" + "|".join(escaped) + r")(?![a-z])"
@@ -363,6 +367,15 @@ def match_skip_reason(title: str, skip_pat: re.Pattern) -> str | None:
     if rule == "anywhere" and _has_senior_marker_anywhere(title):
         return None
     return hit
+
+
+def resolve_skip_words(skip_keywords: list[str] | None, no_skip: bool) -> list[str] | None:
+    """Resolve CLI skip policy. None means skip filtering is disabled."""
+    if no_skip:
+        return None
+    if skip_keywords is not None:
+        return skip_keywords
+    return ACTIVE_DEFAULT_SKIP_KEYWORDS
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1163,7 +1176,7 @@ def main():
         "--skip-keywords",
         nargs="*",
         default=None,
-        help=f"JD 階段要跳過的標題關鍵字（覆寫預設）。預設: {' '.join(DEFAULT_SKIP_KEYWORDS)}",
+        help="JD 階段要跳過的標題關鍵字（預設不套用；使用此參數才啟用）",
     )
     ap.add_argument("--no-skip", action="store_true", help="完全跳過 skip 過濾，全部都抓 JD")
     ap.add_argument("--refetch", action="store_true", help="忽略 seen_jds.jsonl，重新抓所有 JD")
@@ -1202,8 +1215,8 @@ def main():
     max_pages = args.max_pages or default_max
 
     skip_pat = None
-    if not args.no_skip:
-        skip_words = args.skip_keywords if args.skip_keywords is not None else DEFAULT_SKIP_KEYWORDS
+    skip_words = resolve_skip_words(args.skip_keywords, args.no_skip)
+    if skip_words:
         skip_pat = _make_skip_pattern(skip_words)
 
     # 解析 location/geo-id (preset 優先: --location 從 KNOWN_GEO_IDS 取 geo-id, 或自己給)
@@ -1253,12 +1266,12 @@ def main():
             f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ===="
         )
     print(f"==== MAX_PAGES = {max_pages}  (隨機 sleep {SLEEP_MIN}-{SLEEP_MAX}s) ====\n")
-    if args.with_jd and skip_pat:
+    if args.with_jd and skip_pat and skip_words:
         print(f"==== JD skip 規則: {skip_pat.pattern} ====")
         if args.skip_keywords is not None:
             print(f"     (使用者覆寫: {args.skip_keywords})")
-    elif args.with_jd and args.no_skip:
-        print("==== JD skip 規則: <disabled> ====")
+    elif args.with_jd:
+        print("==== JD skip 規則: <none> ====")
 
     # 0) 載入 seen_ids (跨 run dedup)
     seen_ids = load_seen_ids(seen_path) if args.with_jd and not args.refetch else set()
