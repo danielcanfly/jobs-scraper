@@ -44,6 +44,7 @@ from curl_cffi import requests as cc_requests
 from scrapling.parser import Adaptor
 from bs4 import BeautifulSoup
 from jobs_scraper.sources import jora as jora_source
+from jobs_scraper.sources import jobstreet as jobstreet_source
 from jobs_scraper.sources import linkedin as linkedin_source
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
@@ -129,45 +130,19 @@ JORA_BASE = "https://sg.jora.com"
 # JobStreet (sg.jobstreet.com) — 2026-08-22 整合
 # 用 /api/jobsearch/v5/search 抓 list + /graphql 抓 JD content
 # HTML 頁 100% Cloudflare blocked, 走 GraphQL 完全 OK (詳見 RULES.md §12.5)
-JOBSTREET_TPR = {
-    "1h":  "1",
-    "24h": "1",
-    "3d":  "3",
-    "7d":  "7",
-    "14d": "14",
-    "21d": "21",
-    "30d": "30",
-}
-# MAX_PAGES 跟 LinkedIn 一樣 (邏輯都跟 LinkedIn 一樣), 50% 軟停由 crawl_jobstreet_list 跑時判斷
-# 預期覆蓋 (product manager + FT + 5 keyword + dedup):
-# 1d=1 / 3d=7*20=140 raw → ~80 unique / 7d=15*20=300 → ~200 / 14d=30*20=600 → ~400 / 30d=25*20=500 → ~350
-# 7d 的 totalCount 是 953, 5 keyword × 15 page × 20 = 1500 raw, 預期 unique ~600
-JOBSTREET_MAX_PAGES = {
-    "1h":  1,
-    "24h": 4,
-    "3d":  7,
-    "7d":  15,
-    "14d": 30,
-    "21d": 30,
-    "30d": 25,
-}
+JOBSTREET_TPR = jobstreet_source.TPR
+JOBSTREET_MAX_PAGES = jobstreet_source.MAX_PAGES
 # 可被 JOBSTREET_KEYWORDS env var 覆寫 (見上面 env 讀取區塊)
 # 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
 if JOBSTREET_KEYWORDS_OVERRIDE:
     JOBSTREET_KEYWORDS = [k.strip() for k in JOBSTREET_KEYWORDS_OVERRIDE.split(",") if k.strip()]
 else:
-    JOBSTREET_KEYWORDS = [
-        "product manager",
-        "product director",
-        "director of product",
-        "head of product",
-        "product lead",
-    ]
-JOBSTREET_LOCATION = "Singapore"
-JOBSTREET_LIST_API = "https://sg.jobstreet.com/api/jobsearch/v5/search"
-JOBSTREET_GRAPHQL = "https://sg.jobstreet.com/graphql"
-JOBSTREET_BASE = "https://sg.jobstreet.com"
-JOBSTREET_WORKTYPE_FT = "242"
+    JOBSTREET_KEYWORDS = list(jobstreet_source.DEFAULT_KEYWORDS)
+JOBSTREET_LOCATION = jobstreet_source.DEFAULT_LOCATION
+JOBSTREET_LIST_API = jobstreet_source.LIST_API
+JOBSTREET_GRAPHQL = jobstreet_source.GRAPHQL
+JOBSTREET_BASE = jobstreet_source.BASE_URL
+JOBSTREET_WORKTYPE_FT = jobstreet_source.WORKTYPE_FT
 
 DEFAULT_TPR = "24h"
 
@@ -946,176 +921,54 @@ def crawl_jora_list(tpr: str, max_pages: int,
 
 
 # ─────────────────────────────────────────────────────────────
-# JobStreet SG 來源 (sg.jobstreet.com) — 2026-08-22 整合
-# 公開 List API + GraphQL, 不需 Cloudflare solve; HTML 頁 100% 擋, 走 GraphQL 拿 content
+# JobStreet compatibility surface
+# Implementation owner: jobs_scraper.sources.jobstreet
 # ─────────────────────────────────────────────────────────────
-JOBSTREET_DETAIL_QUERY = """
-query getJobDetails($jobId: ID!) {
-  jobDetails(id: $jobId) {
-    job {
-      id
-      title
-      abstract
-      content
-      status
-      isExpired
-      createdAt { dateTimeUtc }
-      updatedAt { dateTimeUtc }
-      expiresAt { dateTimeUtc }
-      advertiser { id name }
-      location { label }
-      workTypes { label }
-    }
-  }
-}
-"""
+JOBSTREET_DETAIL_QUERY = jobstreet_source.JOBSTREET_DETAIL_QUERY
 
 
 def build_jobstreet_list_url(keyword: str, page: int, daterange: str,
                               worktype: str = JOBSTREET_WORKTYPE_FT,
                               where: str = JOBSTREET_LOCATION,
                               page_size: int = 20) -> str:
-    """組 JobStreet list API URL。"""
-    import urllib.parse
-    params = {
-        "siteKey": "SG-Main",
-        "keywords": keyword,
-        "where": where,
-        "worktype": worktype,
-        "daterange": str(daterange),
-        "page": str(page),
-        "pageSize": str(page_size),
-    }
-    return f"{JOBSTREET_LIST_API}?{urllib.parse.urlencode(params)}"
+    return jobstreet_source.build_list_url(
+        keyword,
+        page,
+        daterange,
+        worktype=worktype,
+        where=where,
+        page_size=page_size,
+        list_api=JOBSTREET_LIST_API,
+    )
 
 
 def parse_jobstreet_list_page(data: dict, keyword: str) -> list[dict]:
-    """從 JobStreet list API JSON 抓 jobs。"""
-    jobs_raw = data.get("data") or []
-    out = []
-    for j in jobs_raw:
-        jid = j.get("id")
-        if not jid:
-            continue
-        # 公司優先用 employer.name, 退到 advertiser.description
-        emp = j.get("employer") or {}
-        adv = j.get("advertiser") or {}
-        company = emp.get("name") or adv.get("description") or j.get("companyName") or ""
-        # locations → 用第一個 label
-        locs = j.get("locations") or []
-        loc_label = locs[0].get("label", "") if locs else ""
-        # workArrangements (Remote / Hybrid / Onsite) — 2026-08-23 統一 "Onsite" 沒 hyphen
-        wm = ""
-        wa = (j.get("workArrangements") or {}).get("data") or []
-        if wa and isinstance(wa, list) and wa[0].get("label"):
-            wm = wa[0]["label"].get("text", "")
-            wm = wm.replace("On-site", "Onsite")  # JobStreet API 給 "On-site" 統一轉 "Onsite"
-        out.append({
-            "job_id": str(jid),
-            "title": j.get("title", ""),
-            "company": company,
-            "location": loc_label,
-            "posted_at": j.get("listingDate", ""),
-            "posted_ago": j.get("listingDateDisplay", ""),
-            "work_mode": wm,
-            "teaser": j.get("teaser", ""),
-            "url": "",  # 不在 list 階段組, enrich 階段補 (要用 title slug)
-            "keyword_used": keyword,  # debug 用, 哪個 keyword 撈到的
-            "source": "jobstreet",
-        })
-    return out
+    return jobstreet_source.parse_list_page(data, keyword)
 
 
 def fetch_jobstreet_jd(job_id: str) -> dict:
-    """打 GraphQL 拿單一職缺完整 content (HTML JD), BS4 轉純文字。"""
-    try:
-        r = _cc_session.post(
-            JOBSTREET_GRAPHQL,
-            json={"query": JOBSTREET_DETAIL_QUERY, "variables": {"jobId": str(job_id)}},
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
-                     "Content-Type": "application/json"},
-            timeout=30,
-            impersonate="chrome",
-        )
-    except Exception as e:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(e)}
-    if r.status_code != 200:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'HTTP {r.status_code}'}
-    try:
-        data = r.json()
-    except Exception as e:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': f'JSON fail: {e}'}
-    if "errors" in data:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': str(data['errors'][:1])}
-    job = (data.get("data") or {}).get("jobDetails", {}).get("job")
-    if not job:
-        return {'jd_text': None, 'jd_lines': None, 'jd_html': None, 'company': '', 'location': '', 'title': '', 'error': 'no job in response'}
-    # content (HTML) → plain text
-    content_html = job.get("content") or ""
-    if content_html:
-        soup = BeautifulSoup(content_html, "html.parser")
-        jd_text = re.sub(r"\s+", " ", soup.get_text(separator=" ", strip=True)).strip()
-        jd_lines = [t.strip() for t in soup.stripped_strings if len(t.strip()) > 1]
-    else:
-        jd_text = None
-        jd_lines = None
-    # 公司/位置 fallback (從 GraphQL 補)
-    adv = job.get("advertiser") or {}
-    loc = job.get("location") or {}
-    return {
-        'jd_text': jd_text,
-        'jd_lines': jd_lines,
-        'jd_html': content_html or None,
-        'company': adv.get("name", ""),
-        'location': (loc.get("label") if isinstance(loc, dict) else "") or "",
-        'title': job.get("title", ""),
-        'error': None if jd_text else 'empty JD',
-    }
+    return jobstreet_source.fetch_jd(
+        _cc_session,
+        job_id,
+        graphql_url=JOBSTREET_GRAPHQL,
+        query=JOBSTREET_DETAIL_QUERY,
+    )
 
 
 def crawl_jobstreet_list(daterange: str, max_pages: int,
                           keywords: list[str] | None = None,
                           worktype: str = JOBSTREET_WORKTYPE_FT) -> list[dict]:
-    """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
-
-    50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
-    """
-    if keywords is None:
-        keywords = JOBSTREET_KEYWORDS
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    for kw in keywords:
-        kw_seen: set[str] = set()
-        for p in range(1, max_pages + 1):
-            url = build_jobstreet_list_url(kw, p, daterange, worktype=worktype)
-            try:
-                r = _cc_session.get(url, timeout=20, impersonate="chrome")
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code != 200:
-                print(f"  [jobstreet {kw} p{p}] FAIL: HTTP {r.status_code}")
-                return all_jobs
-            try:
-                data = r.json()
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL JSON: {e}")
-                return all_jobs
-            jobs = parse_jobstreet_list_page(data, kw)
-            new_jobs = [j for j in jobs if j['job_id'] not in seen and j['job_id'] not in kw_seen]
-            for j in new_jobs:
-                kw_seen.add(j['job_id'])
-                seen.add(j['job_id'])
-                all_jobs.append(j)
-            total_count = data.get("totalCount", "?")
-            print(f"  [jobstreet {kw} p{p}] 收 {len(jobs):3} | 新增 {len(new_jobs):3} | kw 累計 {len(kw_seen):3} | 跨 kw 累計 {len(all_jobs):3} | totalCount={total_count}")
-            # 50% 軟停
-            if not new_jobs or len(new_jobs) < 10 or len(jobs) == 0:
-                print(f"            50% 軟停 (新增 < 10 或 jobs 空)")
-                break
-            if p < max_pages:
-                human_sleep("list")
-    return all_jobs
+    return jobstreet_source.crawl_list(
+        _cc_session,
+        daterange,
+        max_pages,
+        keywords=keywords if keywords is not None else JOBSTREET_KEYWORDS,
+        worktype=worktype,
+        where=JOBSTREET_LOCATION,
+        page_size=20,
+        list_api=JOBSTREET_LIST_API,
+        sleep_fn=human_sleep,
+    )
 
 
 def enrich_with_jd(jobs: list[dict], skip_pat: re.Pattern | None = None,
