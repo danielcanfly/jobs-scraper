@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real MCP stdio smoke: spawn server.py, initialize, list tools, call fail-closed tool."""
+
 from __future__ import annotations
 
 import asyncio

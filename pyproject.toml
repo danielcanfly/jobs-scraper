@@ -35,6 +35,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
+    "mypy>=2.3.1",
+    "ruff>=0.6.0",
 ]
 
 [project.urls]
@@ -42,10 +45,51 @@ Homepage = "https://github.com/danielcanfly/jobs-scraper"
 Repository = "https://github.com/danielcanfly/jobs-scraper"
 
 # Canonical dependency source. requirements.txt mirrors this dependency set.
-# v1.1 ships both the frozen v1.0 entrypoint and the portable tracker entrypoint.
+# v1.2 keeps legacy top-level compatibility modules while implementation moves
+# behind an installable jobs_scraper package.
 [tool.setuptools]
-py-modules = ["sg_product_jobs", "server", "server_v1_1", "job_tracker"]
+py-modules = [
+    "sg_product_jobs",
+    "server",
+    "server_v1_1",
+    "job_tracker",
+    "runtime_core",
+    "region_policy",
+]
+packages = ["jobs_scraper", "jobs_scraper.sources", "jobs_scraper.tracker", "jobs_scraper.mcp_services"]
 
 [tool.pytest.ini_options]
 testpaths = ["."]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["runtime_core.py", "region_policy.py", "job_tracker.py"]
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+
+[tool.coverage.run]
+source = [
+    "jobs_scraper",
+    "server",
+    "server_v1_1",
+    "job_tracker",
+    "runtime_core",
+    "region_policy",
+    "sg_product_jobs",
+]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 0

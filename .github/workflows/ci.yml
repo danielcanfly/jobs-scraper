@@ -41,8 +41,28 @@ jobs:
       - name: Compile all
         run: .venv/bin/python -m compileall -q .
 
+      - name: Run Ruff lint/import hygiene
+        run: .venv/bin/python -m ruff check .
+
+      - name: Run Ruff format check
+        run: |
+          FORMAT_TARGETS="$(git ls-files '*.py' ':!tests/equivalence/*' ':!scripts/check_equivalence_freeze.py')"
+          .venv/bin/python -m ruff format --check $FORMAT_TARGETS
+
+      - name: Run typing scaffold
+        run: .venv/bin/python -m mypy --config-file pyproject.toml
+
+      - name: Run coverage report
+        run: .venv/bin/python -m pytest --cov=jobs_scraper --cov=server --cov=server_v1_1 --cov=job_tracker --cov=runtime_core --cov=region_policy --cov=sg_product_jobs --cov-report=term-missing --cov-fail-under=0
+
       - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
+
+      - name: Verify behaviour equivalence harness freeze
+        run: .venv/bin/python scripts/check_equivalence_freeze.py
+
+      - name: Run v1.1.1 behaviour equivalence gate
+        run: .venv/bin/python -m pytest -q tests/equivalence/test_v111_equivalence.py
 
       - name: Run full pytest suite
         run: .venv/bin/python -m pytest -q

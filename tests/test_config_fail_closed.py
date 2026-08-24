@@ -8,11 +8,11 @@ Verifies:
   - Write tool (sync_jobs_to_sheet) uses spreadsheets write scope.
   - Public crawl (crawl_jobs) does NOT require any Sheet config.
 """
+
 from __future__ import annotations
 
 import importlib
 import os
-import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,7 +27,10 @@ AUTHOR_GID = "111" + "9491672"
 @contextmanager
 def _fresh_server(env: dict[str, str] | None = None):
     """Import server.py with a clean env; yield the module; restore env at exit."""
-    saved = {k: os.environ.get(k) for k in ("SHEET_ID", "SHEET_GID", "GSPREAD_SA_KEY_PATH", "JOBS_SCRAPER_SUBPROCESS_TIMEOUT")}
+    saved = {
+        k: os.environ.get(k)
+        for k in ("SHEET_ID", "SHEET_GID", "GSPREAD_SA_KEY_PATH", "JOBS_SCRAPER_SUBPROCESS_TIMEOUT")
+    }
     for k in saved:
         os.environ.pop(k, None)
     if env:
@@ -61,12 +64,14 @@ def test_no_author_sheet_id_in_executable_code():
 # ── Q33b: SG_RAW_SHEET_ID empty when env not set ────────────────────
 def test_sheet_id_default_is_empty():
     import sg_product_jobs as M
+
     assert M.SHEET_ID_OVERRIDE == "", f"got {M.SHEET_ID_OVERRIDE!r}"
     assert M.SG_RAW_SHEET_ID == "", f"got {M.SG_RAW_SHEET_ID!r}"
 
 
 def test_sgid_default_is_zero():
     import sg_product_jobs as M
+
     assert M.SHEET_GID_OVERRIDE == "", f"got {M.SHEET_GID_OVERRIDE!r}"
     assert M.SG_RAW_GID == 0, f"got {M.SG_RAW_GID}"
 
@@ -97,11 +102,13 @@ def test_sync_jobs_to_sheet_no_config_returns_structured_error():
 
 # ── Q36: missing credential file yields safe structured error ───────
 def test_credential_file_missing_returns_structured_error(tmp_path=None):
-    with _fresh_server(env={
-        "SHEET_ID": "fake_sheet_id_for_test",
-        "SHEET_GID": "123",
-        "GSPREAD_SA_KEY_PATH": "/nonexistent/path/that/does/not/exist.json",
-    }) as s:
+    with _fresh_server(
+        env={
+            "SHEET_ID": "fake_sheet_id_for_test",
+            "SHEET_GID": "123",
+            "GSPREAD_SA_KEY_PATH": "/nonexistent/path/that/does/not/exist.json",
+        }
+    ) as s:
         res = s.audit_sheet()
     assert res.ok is False
     assert res.error_code == "CREDENTIAL_FILE_MISSING"
@@ -113,8 +120,13 @@ def test_crawl_jobs_works_without_sheet_config():
     # Just confirm the pydantic model accepts the call shape; we don't actually
     # run the subprocess (no live network). Confirm argument validation only.
     from server import CrawlResult
+
     model = CrawlResult(
-        ok=True, source="linkedin", range="7d", with_jd=False, exit_code=0,
+        ok=True,
+        source="linkedin",
+        range="7d",
+        with_jd=False,
+        exit_code=0,
         message="x",
     )
     assert model.source == "linkedin"
@@ -135,6 +147,7 @@ def test_no_credential_leak_in_result_objects():
 # ── Q71: read tools use readonly scope, write tool uses write scope ─
 def test_read_scopes_vs_write_scopes():
     import server
+
     assert server.SCOPES_READONLY == ["https://www.googleapis.com/auth/spreadsheets.readonly"]
     assert server.SCOPES_WRITE == ["https://www.googleapis.com/auth/spreadsheets"]
     # The constants must not be equal (read tools must not use write scope)
@@ -144,6 +157,7 @@ def test_read_scopes_vs_write_scopes():
 def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
     """Verify that _read_sheet_rows actually passes the readonly scope to Credentials.from_service_account_file."""
     import server
+
     captured = {}
 
     class _FakeCreds:
@@ -154,8 +168,9 @@ def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
             return cls()
 
     class _FakeWS:
-        def get_all_values(self):
-            return [["header"], ["a", "b"]]
+        def get(self, range_name):
+            assert range_name == "A2:K"
+            return [["a", "b"]]
 
     class _FakeGC:
         def open_by_key(self, sheet_id):
@@ -164,33 +179,33 @@ def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
         def get_worksheet_by_id(self, gid):
             return _FakeWS()
 
-    import gspread
-    monkey_gspread_authorize = lambda creds: _FakeGC()
-    gspread_mod = sys.modules.get("gspread")
-    if gspread_mod is not None:
-        saved = gspread_mod.authorize
-        gspread_mod.authorize = monkey_gspread_authorize
+    gspread_mod = importlib.import_module("gspread")
+
+    def monkey_gspread_authorize(creds):
+        return _FakeGC()
+
+    saved = gspread_mod.authorize
+    gspread_mod.authorize = monkey_gspread_authorize
     try:
         from google.oauth2 import service_account as sa_mod
+
         sa_mod.Credentials = _FakeCreds
         rows = server._read_sheet_rows("dummy.json", "sheet_id", "0")
-        assert captured.get("scopes") == server.SCOPES_READONLY, \
+        assert captured.get("scopes") == server.SCOPES_READONLY, (
             f"read tool leaked write scope: {captured.get('scopes')}"
+        )
         assert rows == [["a", "b"]]
     finally:
-        if gspread_mod is not None and "saved" in dir():
-            gspread_mod.authorize = saved
+        gspread_mod.authorize = saved
 
 
 # ── Q69: not writing to the author's production Sheet during test ───
 def test_tests_do_not_touch_production_sheet():
     """Sanity: tests must never set SHEET_ID to the audited production ID."""
-    assert AUTHOR_SHEET_ID not in os.environ, \
-        "test env cannot have author Sheet ID set (would risk production write)"
+    assert AUTHOR_SHEET_ID not in os.environ, "test env cannot have author Sheet ID set (would risk production write)"
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, fn) for n, fn in globals().items() if n.startswith("test_") and callable(fn)]
     n_pass = n_fail = 0
     for n, fn in tests:

@@ -4,6 +4,7 @@ Unit tests for sg_product_jobs helpers.
 執行: python test_helpers.py
 不需要任何網路或 credentials, 純邏輯測試
 """
+
 import sys
 from pathlib import Path
 
@@ -14,13 +15,16 @@ import sg_product_jobs as M
 
 def test_build_e_formula_linkedin():
     e = M.build_e_formula("linkedin", "4430572342", "")
-    assert e == '=HYPERLINK("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342","https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342")', f"got: {e}"
+    assert (
+        e
+        == '=HYPERLINK("https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342","https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342")'
+    ), f"got: {e}"
 
 
 def test_build_e_formula_jora():
     e = M.build_e_formula("jora", "abc123def456", "https://sg.jora.com/job/Product-Manager-abc123def456")
     assert "sg.jora.com/job/Product-Manager-abc123def456" in e
-    assert e.startswith('=HYPERLINK(')
+    assert e.startswith("=HYPERLINK(")
 
 
 def test_build_e_formula_jora_no_url():
@@ -49,33 +53,73 @@ def test_parse_sheet_row_linkedin_short_id():
 
 def test_parse_sheet_row_linkedin_api_url():
     """LinkedIn sheet row 可能是完整 API URL"""
-    row = ["New", "", "2026-08-22", "LinkedIn / Minimax",
-           "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342",
-           "OKX", "VP", "JD", "SG", "Onsite", ""]
+    row = [
+        "New",
+        "",
+        "2026-08-22",
+        "LinkedIn / Minimax",
+        "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342",
+        "OKX",
+        "VP",
+        "JD",
+        "SG",
+        "Onsite",
+        "",
+    ]
     assert M.parse_sheet_row_to_key(row) == ("linkedin", "4430572342")
 
 
 def test_parse_sheet_row_jora():
     """Jora sheet row: 32-char hex hash 在 URL 尾"""
-    row = ["New", "", "2026-08-22", "Jora / Minimax",
-           "https://sg.jora.com/job/Product-Manager-3edbbb646574ed2a0a926fee537b0e7c?abstrac",
-           "Jora Co", "PM", "JD", "SG", "Onsite", ""]
+    row = [
+        "New",
+        "",
+        "2026-08-22",
+        "Jora / Minimax",
+        "https://sg.jora.com/job/Product-Manager-3edbbb646574ed2a0a926fee537b0e7c?abstrac",
+        "Jora Co",
+        "PM",
+        "JD",
+        "SG",
+        "Onsite",
+        "",
+    ]
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
 def test_parse_sheet_row_jora_with_query():
     """Jora URL 帶 query string"""
-    row = ["New", "", "2026-08-22", "Jora / Minimax",
-           "https://sg.jora.com/job/Foo-3edbbb646574ed2a0a926fee537b0e7c?tracking=abc&x=1",
-           "Jora", "PM", "JD", "SG", "Onsite", ""]
+    row = [
+        "New",
+        "",
+        "2026-08-22",
+        "Jora / Minimax",
+        "https://sg.jora.com/job/Foo-3edbbb646574ed2a0a926fee537b0e7c?tracking=abc&x=1",
+        "Jora",
+        "PM",
+        "JD",
+        "SG",
+        "Onsite",
+        "",
+    ]
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
 def test_parse_sheet_row_jobstreet():
     """JobStreet sheet row: /job/{digit} 純 id"""
-    row = ["New", "", "2026-08-22", "JobStreet / Minimax",
-           "https://sg.jobstreet.com/job/94145676",
-           "Tech Data", "PM", "JD", "SG", "Onsite", ""]
+    row = [
+        "New",
+        "",
+        "2026-08-22",
+        "JobStreet / Minimax",
+        "https://sg.jobstreet.com/job/94145676",
+        "Tech Data",
+        "PM",
+        "JD",
+        "SG",
+        "Onsite",
+        "",
+    ]
     assert M.parse_sheet_row_to_key(row) == ("jobstreet", "94145676")
 
 
@@ -104,7 +148,19 @@ def test_load_sheet_keys_normal():
     """既有 rows + 找下一個空白 row"""
     existing = [
         ["Status", "Priority", "Date", "Source", "URL", "Co", "Title", "JD", "Loc", "WM", "Visa"],  # header
-        ["New", "", "2026-08-22", "JobStreet / Minimax", "https://sg.jobstreet.com/job/94145676", "Tech", "PM", "JD", "SG", "Onsite", ""],
+        [
+            "New",
+            "",
+            "2026-08-22",
+            "JobStreet / Minimax",
+            "https://sg.jobstreet.com/job/94145676",
+            "Tech",
+            "PM",
+            "JD",
+            "SG",
+            "Onsite",
+            "",
+        ],
         ["New", "", "2026-08-22", "LinkedIn / Minimax", "4430572342", "OKX", "VP", "JD", "SG", "Onsite", ""],
     ]
     keys, next_row = M._load_sheet_keys(existing)
@@ -231,7 +287,6 @@ def test_work_mode_empty():
 # 跑所有測試
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import inspect
     tests = [(name, fn) for name, fn in globals().items() if name.startswith("test_") and callable(fn)]
     n_pass = 0
     n_fail = 0
@@ -246,6 +301,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"  💥 {name}: {type(e).__name__}: {e}")
             n_fail += 1
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {n_pass}/{len(tests)} 通過, {n_fail} 失敗")
     sys.exit(0 if n_fail == 0 else 1)

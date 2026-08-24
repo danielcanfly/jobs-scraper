@@ -5,6 +5,7 @@ This guard intentionally scans the entire tracked tree, not a hand-picked list o
 "distributable" files. Known historical values are assembled at runtime so the
 guard itself does not re-commit the forbidden literal it is meant to detect.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,12 +26,8 @@ FORBIDDEN_EXACT = {
 
 # Generic patterns catch future leaks that do not reuse the historical values.
 PATTERNS: dict[str, re.Pattern[str]] = {
-    "concrete_google_sheet_url": re.compile(
-        r"https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]{20,}(?:/|\b)"
-    ),
-    "service_account_identity": re.compile(
-        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com\b"
-    ),
+    "concrete_google_sheet_url": re.compile(r"https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]{20,}(?:/|\b)"),
+    "service_account_identity": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com\b"),
     "google_private_key_json": re.compile(r'"private_key"\s*:\s*"-----BEGIN'),
 }
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from mcp import Client
 
@@ -11,6 +10,7 @@ import sg_product_jobs as M
 
 def _subprocess_result(summary: dict) -> dict:
     import json
+
     return {
         "ok": True,
         "exit_code": 0,
@@ -58,8 +58,12 @@ def test_crawl_without_sheet_config_calls_no_sheet_write(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     seen_args = []
     summary = {
-        "jobs_found": 11, "jobs_enriched": 9, "jobs_failed": 2,
-        "output_file": "/tmp/jobs.json", "written": 0, "skipped_dup": 0,
+        "jobs_found": 11,
+        "jobs_enriched": 9,
+        "jobs_failed": 2,
+        "output_file": "/tmp/jobs.json",
+        "written": 0,
+        "skipped_dup": 0,
         "skipped_no_jd": 0,
     }
 
@@ -91,8 +95,12 @@ def test_sync_propagates_exact_config_and_structured_counts(monkeypatch, tmp_pat
     monkeypatch.setenv("GSPREAD_SA_KEY_PATH", str(credential))
     seen_args = []
     summary = {
-        "jobs_found": 20, "jobs_enriched": 18, "jobs_failed": 2,
-        "output_file": "/tmp/jobs.json", "written": 12, "skipped_dup": 5,
+        "jobs_found": 20,
+        "jobs_enriched": 18,
+        "jobs_failed": 2,
+        "output_file": "/tmp/jobs.json",
+        "written": 12,
+        "skipped_dup": 5,
         "skipped_no_jd": 3,
     }
 
@@ -104,9 +112,14 @@ def test_sync_propagates_exact_config_and_structured_counts(monkeypatch, tmp_pat
 
     async def run():
         async with Client(server.mcp) as client:
-            result = await client.call_tool("sync_jobs_to_sheet", arguments={
-                "source": "jobstreet", "range": "7d", "dry_run": True,
-            })
+            result = await client.call_tool(
+                "sync_jobs_to_sheet",
+                arguments={
+                    "source": "jobstreet",
+                    "range": "7d",
+                    "dry_run": True,
+                },
+            )
             assert result.is_error is False
             sc = result.structured_content
             assert sc["ok"] is True
@@ -149,8 +162,19 @@ class RecordingWS:
 
 
 def _row():
-    return ["New", "", "2026-08-23", "source", '=HYPERLINK("https://example.com","x")',
-            "company", "title", "jd", "Singapore", "Hybrid", ""]
+    return [
+        "New",
+        "",
+        "2026-08-23",
+        "source",
+        '=HYPERLINK("https://example.com","x")',
+        "company",
+        "title",
+        "jd",
+        "Singapore",
+        "Hybrid",
+        "",
+    ]
 
 
 def test_sheet_formula_is_last_write_phase():
@@ -178,4 +202,5 @@ def test_crawl_annotation_is_truthful_for_local_artifacts():
         assert tool.annotations.destructive_hint is False
         assert tool.annotations.idempotent_hint is False
         assert tool.annotations.open_world_hint is True
+
     asyncio.run(run())

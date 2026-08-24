@@ -1,0 +1,21 @@
+{
+  "freeze_version": 1,
+  "baseline": {
+    "tag": "v1.1.1",
+    "commit": "8fbf32484418c2d5edd1fc1e0e451232515dadd8",
+    "tree": "f0ba649aa4d989fceffa51b14c49a1f4b7e311c4"
+  },
+  "phase_a_green_evidence": {
+    "commit": "2f162aa00f284cfea5d404938269f9dce697e07e",
+    "tree": "ad6ba974d5fb2d9f08605730339ab0e7e1d2d8c8",
+    "official_ci_run": 32665110754,
+    "equivalence_named_gate": "success",
+    "full_ci": "success"
+  },
+  "frozen_blobs": {
+    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "f2eeb57efde1a1f1f36b825ad322edd702f24ad4",
+    "tests/equivalence/v111_golden.json": "c2d4f557a74cafc2d33d86d75e95a412e88a422c",
+    "tests/equivalence/test_v111_equivalence.py": "958fbac88bf8e9cc28dee8156eb959fa0e305b0a"
+  },
+  "policy": "During Phase B/C architecture cleanup, frozen harness blobs may not change. Product behaviour changes require a separate explicitly authorized delta, not a golden rewrite inside the refactor."
+}

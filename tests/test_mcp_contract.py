@@ -5,6 +5,7 @@ These tests load the MCP server module, list tools via MCPServer.list_tools(),
 and assert the schema/annotation/contract requirements from 04_MCP_CONTRACT.md
 without requiring a live MCP transport or Google credentials.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +29,7 @@ def _server():
     global _SERVER
     if _SERVER is None:
         import server  # noqa: F401
+
         _SERVER = server
     return _SERVER
 
@@ -54,8 +56,8 @@ def test_dependency_pinned_to_v2():
     # pyproject: same check
     assert re.search(r'"?mcp[><=,\s0-9.]*2(\.0+)?[,\s<>=]"?', pyproject), "pyproject.toml must pin mcp>=2"
     # import the actual installed package to confirm v2
-    import mcp
     from importlib.metadata import version
+
     v = version("mcp")
     assert v.startswith("2."), f"installed mcp is not v2: {v}"
 
@@ -65,12 +67,14 @@ def test_server_uses_mcpserver_v2():
     # Force fresh import
     sys.modules.pop("server", None)
     import server  # noqa: F401
+
     s = server
     # class name in v2 is MCPServer
     assert s.mcp.__class__.__name__ == "MCPServer", f"got {s.mcp.__class__.__name__}"
     # not v1 FastMCP
-    assert "fastmcp" not in s.mcp.__class__.__module__.lower(), \
+    assert "fastmcp" not in s.mcp.__class__.__module__.lower(), (
         f"module should not be mcp.server.fastmcp: {s.mcp.__class__.__module__}"
+    )
     # source file does not import FastMCP
     src = (REPO_ROOT / "server.py").read_text(encoding="utf-8")
     assert "FastMCP" not in src, "server.py must not reference FastMCP (v1)"
@@ -105,14 +109,14 @@ def test_sync_jobs_to_sheet_present_as_write():
 # ── Q19: source input restricted to linkedin/jora/jobstreet ────────
 def test_source_input_enum():
     t = _by_name("crawl_jobs")
-    enum = (t.input_schema["properties"]["source"].get("enum") or [])
+    enum = t.input_schema["properties"]["source"].get("enum") or []
     assert enum == ["linkedin", "jora", "jobstreet"], f"got {enum}"
 
 
 # ── Q20: range input restricted to 7 supported ranges ──────────────
 def test_range_input_enum():
     t = _by_name("crawl_jobs")
-    enum = (t.input_schema["properties"]["range"].get("enum") or [])
+    enum = t.input_schema["properties"]["range"].get("enum") or []
     assert enum == ["1h", "24h", "3d", "7d", "14d", "21d", "30d"], f"got {enum}"
 
 
@@ -163,10 +167,16 @@ def test_all_canonical_tools_have_output_schema():
 # ── Q27: invalid source rejected before subprocess execution ───────
 def test_invalid_source_rejected_by_pydantic():
     from pydantic import ValidationError
+
     from server import CrawlResult
+
     try:
         CrawlResult(
-            ok=True, source="bad", range="7d", with_jd=False, exit_code=0,
+            ok=True,
+            source="bad",
+            range="7d",
+            with_jd=False,
+            exit_code=0,
             message="x",  # type: ignore[arg-type]
         )
     except ValidationError:
@@ -177,10 +187,16 @@ def test_invalid_source_rejected_by_pydantic():
 # ── Q28: invalid range rejected by pydantic ────────────────────────
 def test_invalid_range_rejected_by_pydantic():
     from pydantic import ValidationError
+
     from server import CrawlResult
+
     try:
         CrawlResult(
-            ok=True, source="linkedin", range="99h", with_jd=False, exit_code=0,
+            ok=True,
+            source="linkedin",
+            range="99h",
+            with_jd=False,
+            exit_code=0,
             message="x",  # type: ignore[arg-type]
         )
     except ValidationError:
@@ -190,22 +206,24 @@ def test_invalid_range_rejected_by_pydantic():
 
 # ── Q29: subprocess uses sys.executable / list args / cwd ──────────
 def test_subprocess_uses_sys_executable_and_cwd():
-    import server
     import inspect
-    src = inspect.getsource(server)
-    # subprocess.run with list args (not shell=True string)
-    assert re.search(r"subprocess\.run\(\s*\n?\s*cmd", src), "subprocess.run cmd arg not found"
-    assert "shell=True" not in src, "shell=True forbidden"
-    # sys.executable is the interpreter (also set PYTHON_EXE)
+
+    import runtime_core as RT
+    import server
+
+    src = inspect.getsource(RT)
+    assert "subprocess.run" in src
+    assert "shell=True" not in src
     assert "sys.executable" in src
-    assert "PYTHON_EXE" in src
-    # cwd is REPO_ROOT
     assert "REPO_ROOT" in src
+    assert server._run_subprocess is RT.run_scraper_subprocess
+    assert server._parse_machine_summary is RT.parse_machine_summary
 
 
 # ── Q30: subprocess timeout >= 7200s ───────────────────────────────
 def test_subprocess_timeout_default_7200():
     import server
+
     assert int(server.SUBPROCESS_TIMEOUT) >= 7200, f"timeout too low: {server.SUBPROCESS_TIMEOUT}"
 
 
@@ -213,9 +231,11 @@ def test_subprocess_timeout_default_7200():
 def test_timeout_returns_structured_failure():
     """Drive _run_subprocess with a 1s timeout and a sleep; assert ok=False, error_code=SUBPROCESS_TIMEOUT."""
     import server
+
     r = server._run_subprocess(
         [sys.executable, "-c", "import time; time.sleep(5)"],
-        timeout=1, raw=True,
+        timeout=1,
+        raw=True,
     )
     assert r["ok"] is False
     assert r["timed_out"] is True
@@ -225,9 +245,11 @@ def test_timeout_returns_structured_failure():
 # ── Q32: non-zero exit returns ok=False / error_code ───────────────
 def test_nonzero_exit_returns_structured_failure():
     import server
+
     r = server._run_subprocess(
         [sys.executable, "-c", "import sys; sys.exit(7)"],
-        timeout=10, raw=True,
+        timeout=10,
+        raw=True,
     )
     assert r["ok"] is False
     assert r["exit_code"] == 7
@@ -237,13 +259,13 @@ def test_nonzero_exit_returns_structured_failure():
 # ── Q31/Q32 supplementary: server has instructions mentioning the contract
 def test_server_instructions_present_and_explicit():
     import server
+
     inst = server.mcp.instructions or ""
     for needle in ("sync_jobs_to_sheet", "CONFIG_MISSING", "untrusted", "7200"):
         assert needle in inst, f"instructions missing {needle!r}: {inst!r}"
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, fn) for n, fn in globals().items() if n.startswith("test_") and callable(fn)]
     n_pass = n_fail = 0
     for n, fn in tests:

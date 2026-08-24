@@ -28,6 +28,13 @@ class FakeWorksheet:
         assert row == 1
         return list(self._rows[0]) if self._rows else []
 
+    def get(self, range_name: str):
+        if range_name.startswith("A1:"):
+            return [list(self._rows[0])] if self._rows else []
+        if range_name.startswith("A2:"):
+            return [list(r) for r in self._rows[1:]]
+        raise AssertionError(f"unexpected range: {range_name}")
+
     def get_all_values(self):
         return [list(r) for r in self._rows]
 
@@ -64,9 +71,7 @@ def _summary(*, written: int = 0):
         "exit_code": 0,
         "timed_out": False,
         "error_code": None,
-        "stdout_tail": (
-            'JOBS_SCRAPER_SUMMARY={"written":%d,"skipped_dup":0,"skipped_no_jd":0}\n' % written
-        ),
+        "stdout_tail": ('JOBS_SCRAPER_SUMMARY={"written":%d,"skipped_dup":0,"skipped_no_jd":0}\n' % written),
         "stderr_tail": "",
     }
 
@@ -102,17 +107,16 @@ def test_initialize_default_six_tabs_is_one_atomic_batch(monkeypatch):
         props = add["properties"]
         assert props["gridProperties"] == {"rowCount": 1000, "columnCount": 27}
         sid = props["sheetId"]
-        assert any(
-            r.get("updateCells", {}).get("start", {}).get("sheetId") == sid
-            for r in requests
-        )
+        assert any(r.get("updateCells", {}).get("start", {}).get("sheetId") == sid for r in requests)
 
 
 def test_initialize_existing_blank_resize_and_schema_share_same_batch(monkeypatch):
-    sh = FakeSpreadsheet([
-        FakeWorksheet("SG-Raw", [], wid=11, row_count=50, col_count=10),
-        FakeWorksheet("SG-Selected", _good_rows(), wid=12, row_count=1200, col_count=30),
-    ])
+    sh = FakeSpreadsheet(
+        [
+            FakeWorksheet("SG-Raw", [], wid=11, row_count=50, col_count=10),
+            FakeWorksheet("SG-Selected", _good_rows(), wid=12, row_count=1200, col_count=30),
+        ]
+    )
     monkeypatch.setattr(JT, "_open_spreadsheet", lambda *_a, **_kw: sh)
     result = JT.initialize_job_tracker("user-sheet", "/tmp/key.json", regions=["SG"], dry_run=False)
     assert result["ok"] is True
@@ -121,7 +125,8 @@ def test_initialize_existing_blank_resize_and_schema_share_same_batch(monkeypatc
     assert len(sh.batch_calls) == 1
     requests = sh.batch_calls[0]["requests"]
     resize = next(
-        r["updateSheetProperties"] for r in requests
+        r["updateSheetProperties"]
+        for r in requests
         if "updateSheetProperties" in r
         and r["updateSheetProperties"]["properties"]["sheetId"] == 11
         and "rowCount" in r["updateSheetProperties"]["properties"]["gridProperties"]
@@ -134,10 +139,12 @@ def test_initialize_existing_blank_resize_and_schema_share_same_batch(monkeypatc
 
 
 def test_incompatible_preflight_performs_zero_writes(monkeypatch):
-    sh = FakeSpreadsheet([
-        FakeWorksheet("SG-Raw", [["wrong", "header"]], wid=11),
-        FakeWorksheet("SG-Selected", _good_rows(), wid=12),
-    ])
+    sh = FakeSpreadsheet(
+        [
+            FakeWorksheet("SG-Raw", [["wrong", "header"]], wid=11),
+            FakeWorksheet("SG-Selected", _good_rows(), wid=12),
+        ]
+    )
     monkeypatch.setattr(JT, "_open_spreadsheet", lambda *_a, **_kw: sh)
     result = JT.initialize_job_tracker("user-sheet", "/tmp/key.json", regions=["SG"], dry_run=False)
     assert result["ok"] is False
@@ -194,7 +201,7 @@ def test_missing_region_blocks_subprocess(monkeypatch):
         raise JT.TrackerError("REGION_NOT_INITIALIZED", "missing SG-Raw")
 
     monkeypatch.setattr(S.JT, "open_region_raw", fail_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d")
     assert result.ok is False
     assert result.error_code == "REGION_NOT_INITIALIZED"
@@ -207,7 +214,7 @@ def test_schema_mismatch_blocks_subprocess(monkeypatch):
         raise JT.TrackerError("SCHEMA_MISMATCH", "bad header")
 
     monkeypatch.setattr(S.JT, "open_region_raw", fail_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d")
     assert result.ok is False
     assert result.error_code == "SCHEMA_MISMATCH"
@@ -215,7 +222,7 @@ def test_schema_mismatch_blocks_subprocess(monkeypatch):
 
 def test_unsupported_source_region_blocks_before_config_or_subprocess(monkeypatch):
     monkeypatch.setattr(S, "_cfg_or_error", lambda: pytest.fail("config must not be consulted"))
-    monkeypatch.setattr(S.legacy, "_run_subprocess", lambda _args: pytest.fail("subprocess must not run"))
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
     result = S.sync_jobs_to_sheet(region="TW", source="jobstreet", range="7d")
     assert result.ok is False
     assert result.error_code == "SOURCE_REGION_UNSUPPORTED"
@@ -239,7 +246,7 @@ def test_sync_dry_run_resolves_readonly_and_uses_internal_gid(monkeypatch):
         return _summary()
 
     monkeypatch.setattr(S.JT, "open_region_raw", fake_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", fake_run)
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", fake_run)
     result = S.sync_jobs_to_sheet(region="SG", source="linkedin", range="7d", with_jd=False, dry_run=True)
     assert result.ok is True
     assert opens == [False]
@@ -268,7 +275,7 @@ def test_sync_real_write_resolves_with_write_scope(monkeypatch):
         return _summary(written=2)
 
     monkeypatch.setattr(S.JT, "open_region_raw", fake_open)
-    monkeypatch.setattr(S.legacy, "_run_subprocess", fake_run)
+    monkeypatch.setattr(S.RT, "run_scraper_subprocess", fake_run)
     result = S.sync_jobs_to_sheet(region="China", source="linkedin", range="24h", with_jd=False, dry_run=False)
     assert result.ok is True and result.written == 2
     assert opens == [True]

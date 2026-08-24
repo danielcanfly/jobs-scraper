@@ -10,6 +10,7 @@ Fresh-install qualification harness.
 
 任何失敗 → exit 1, 不動 production 環境。
 """
+
 from __future__ import annotations
 
 import os
@@ -24,8 +25,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> subprocess.CompletedProcess:
     return subprocess.run(
-        cmd, cwd=str(cwd) if cwd else None,
-        capture_output=True, text=True, timeout=timeout,
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
@@ -97,12 +101,12 @@ def main(target_dir: str | None = None) -> int:
         s = child
         d = dst / child.name
         if s.is_dir():
-            shutil.copytree(s, d, dirs_exist_ok=True, ignore=shutil.ignore_patterns(
-                "__pycache__", "*.pyc", ".venv", ".secrets"
-            ))
+            shutil.copytree(
+                s, d, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", ".secrets")
+            )
         else:
             shutil.copy2(s, d)
-    print(f"[fresh-install] copied")
+    print("[fresh-install] copied")
 
     # 2. 建全新 venv (用 Python 3.11+)
     venv = dst / ".venv"
@@ -145,8 +149,13 @@ def main(target_dir: str | None = None) -> int:
 
     # 6. import server (確認 MCP v2 走得通)
     r = _run(
-        [str(vpy), "-c", "import server; import inspect; m=inspect.getsource(server); assert 'MCPServer' in m, 'no MCPServer in server.py'; print('server import OK')"],
-        cwd=str(dst), timeout=30,
+        [
+            str(vpy),
+            "-c",
+            "import server; import inspect; m=inspect.getsource(server); assert 'MCPServer' in m, 'no MCPServer in server.py'; print('server import OK')",
+        ],
+        cwd=str(dst),
+        timeout=30,
     )
     if r.returncode != 0:
         print(f"FAIL: import server: {r.stdout}\n{r.stderr}")

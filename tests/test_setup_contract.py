@@ -9,6 +9,7 @@ These are deterministic tests for setup.sh / CI, no live Google credentials:
   - Installs into .venv and uses that exact interpreter for tests.
   - CI uses read-only repository permissions and runs the repository-wide hygiene guard.
 """
+
 from __future__ import annotations
 
 import os
@@ -45,9 +46,9 @@ def test_setup_propagates_test_failures():
         raise AssertionError("setup.sh missing")
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "clone"
-        shutil.copytree(REPO_ROOT, work, ignore=shutil.ignore_patterns(
-            ".venv", ".secrets", "__pycache__", "*.pyc", ".git"
-        ))
+        shutil.copytree(
+            REPO_ROOT, work, ignore=shutil.ignore_patterns(".venv", ".secrets", "__pycache__", "*.pyc", ".git")
+        )
         bad_test = work / "tests" / "test_setup_contract_sabotage.py"
         bad_test.write_text(
             "def test_sabotage():\n    assert False, 'sabotage fixture'\n",
@@ -62,7 +63,11 @@ def test_setup_propagates_test_failures():
         env = {**os.environ, "PATH": os.environ.get("PATH", "")}
         r = subprocess.run(
             ["bash", str(work / "setup.sh")],
-            cwd=str(work), env=env, capture_output=True, text=True, timeout=900,
+            cwd=str(work),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=900,
         )
         assert r.returncode != 0, (
             f"setup.sh returned 0 even with a failing test.\n"
@@ -73,10 +78,11 @@ def test_setup_propagates_test_failures():
 def test_setup_uses_venv_python_for_tests():
     text = SETUP_SH.read_text(encoding="utf-8")
     assert "VENV_PY" in text, "VENV_PY not used"
-    assert "VENV_DIR=\"" in text or "VENV_DIR=" in text, "VENV_DIR not set"
+    assert 'VENV_DIR="' in text or "VENV_DIR=" in text, "VENV_DIR not set"
     assert "bin/python" in text, "no venv python path"
-    assert re.search(r'"\$\{?VENV_PY\}?"\s+-m\s+pytest', text) or re.search(r"\$\{?VENV_PY\}?\s+-m\s+pytest", text), \
+    assert re.search(r'"\$\{?VENV_PY\}?"\s+-m\s+pytest', text) or re.search(r"\$\{?VENV_PY\}?\s+-m\s+pytest", text), (
         "pytest not invoked through $VENV_PY"
+    )
     activate_for_test = re.search(r"activate\s*\n.*pytest", text, re.S)
     assert not activate_for_test, "setup.sh appears to depend on activate for pytest"
 
@@ -90,8 +96,7 @@ def test_setup_prints_venv_interpreter():
 def test_setup_idempotent_no_overwrite():
     text = SETUP_SH.read_text(encoding="utf-8")
     assert "if [ ! -f" in text and ".env" in text, "missing .env existence check"
-    assert "mkdir -p \"$REPO_ROOT/.secrets\"" in text or "mkdir -p .secrets" in text, \
-        "missing .secrets mkdir"
+    assert 'mkdir -p "$REPO_ROOT/.secrets"' in text or "mkdir -p .secrets" in text, "missing .secrets mkdir"
 
 
 def test_ci_workflow_exists():
@@ -113,8 +118,9 @@ def test_repo_hygiene_guard_runs_clean_on_tracked_tree():
     script = REPO_ROOT / "scripts" / "check_repo_hygiene.py"
     assert script.exists(), f"missing {script}"
     source = script.read_text(encoding="utf-8")
-    assert "git" in source and "ls-files" in source and "-z" in source, \
+    assert "git" in source and "ls-files" in source and "-z" in source, (
         "hygiene guard must enumerate the Git-tracked tree"
+    )
 
     # The runtime scan is meaningful only in a Git checkout, because its contract
     # is explicitly the tracked tree. Fresh-install verification intentionally
@@ -124,8 +130,11 @@ def test_repo_hygiene_guard_runs_clean_on_tracked_tree():
         return
 
     r = subprocess.run(
-        [sys.executable, str(script)], cwd=REPO_ROOT,
-        capture_output=True, text=True, timeout=30,
+        [sys.executable, str(script)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert r.returncode == 0, f"hygiene guard failed:\n{r.stdout}\n{r.stderr}"
     assert "REPO_HYGIENE_PASS" in r.stdout
