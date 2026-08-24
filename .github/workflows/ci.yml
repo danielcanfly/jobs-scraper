@@ -11,7 +11,7 @@ on:
 
 jobs:
   migrate_b3a_linkedin:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.2.0-architecture-cleanup' && !contains(github.event.head_commit.message, 'refactor: route LinkedIn through source adapter')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/v1.2.0-architecture-cleanup'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,10 +27,12 @@ jobs:
           text = path.read_text(encoding='utf-8')
           import_anchor = 'from bs4 import BeautifulSoup\n'
           import_line = 'from jobs_scraper.sources import linkedin as linkedin_source\n'
-          if import_line not in text:
-              if import_anchor not in text:
-                  raise SystemExit('IMPORT_ANCHOR_MISSING')
-              text = text.replace(import_anchor, import_anchor + import_line, 1)
+          if import_line in text:
+              print('B3A_ALREADY_MIGRATED')
+              raise SystemExit(0)
+          if import_anchor not in text:
+              raise SystemExit('IMPORT_ANCHOR_MISSING')
+          text = text.replace(import_anchor, import_anchor + import_line, 1)
           start_marker = '# ─────────────────────────────────────────────────────────────\n# 列表頁\n# ─────────────────────────────────────────────────────────────\n'
           end_marker = '# ─────────────────────────────────────────────────────────────\n# 主程式\n# ─────────────────────────────────────────────────────────────\n'
           start = text.find(start_marker)
@@ -75,6 +77,10 @@ jobs:
           replacement = '\n'.join(replacement_lines)
           path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
           PY
+          if git diff --quiet -- sg_product_jobs.py; then
+            echo 'B3A_NO_SOURCE_DIFF'
+            exit 0
+          fi
           python -m py_compile sg_product_jobs.py
           git diff --check -- sg_product_jobs.py
           git config user.name github-actions[bot]
