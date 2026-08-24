@@ -35,6 +35,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
+    "mypy>=2.3.1",
     "ruff>=0.6.0",
 ]
 
@@ -67,3 +69,27 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["runtime_core.py", "region_policy.py", "job_tracker.py"]
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+
+[tool.coverage.run]
+source = [
+    "jobs_scraper",
+    "server",
+    "server_v1_1",
+    "job_tracker",
+    "runtime_core",
+    "region_policy",
+    "sg_product_jobs",
+]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 0
