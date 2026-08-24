@@ -8,12 +8,20 @@ import region_policy as RP
 import runtime_core as RT
 
 from . import crawl as crawl_service
+from . import errors
 
 ConfigReader = Callable[[], tuple[str, str] | dict[str, Any]]
 
 
 def cfg_or_error() -> tuple[str, str] | dict[str, Any]:
     return JT.check_tracker_config(RT.REPO_ROOT)
+
+
+def _cfg_or_raise(cfg_reader: ConfigReader) -> tuple[str, str]:
+    cfg = cfg_reader()
+    if isinstance(cfg, dict):
+        raise errors.from_public_error(cfg["error_code"], cfg["message"])
+    return cfg
 
 
 def source_region_supported(source: str, region: str) -> tuple[bool, str | None]:
@@ -26,19 +34,9 @@ def initialize_tracker_payload(
     dry_run: bool,
     cfg_reader: ConfigReader = cfg_or_error,
 ) -> dict[str, Any]:
-    cfg = cfg_reader()
-    if isinstance(cfg, dict):
-        return {
-            "ok": False,
-            "dry_run": dry_run,
-            "regions": list(regions),
-            "error_code": cfg["error_code"],
-            "message": cfg["message"],
-        }
-    sa_key_path, sheet_id = cfg
     try:
-        result = JT.initialize_job_tracker(sheet_id, sa_key_path, regions, dry_run=dry_run)
-    except JT.TrackerError as exc:
+        sa_key_path, sheet_id = _cfg_or_raise(cfg_reader)
+    except errors.ServiceError as exc:
         return {
             "ok": False,
             "dry_run": dry_run,
@@ -46,13 +44,25 @@ def initialize_tracker_payload(
             "error_code": exc.error_code,
             "message": exc.message,
         }
-    except Exception as exc:
+    try:
+        result = JT.initialize_job_tracker(sheet_id, sa_key_path, regions, dry_run=dry_run)
+    except JT.TrackerError as exc:
+        service_error = errors.from_public_error(exc.error_code, exc.message)
         return {
             "ok": False,
             "dry_run": dry_run,
             "regions": list(regions),
-            "error_code": "SHEET_INIT_FAILED",
-            "message": f"could not initialize tracker: {type(exc).__name__}: {exc}",
+            "error_code": service_error.error_code,
+            "message": service_error.message,
+        }
+    except Exception as exc:
+        service_error = errors.SheetInitFailed(f"could not initialize tracker: {type(exc).__name__}: {exc}")
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "regions": list(regions),
+            "error_code": service_error.error_code,
+            "message": service_error.message,
         }
     payload = dict(result)
     payload.setdefault("created", [])
@@ -79,6 +89,7 @@ def sync_region_payload(
     target_sheet = JT.raw_tab(region)
     supported, reason = source_region_supported(source, region)
     if not supported:
+        error = errors.SourceRegionUnsupported(reason or "unsupported source/region")
         return {
             "ok": False,
             "source": source,
@@ -88,29 +99,13 @@ def sync_region_payload(
             "exit_code": -1,
             "dry_run": dry_run,
             "target_configured": False,
-            "error_code": "SOURCE_REGION_UNSUPPORTED",
-            "message": reason or "unsupported source/region",
+            "error_code": error.error_code,
+            "message": error.message,
         }
-
-    cfg = cfg_reader()
-    if isinstance(cfg, dict):
-        return {
-            "ok": False,
-            "source": source,
-            "region": region,
-            "range": range,
-            "target_sheet": target_sheet,
-            "exit_code": -1,
-            "dry_run": dry_run,
-            "target_configured": False,
-            "error_code": cfg["error_code"],
-            "message": cfg["message"],
-        }
-    sa_key_path, sheet_id = cfg
 
     try:
-        _sh, ws = JT.open_region_raw(sheet_id, sa_key_path, region, write=not dry_run)
-    except JT.TrackerError as exc:
+        sa_key_path, sheet_id = _cfg_or_raise(cfg_reader)
+    except errors.ServiceError as exc:
         return {
             "ok": False,
             "source": source,
@@ -123,7 +118,11 @@ def sync_region_payload(
             "error_code": exc.error_code,
             "message": exc.message,
         }
-    except Exception as exc:
+
+    try:
+        _sh, ws = JT.open_region_raw(sheet_id, sa_key_path, region, write=not dry_run)
+    except JT.TrackerError as exc:
+        service_error = errors.from_public_error(exc.error_code, exc.message)
         return {
             "ok": False,
             "source": source,
@@ -133,8 +132,22 @@ def sync_region_payload(
             "exit_code": -1,
             "dry_run": dry_run,
             "target_configured": False,
-            "error_code": "SHEET_NOT_FOUND",
-            "message": f"could not resolve target sheet: {type(exc).__name__}: {exc}",
+            "error_code": service_error.error_code,
+            "message": service_error.message,
+        }
+    except Exception as exc:
+        service_error = errors.SheetNotFound(f"could not resolve target sheet: {type(exc).__name__}: {exc}")
+        return {
+            "ok": False,
+            "source": source,
+            "region": region,
+            "range": range,
+            "target_sheet": target_sheet,
+            "exit_code": -1,
+            "dry_run": dry_run,
+            "target_configured": False,
+            "error_code": service_error.error_code,
+            "message": service_error.message,
         }
 
     payload = crawl_service.sheet_sync_payload(
@@ -159,13 +172,14 @@ def read_region_rows(
     *,
     cfg_reader: ConfigReader = cfg_or_error,
 ) -> tuple[list[list[str]] | None, dict[str, str] | None]:
-    cfg = cfg_reader()
-    if isinstance(cfg, dict):
-        return None, {"error_code": cfg["error_code"], "message": cfg["message"]}
-    sa_key_path, sheet_id = cfg
     try:
+        sa_key_path, sheet_id = _cfg_or_raise(cfg_reader)
         return JT.read_region_rows(sheet_id, sa_key_path, region), None
-    except JT.TrackerError as exc:
+    except errors.ServiceError as exc:
         return None, {"error_code": exc.error_code, "message": exc.message}
+    except JT.TrackerError as exc:
+        service_error = errors.from_public_error(exc.error_code, exc.message)
+        return None, {"error_code": service_error.error_code, "message": service_error.message}
     except Exception as exc:
-        return None, {"error_code": "SHEET_NOT_FOUND", "message": f"could not read region sheet: {type(exc).__name__}: {exc}"}
+        service_error = errors.SheetNotFound(f"could not read region sheet: {type(exc).__name__}: {exc}")
+        return None, {"error_code": service_error.error_code, "message": service_error.message}

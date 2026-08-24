@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 
 import runtime_core as RT
 from jobs_scraper.mcp_services import crawl as crawl_service
+from jobs_scraper.mcp_services import errors
 from jobs_scraper.mcp_services import sheet_analysis
 from jobs_scraper.mcp_services import sheet_config
 
@@ -284,6 +285,8 @@ def audit_sheet() -> AuditResult:
     sa_key_path, sheet_id, gid = cfg
     try:
         rows = _read_sheet_rows(sa_key_path, sheet_id, gid)
+    except errors.ServiceError as e:
+        return AuditResult(ok=False, error_code=e.error_code, message=e.message)
     except Exception as e:
         return AuditResult(
             ok=False, error_code="SHEET_NOT_FOUND",
@@ -318,6 +321,8 @@ def get_stats() -> StatsResult:
     sa_key_path, sheet_id, gid = cfg
     try:
         rows = _read_sheet_rows(sa_key_path, sheet_id, gid)
+    except errors.ServiceError as e:
+        return StatsResult(ok=False, error_code=e.error_code, message=e.message)
     except Exception as e:
         return StatsResult(
             ok=False, error_code="SHEET_NOT_FOUND",

@@ -154,8 +154,9 @@ def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
             return cls()
 
     class _FakeWS:
-        def get_all_values(self):
-            return [["header"], ["a", "b"]]
+        def get(self, range_name):
+            assert range_name == "A2:K"
+            return [["a", "b"]]
 
     class _FakeGC:
         def open_by_key(self, sheet_id):

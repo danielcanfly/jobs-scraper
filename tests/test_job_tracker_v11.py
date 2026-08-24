@@ -24,6 +24,13 @@ class FakeWorksheet:
         assert row == 1
         return list(self._rows[0]) if self._rows else []
 
+    def get(self, range_name: str):
+        if range_name.startswith("A1:"):
+            return [list(self._rows[0])] if self._rows else []
+        if range_name.startswith("A2:"):
+            return [list(r) for r in self._rows[1:]]
+        raise AssertionError(f"unexpected range: {range_name}")
+
     def get_all_values(self):
         return [list(r) for r in self._rows]
 

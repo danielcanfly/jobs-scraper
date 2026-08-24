@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .audit import validate_worksheet_schema
+from .audit import read_tracker_rows, validate_worksheet_schema
 from .schema import SCHEMA_VERSION, TrackerError, raw_tab, selected_tab
 
 SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -75,4 +75,4 @@ def open_region_raw(sheet_id: str, sa_key_path: str, region: str, *, write: bool
 
 def read_region_rows(sheet_id: str, sa_key_path: str, region: str) -> list[list[str]]:
     _sh, ws = open_region_raw(sheet_id, sa_key_path, region, write=False)
-    return ws.get_all_values()[1:]
+    return read_tracker_rows(ws)
