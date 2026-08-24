@@ -1,7 +1,7 @@
 name: ci
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
@@ -10,16 +10,15 @@ on:
     branches: [main]
 
 jobs:
-  migrate_b3a_linkedin:
+  render_b3a_linkedin:
     if: github.event_name == 'pull_request' && github.head_ref == 'feature/v1.2.0-architecture-cleanup'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/v1.2.0-architecture-cleanup
-          fetch-depth: 0
 
-      - name: Apply bounded LinkedIn adapter migration
+      - name: Render transformed sg_product_jobs.py
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -51,44 +50,36 @@ jobs:
               'JD_DESC_SEL = linkedin_source.JD_DESC_SEL',
               'JD_BLOCK_SEL = linkedin_source.JD_BLOCK_SEL',
               '_clean = linkedin_source._clean',
-              '',
-              '',
+              '', '',
               'def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:',
               '    return linkedin_source.build_list_url(',
               '        tpr, start, location, geo_id, keywords=KEYWORDS,',
               '    )',
-              '',
-              '',
+              '', '',
               'def parse_list_page(html: str) -> list[dict]:',
               '    return linkedin_source.parse_list_page(html)',
-              '',
-              '',
+              '', '',
               'def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:',
               '    return linkedin_source.fetch_list_page(',
               '        _cc_session, tpr, start, location, geo_id, keywords=KEYWORDS,',
               '    )',
-              '',
-              '',
+              '', '',
               'def build_jd_url(job_id: str) -> str:',
               '    return linkedin_source.build_jd_url(job_id)',
-              '',
-              '',
+              '', '',
               'def fetch_jd(job_id: str) -> dict:',
               '    return linkedin_source.fetch_jd(_cc_session, job_id)',
-              '',
-              '',
+              '', '',
           ]
           replacement = '\n'.join(replacement_lines)
           path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
           PY
-          rm -f .github/workflows/_v12_b3a_linkedin_migration.yml
-          git show 4e699b6501c877c31f2e0fc05ea8661484820a67:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A sg_product_jobs.py .github/workflows
-          git diff --cached --check
-          git commit -m 'refactor: route LinkedIn through source adapter'
-          git push origin HEAD:feature/v1.2.0-architecture-cleanup
+          python -m py_compile sg_product_jobs.py
+          echo "B3A_SHA256=$(sha256sum sg_product_jobs.py | cut -d' ' -f1)"
+          echo "B3A_BASE64_BEGIN"
+          base64 -w0 sg_product_jobs.py
+          echo
+          echo "B3A_BASE64_END"
 
   test:
     runs-on: ubuntu-latest
