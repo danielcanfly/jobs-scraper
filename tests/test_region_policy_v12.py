@@ -61,7 +61,7 @@ def test_tracker_custom_region_passthrough_is_not_narrowed():
 
 def test_region_policy_not_duplicated_in_v11_server():
     source = inspect.getsource(S)
-    assert 'REGION_LOCATIONS: dict[str, str] = {' not in source
-    assert 'SOURCE_LABELS: dict[str, str] = {' not in source
+    assert "REGION_LOCATIONS: dict[str, str] = {" not in source
+    assert "SOURCE_LABELS: dict[str, str] = {" not in source
     assert "Region = RP.PublicRegion" in source
     assert "return RP.source_region_supported(source, region)" in source

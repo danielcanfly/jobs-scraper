@@ -1,4 +1,5 @@
 """Read-only Job Tracker schema validation helpers."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -51,11 +51,13 @@ def test_server_maps_typed_sheet_not_found_without_leaking_exception_name(monkey
 
 def test_tracker_config_dict_is_raised_as_typed_internal_error():
     with pytest.raises(errors.CredentialFileMissing) as raised:
-        tracker._cfg_or_raise(lambda: {
-            "ok": False,
-            "error_code": "CREDENTIAL_FILE_MISSING",
-            "message": "credential file not found: /tmp/nope.json",
-        })
+        tracker._cfg_or_raise(
+            lambda: {
+                "ok": False,
+                "error_code": "CREDENTIAL_FILE_MISSING",
+                "message": "credential file not found: /tmp/nope.json",
+            }
+        )
     assert raised.value.message == "credential file not found: /tmp/nope.json"
 
 

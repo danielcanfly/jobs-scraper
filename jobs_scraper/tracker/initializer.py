@@ -1,4 +1,5 @@
 """Job Tracker initialization planning and batch mutation orchestration."""
+
 from __future__ import annotations
 
 from typing import Any, Iterable
@@ -39,17 +40,19 @@ def _schema_requests(sheet_id: int, row_count: int) -> list[dict[str, Any]]:
     end_row = max(int(row_count), DEFAULT_ROWS)
     header_cells = []
     for header, note in zip(HEADERS, HEADER_NOTES, strict=True):
-        header_cells.append({
-            "userEnteredValue": {"stringValue": header},
-            "note": note,
-            "userEnteredFormat": {
-                "backgroundColor": HEADER_RGB,
-                "textFormat": {"foregroundColor": WHITE_RGB, "bold": True, "fontFamily": "Arial"},
-                "horizontalAlignment": "CENTER",
-                "verticalAlignment": "MIDDLE",
-                "wrapStrategy": "WRAP",
-            },
-        })
+        header_cells.append(
+            {
+                "userEnteredValue": {"stringValue": header},
+                "note": note,
+                "userEnteredFormat": {
+                    "backgroundColor": HEADER_RGB,
+                    "textFormat": {"foregroundColor": WHITE_RGB, "bold": True, "fontFamily": "Arial"},
+                    "horizontalAlignment": "CENTER",
+                    "verticalAlignment": "MIDDLE",
+                    "wrapStrategy": "WRAP",
+                },
+            }
+        )
 
     requests: list[dict[str, Any]] = [
         {
@@ -89,67 +92,79 @@ def _schema_requests(sheet_id: int, row_count: int) -> list[dict[str, Any]]:
     ]
 
     for col, values in VALIDATIONS.items():
-        requests.append({
-            "setDataValidation": {
-                "range": _grid_range(sheet_id, col, col + 1, start_row=1, end_row=end_row),
-                "rule": {
-                    "condition": {
-                        "type": "ONE_OF_LIST",
-                        "values": [{"userEnteredValue": value} for value in values],
+        requests.append(
+            {
+                "setDataValidation": {
+                    "range": _grid_range(sheet_id, col, col + 1, start_row=1, end_row=end_row),
+                    "rule": {
+                        "condition": {
+                            "type": "ONE_OF_LIST",
+                            "values": [{"userEnteredValue": value} for value in values],
+                        },
+                        "strict": True,
+                        "showCustomUi": True,
                     },
-                    "strict": True,
-                    "showCustomUi": True,
-                },
+                }
             }
-        })
+        )
 
     for value, color in STATUS_COLORS.items():
-        requests.append({
-            "addConditionalFormatRule": {
-                "rule": {
-                    "ranges": [_grid_range(sheet_id, 0, 1, start_row=1, end_row=end_row)],
-                    "booleanRule": {
-                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": value}]},
-                        "format": {"backgroundColor": color},
+        requests.append(
+            {
+                "addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [_grid_range(sheet_id, 0, 1, start_row=1, end_row=end_row)],
+                        "booleanRule": {
+                            "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": value}]},
+                            "format": {"backgroundColor": color},
+                        },
                     },
-                },
-                "index": 0,
+                    "index": 0,
+                }
             }
-        })
+        )
 
     for value, color in PRIORITY_COLORS.items():
-        requests.append({
-            "addConditionalFormatRule": {
-                "rule": {
-                    "ranges": [_grid_range(sheet_id, 1, 2, start_row=1, end_row=end_row)],
-                    "booleanRule": {
-                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": value}]},
-                        "format": {"backgroundColor": color},
+        requests.append(
+            {
+                "addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [_grid_range(sheet_id, 1, 2, start_row=1, end_row=end_row)],
+                        "booleanRule": {
+                            "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": value}]},
+                            "format": {"backgroundColor": color},
+                        },
                     },
-                },
-                "index": 0,
+                    "index": 0,
+                }
             }
-        })
+        )
 
     for col, width in enumerate(COLUMN_WIDTHS):
-        requests.append({
+        requests.append(
+            {
+                "updateDimensionProperties": {
+                    "range": {
+                        "sheetId": int(sheet_id),
+                        "dimension": "COLUMNS",
+                        "startIndex": col,
+                        "endIndex": col + 1,
+                    },
+                    "properties": {"pixelSize": width},
+                    "fields": "pixelSize",
+                }
+            }
+        )
+
+    requests.append(
+        {
             "updateDimensionProperties": {
-                "range": {
-                    "sheetId": int(sheet_id), "dimension": "COLUMNS",
-                    "startIndex": col, "endIndex": col + 1,
-                },
-                "properties": {"pixelSize": width},
+                "range": {"sheetId": int(sheet_id), "dimension": "ROWS", "startIndex": 0, "endIndex": 1},
+                "properties": {"pixelSize": HEADER_HEIGHT_PX},
                 "fields": "pixelSize",
             }
-        })
-
-    requests.append({
-        "updateDimensionProperties": {
-            "range": {"sheetId": int(sheet_id), "dimension": "ROWS", "startIndex": 0, "endIndex": 1},
-            "properties": {"pixelSize": HEADER_HEIGHT_PX},
-            "fields": "pixelSize",
         }
-    })
+    )
     return requests
 
 
@@ -245,15 +260,17 @@ def _build_initialization_requests(sh, plan: dict[str, Any]) -> tuple[list[dict[
 
     for title in plan["create"]:
         sheet_id = new_ids[title]
-        requests.append({
-            "addSheet": {
-                "properties": {
-                    "sheetId": sheet_id,
-                    "title": title,
-                    "gridProperties": {"rowCount": DEFAULT_ROWS, "columnCount": SCHEMA_COLUMNS},
+        requests.append(
+            {
+                "addSheet": {
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "title": title,
+                        "gridProperties": {"rowCount": DEFAULT_ROWS, "columnCount": SCHEMA_COLUMNS},
+                    }
                 }
             }
-        })
+        )
         requests.extend(_schema_requests(sheet_id, DEFAULT_ROWS))
 
     for title in plan["configure_blank"]:
@@ -280,13 +297,16 @@ def initialize_job_tracker(
     plan = plan_initialize(sh, regions)
     if plan["incompatible"]:
         return {
-            "ok": False, "dry_run": dry_run, "error_code": "SCHEMA_MISMATCH",
+            "ok": False,
+            "dry_run": dry_run,
+            "error_code": "SCHEMA_MISMATCH",
             "message": "one or more target region sheets already contain incompatible data; no changes made",
             **plan,
         }
     if dry_run:
         return {
-            "ok": True, "dry_run": True,
+            "ok": True,
+            "dry_run": True,
             "message": "initialization preview only; no Sheet writes performed",
             **plan,
         }

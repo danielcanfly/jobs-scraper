@@ -9,6 +9,7 @@ def _run(coro):
 
 def _tools():
     import server_v1_1
+
     return _run(server_v1_1.mcp.list_tools())
 
 
@@ -21,6 +22,7 @@ def _by_name(name: str):
 
 def test_v11_server_version_and_tool_set():
     import server_v1_1
+
     assert server_v1_1.mcp.version == "1.1.1"
     assert {t.name for t in _tools()} == {
         "crawl_jobs",
@@ -60,6 +62,7 @@ def test_read_tools_are_region_aware_and_read_only():
 
 def test_v11_config_no_longer_requires_sheet_gid(monkeypatch, tmp_path):
     import job_tracker as JT
+
     key = tmp_path / "sa.json"
     key.write_text("{}", encoding="utf-8")
     monkeypatch.setenv("SHEET_ID", "user-owned-sheet-id-1234567890")
@@ -72,6 +75,7 @@ def test_v11_config_no_longer_requires_sheet_gid(monkeypatch, tmp_path):
 
 def test_non_sg_jora_and_jobstreet_fail_before_crawl():
     import server_v1_1
+
     for source in ("jora", "jobstreet"):
         ok, reason = server_v1_1._source_region_supported(source, "TW")
         assert ok is False

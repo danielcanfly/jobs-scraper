@@ -1,4 +1,5 @@
 """Legacy v1.0 Sheet configuration and read-only row loading."""
+
 from __future__ import annotations
 
 import os

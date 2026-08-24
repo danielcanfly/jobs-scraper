@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Extend the qualified fresh-install harness with v1.1.x MCP checks in the same clean copy."""
+
 from __future__ import annotations
 
 import subprocess

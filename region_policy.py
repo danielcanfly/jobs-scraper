@@ -3,6 +3,7 @@
 This module owns only cross-cutting tracker-region facts. Source-specific crawl
 implementation details (for example LinkedIn geo IDs) remain with source code.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -54,9 +55,7 @@ REGION_ALIASES: dict[str, PublicRegion] = {
     "shanghai": "China",
 }
 
-REGION_LOCATIONS: dict[PublicRegion, str] = {
-    key: policy.location for key, policy in REGION_POLICIES.items()
-}
+REGION_LOCATIONS: dict[PublicRegion, str] = {key: policy.location for key, policy in REGION_POLICIES.items()}
 
 SOURCE_LABELS: dict[SourceName, str] = {
     "linkedin": "LinkedIn / jobs-scraper",

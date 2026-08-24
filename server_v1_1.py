@@ -1,4 +1,5 @@
 """jobs-scraper MCP v1.1.1: portable Job Tracker + region-aware Sheet tools."""
+
 from __future__ import annotations
 
 from typing import Annotated, Any
@@ -129,6 +130,7 @@ mcp = MCPServer(
     ),
 )
 
+
 @mcp.tool(
     name="crawl_jobs",
     title="Crawl jobs (no Sheet write)",
@@ -151,14 +153,16 @@ def crawl_jobs(
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
     refetch: Annotated[bool, "Re-fetch JDs ignoring cache"] = False,
 ) -> CrawlResult:
-    return CrawlResult(**crawl_service.crawl_payload(
-        source,
-        range,
-        with_jd=with_jd,
-        max_pages=max_pages,
-        refetch=refetch,
-        runner=RT.run_scraper_subprocess,
-    ))
+    return CrawlResult(
+        **crawl_service.crawl_payload(
+            source,
+            range,
+            with_jd=with_jd,
+            max_pages=max_pages,
+            refetch=refetch,
+            runner=RT.run_scraper_subprocess,
+        )
+    )
 
 
 def _cfg_or_error():
@@ -187,7 +191,11 @@ def _source_region_supported(source: str, region: str) -> tuple[bool, str | None
     structured_output=True,
 )
 def initialize_job_tracker(
-    regions: Annotated[list[Region], Field(min_length=1, max_length=12, description="Region pairs to create")] = ["SG", "TW", "China"],
+    regions: Annotated[list[Region], Field(min_length=1, max_length=12, description="Region pairs to create")] = [
+        "SG",
+        "TW",
+        "China",
+    ],
     dry_run: Annotated[bool, "Preview only when true; no Sheet writes"] = True,
 ) -> TrackerInitResult:
     payload = tracker_service.initialize_tracker_payload(list(regions), dry_run=dry_run, cfg_reader=_cfg_or_error)
@@ -202,7 +210,9 @@ def initialize_job_tracker(
         "and appends jobs. Users configure SHEET_ID and service-account credentials; SHEET_GID is not required. "
         "dry_run=true previews scraper writes without modifying job rows and resolves the target with read-only Sheets scope."
     ),
-    annotations=ToolAnnotations(read_only_hint=False, open_world_hint=True, destructive_hint=False, idempotent_hint=False),
+    annotations=ToolAnnotations(
+        read_only_hint=False, open_world_hint=True, destructive_hint=False, idempotent_hint=False
+    ),
     structured_output=True,
 )
 def sync_jobs_to_sheet(
@@ -246,11 +256,15 @@ def audit_sheet(region: Annotated[Region, "Tracker region to audit"] = "SG") -> 
     target = JT.raw_tab(region)
     rows, error = _read_region_rows(region)
     if error:
-        return RegionAuditResult(ok=False, region=region, target_sheet=target, error_code=error["error_code"], message=error["message"])
+        return RegionAuditResult(
+            ok=False, region=region, target_sheet=target, error_code=error["error_code"], message=error["message"]
+        )
     rows = rows or []
 
     payload = sheet_analysis.audit_rows(rows, seen_path=RT.REPO_ROOT / "seen_jds.jsonl")
-    return RegionAuditResult(ok=True, region=region, target_sheet=target, **payload, message=f"audited {len(rows)} rows from {target}")
+    return RegionAuditResult(
+        ok=True, region=region, target_sheet=target, **payload, message=f"audited {len(rows)} rows from {target}"
+    )
 
 
 @mcp.tool(
@@ -267,10 +281,14 @@ def get_stats(region: Annotated[Region, "Tracker region to inspect"] = "SG") -> 
     target = JT.raw_tab(region)
     rows, error = _read_region_rows(region)
     if error:
-        return RegionStatsResult(ok=False, region=region, target_sheet=target, error_code=error["error_code"], message=error["message"])
+        return RegionStatsResult(
+            ok=False, region=region, target_sheet=target, error_code=error["error_code"], message=error["message"]
+        )
     rows = rows or []
     payload = sheet_analysis.stats_rows(rows, seen_path=RT.REPO_ROOT / "seen_jds.jsonl")
-    return RegionStatsResult(ok=True, region=region, target_sheet=target, **payload, message=f"stats for {len(rows)} rows from {target}")
+    return RegionStatsResult(
+        ok=True, region=region, target_sheet=target, **payload, message=f"stats for {len(rows)} rows from {target}"
+    )
 
 
 if __name__ == "__main__":

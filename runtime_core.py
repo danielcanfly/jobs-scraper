@@ -4,6 +4,7 @@ This module owns subprocess execution, timeout/error normalization, repository
 paths, source/range public types, and the machine-readable CLI summary parser.
 It is deliberately independent of MCP registration and Google Sheet logic.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,14 +53,10 @@ def run_scraper_subprocess(
             "timed_out": True,
             "error_code": "SUBPROCESS_TIMEOUT",
             "stdout_tail": (
-                exc.stdout.decode("utf-8", "replace")
-                if isinstance(exc.stdout, bytes)
-                else (exc.stdout or "")
+                exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
             )[-OUTPUT_TAIL_STDOUT:],
             "stderr_tail": (
-                exc.stderr.decode("utf-8", "replace")
-                if isinstance(exc.stderr, bytes)
-                else (exc.stderr or "")
+                exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
             )[-OUTPUT_TAIL_STDERR:],
         }
 
@@ -88,7 +85,7 @@ def parse_machine_summary(stdout: str) -> dict[str, Any] | None:
         if not line.startswith(SUMMARY_PREFIX):
             continue
         try:
-            value = json.loads(line[len(SUMMARY_PREFIX):])
+            value = json.loads(line[len(SUMMARY_PREFIX) :])
         except json.JSONDecodeError:
             return None
         return value if isinstance(value, dict) else None

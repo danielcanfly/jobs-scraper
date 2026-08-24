@@ -43,12 +43,8 @@ def test_jobstreet_root_wrappers_delegate_to_adapter(monkeypatch):
         calls["fetch"] = (session, job_id, graphql_url, query)
         return {"jd_text": "JD", "error": None}
 
-    def fake_crawl_list(
-        session, daterange, max_pages, *, keywords, worktype, where, page_size, list_api, sleep_fn
-    ):
-        calls["crawl"] = (
-            session, daterange, max_pages, keywords, worktype, where, page_size, list_api, sleep_fn
-        )
+    def fake_crawl_list(session, daterange, max_pages, *, keywords, worktype, where, page_size, list_api, sleep_fn):
+        calls["crawl"] = (session, daterange, max_pages, keywords, worktype, where, page_size, list_api, sleep_fn)
         return [{"job_id": "94145677"}]
 
     monkeypatch.setattr(S.jobstreet_source, "build_list_url", fake_build_list_url)
@@ -58,7 +54,13 @@ def test_jobstreet_root_wrappers_delegate_to_adapter(monkeypatch):
 
     assert S.build_jobstreet_list_url("pm", 2, "7", worktype="242", where="Singapore") == "URL"
     assert calls["build"] == (
-        "pm", 2, "7", "242", "Singapore", 20, S.JOBSTREET_LIST_API,
+        "pm",
+        2,
+        "7",
+        "242",
+        "Singapore",
+        20,
+        S.JOBSTREET_LIST_API,
     )
 
     payload = {"data": []}
@@ -331,11 +333,13 @@ def test_jobstreet_crawl_preserves_keyword_order_dedup_soft_stop_and_sleep():
     first_page = [_job(i) for i in range(100, 110)]
     second_page = [_job(109), _job(110)]
     third_page = [_job(100), _job(200)]
-    session = Session([
-        {"data": first_page, "totalCount": 12},
-        {"data": second_page, "totalCount": 12},
-        {"data": third_page, "totalCount": 2},
-    ])
+    session = Session(
+        [
+            {"data": first_page, "totalCount": 12},
+            {"data": second_page, "totalCount": 12},
+            {"data": third_page, "totalCount": 2},
+        ]
+    )
     sleeps = []
 
     result = S.jobstreet_source.crawl_list(

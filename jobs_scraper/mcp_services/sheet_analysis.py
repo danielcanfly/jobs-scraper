@@ -1,4 +1,5 @@
 """Pure row analysis shared by legacy and region-aware MCP tools."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -38,9 +39,7 @@ def audit_rows(rows: list[list[str]], *, seen_path: Path | None = None) -> dict[
     work_mode = Counter(row[9] for row in rows if len(row) > 9)
     source = Counter(row[3] for row in rows if len(row) > 3)
     visa_hard = sum(1 for row in rows if len(row) > 10 and row[10].startswith("⚠️ HARD"))
-    visa_soft_or_positive = sum(
-        1 for row in rows if len(row) > 10 and row[10] and not row[10].startswith("⚠️ HARD")
-    )
+    visa_soft_or_positive = sum(1 for row in rows if len(row) > 10 and row[10] and not row[10].startswith("⚠️ HARD"))
 
     return {
         "rows_read": len(rows),

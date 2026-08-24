@@ -8,6 +8,7 @@ Verifies that the two-phase write in _write_rows_to_sheet:
   - Supports dry_run without external writes.
   - Validates gid to avoid silent first-tab writes.
 """
+
 from __future__ import annotations
 
 import sys
@@ -29,6 +30,7 @@ HOSTILE_VALUES = [
 
 class _RecordingWS:
     """Mock gspread worksheet that records every update call."""
+
     def __init__(self, row_count: int = 100) -> None:
         self.row_count = row_count
         self.calls: list[dict] = []
@@ -39,11 +41,13 @@ class _RecordingWS:
         self.row_count += n
 
     def update(self, range_name=None, values=None, value_input_option=None):
-        self.calls.append({
-            "range": range_name,
-            "values": values,
-            "vopt": value_input_option,
-        })
+        self.calls.append(
+            {
+                "range": range_name,
+                "values": values,
+                "vopt": value_input_option,
+            }
+        )
 
 
 def _build_job(job_id: str, source: str, **overrides) -> dict:
@@ -109,8 +113,7 @@ def test_e_column_hyperlink_written_with_user_entered():
     e_call = [c for c in ws.calls if c["range"].startswith("E2:")][0]
     assert e_call["vopt"] == "USER_ENTERED", f"E column used {e_call['vopt']}"
     # E value must be a HYPERLINK formula
-    assert e_call["values"][0][0].startswith("=HYPERLINK("), \
-        f"E not a formula: {e_call['values'][0][0]!r}"
+    assert e_call["values"][0][0].startswith("=HYPERLINK("), f"E not a formula: {e_call['values'][0][0]!r}"
 
 
 # ── Q38b: The non-E phase is split into A:D and F:K (continuous ranges) ─
@@ -129,10 +132,7 @@ def test_two_phase_write_uses_three_updates():
 # ── Q38c: All three ranges receive the same number of rows ──────────
 def test_three_phases_consistent_row_count():
     ws = _RecordingWS()
-    rows = [
-        _row_with_hostile(str(i), "linkedin", "F", f"Co{i}")
-        for i in range(5)
-    ]
+    rows = [_row_with_hostile(str(i), "linkedin", "F", f"Co{i}") for i in range(5)]
     M._write_rows_to_sheet(ws, next_row=10, new_rows=rows)
     counts = [len(c["values"]) for c in ws.calls]
     assert counts == [5, 5, 5], f"phase row counts disagree: {counts}"
@@ -147,8 +147,9 @@ def test_dry_run_does_not_invoke_update():
     # The early return for dry_run must be before any google auth or update call.
     dry_idx = src.find("if dry_run:")
     update_idx = src.find("ws.update(")
-    assert dry_idx > 0 and update_idx > dry_idx, \
+    assert dry_idx > 0 and update_idx > dry_idx, (
         f"dry_run early-return not before update(): dry={dry_idx}, update={update_idx}"
+    )
     # And _write_rows_to_sheet must not be called from dry-run path.
     # Direct test: invoke the inline dry-run path through the helper.
     fake_ws = _RecordingWS()
@@ -165,6 +166,7 @@ def test_gid_zero_is_explicit_not_default():
     """The fallback gid is 0; push_to_sheet/get_worksheet_by_id should be called
     with the user-provided gid (not a historical hardcoded author GID)."""
     import sg_product_jobs as M
+
     # The default gid when env is empty is 0 (sentinel for "not configured").
     assert M.SG_RAW_GID == 0
     # And the hardcoded historical default must be gone.

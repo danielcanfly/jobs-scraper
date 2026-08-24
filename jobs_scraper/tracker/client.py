@@ -1,4 +1,5 @@
 """Google Sheets client and worksheet boundary helpers for Job Tracker."""
+
 from __future__ import annotations
 
 import os

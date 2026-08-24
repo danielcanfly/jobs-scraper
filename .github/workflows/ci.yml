@@ -44,6 +44,11 @@ jobs:
       - name: Run Ruff lint/import hygiene
         run: .venv/bin/python -m ruff check .
 
+      - name: Run Ruff format check
+        run: |
+          FORMAT_TARGETS="$(git ls-files '*.py' ':!tests/equivalence/*' ':!scripts/check_equivalence_freeze.py')"
+          .venv/bin/python -m ruff format --check $FORMAT_TARGETS
+
       - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
 

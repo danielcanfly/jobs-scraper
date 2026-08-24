@@ -5,6 +5,7 @@ This module owns LinkedIn URL construction, list parsing, and JD fetching while
 Network sessions are injected by the orchestration layer so existing monkeypatch
 and connection-pool behaviour remains observable at the legacy boundary.
 """
+
 from __future__ import annotations
 
 from urllib.parse import urlencode
@@ -54,10 +55,7 @@ def build_list_url(
         "sortBy": "DD",
         "start": str(start),
     }
-    return (
-        "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-        "?" + urlencode(params)
-    )
+    return "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?" + urlencode(params)
 
 
 def parse_list_page(html: str) -> list[dict]:
@@ -84,16 +82,18 @@ def parse_list_page(html: str) -> list[dict]:
 
         if not job_id and not title:
             continue
-        jobs.append({
-            "job_id": job_id,
-            "title": title,
-            "company": company,
-            "location": loc,
-            "posted_at": posted_at,
-            "posted_ago": posted_ago,
-            "url": href or f"https://www.linkedin.com/jobs/view/{job_id}",
-            "source": "linkedin",
-        })
+        jobs.append(
+            {
+                "job_id": job_id,
+                "title": title,
+                "company": company,
+                "location": loc,
+                "posted_at": posted_at,
+                "posted_ago": posted_ago,
+                "url": href or f"https://www.linkedin.com/jobs/view/{job_id}",
+                "source": "linkedin",
+            }
+        )
     return jobs
 
 

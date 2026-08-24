@@ -87,9 +87,12 @@ def test_schema_is_exact_a_to_aa_contract():
 
 def test_default_region_pairs_match_reference_workbook():
     assert JT.expected_tabs() == [
-        "SG-Raw", "SG-Selected",
-        "TW-Raw", "TW-Selected",
-        "China-Raw", "China-Selected",
+        "SG-Raw",
+        "SG-Selected",
+        "TW-Raw",
+        "TW-Selected",
+        "China-Raw",
+        "China-Selected",
     ]
     assert JT.canonical_region("Singapore") == "SG"
     assert JT.canonical_region("Taiwan") == "TW"
@@ -106,13 +109,33 @@ def test_validation_contract_matches_live_tracker():
 
 def test_reference_dimensions_are_locked_from_exported_tracker():
     assert JT.COLUMN_WIDTHS == (
-        111, 111,
-        124, 124, 124,
-        172, 172, 172,
-        137, 137, 137, 137, 137,
-        133, 133, 133, 133,
-        109, 109, 109, 109, 109, 109, 109, 109,
-        286, 286,
+        111,
+        111,
+        124,
+        124,
+        124,
+        172,
+        172,
+        172,
+        137,
+        137,
+        137,
+        137,
+        137,
+        133,
+        133,
+        133,
+        133,
+        109,
+        109,
+        109,
+        109,
+        109,
+        109,
+        109,
+        109,
+        286,
+        286,
     )
     assert JT.HEADER_HEIGHT_PX == 52
 
@@ -151,10 +174,7 @@ def test_apply_schema_grows_small_blank_grid_in_same_atomic_batch():
         "columnCount": 27,
     }
     assert resize["fields"] == "gridProperties.rowCount,gridProperties.columnCount"
-    assert any(
-        r.get("updateCells", {}).get("start", {}).get("sheetId") == ws.id
-        for r in requests[1:]
-    )
+    assert any(r.get("updateCells", {}).get("start", {}).get("sheetId") == ws.id for r in requests[1:])
 
 
 def test_plan_initialize_empty_default_sheet_creates_pairs_and_removes_default():
@@ -167,10 +187,12 @@ def test_plan_initialize_empty_default_sheet_creates_pairs_and_removes_default()
 
 def test_plan_initialize_preserves_compatible_existing_pair():
     good = [list(JT.HEADERS)]
-    sh = FakeSpreadsheet([
-        FakeWorksheet("SG-Raw", good, wid=11, col_count=27),
-        FakeWorksheet("SG-Selected", good, wid=12, col_count=27),
-    ])
+    sh = FakeSpreadsheet(
+        [
+            FakeWorksheet("SG-Raw", good, wid=11, col_count=27),
+            FakeWorksheet("SG-Selected", good, wid=12, col_count=27),
+        ]
+    )
     plan = JT.plan_initialize(sh, ["SG"])
     assert plan["create"] == []
     assert plan["configure_blank"] == []
@@ -179,10 +201,12 @@ def test_plan_initialize_preserves_compatible_existing_pair():
 
 
 def test_plan_initialize_fails_closed_on_nonempty_schema_mismatch():
-    sh = FakeSpreadsheet([
-        FakeWorksheet("SG-Raw", [["Status", "Priority", "Date"]], wid=11, col_count=27),
-        FakeWorksheet("SG-Selected", [list(JT.HEADERS)], wid=12, col_count=27),
-    ])
+    sh = FakeSpreadsheet(
+        [
+            FakeWorksheet("SG-Raw", [["Status", "Priority", "Date"]], wid=11, col_count=27),
+            FakeWorksheet("SG-Selected", [list(JT.HEADERS)], wid=12, col_count=27),
+        ]
+    )
     plan = JT.plan_initialize(sh, ["SG"])
     assert len(plan["incompatible"]) == 1
     assert plan["incompatible"][0]["sheet"] == "SG-Raw"

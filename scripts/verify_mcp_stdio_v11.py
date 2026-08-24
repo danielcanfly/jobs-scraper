@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real MCP stdio smoke for v1.1.0: spawn server_v1_1.py and verify the five-tool contract."""
+
 from __future__ import annotations
 
 import asyncio

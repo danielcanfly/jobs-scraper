@@ -4,6 +4,7 @@ This module owns JobStreet URL construction, list API parsing, JD fetching, and
 multi-keyword crawl behaviour. The legacy root module injects network sessions
 and sleep functions so monkeypatch and pacing boundaries remain observable.
 """
+
 from __future__ import annotations
 
 import re
@@ -112,19 +113,21 @@ def parse_list_page(data: dict, keyword: str) -> list[dict]:
             work_mode = arrangements[0]["label"].get("text", "")
             work_mode = work_mode.replace("On-site", "Onsite")
 
-        out.append({
-            "job_id": str(job_id),
-            "title": job.get("title", ""),
-            "company": company,
-            "location": location_label,
-            "posted_at": job.get("listingDate", ""),
-            "posted_ago": job.get("listingDateDisplay", ""),
-            "work_mode": work_mode,
-            "teaser": job.get("teaser", ""),
-            "url": "",
-            "keyword_used": keyword,
-            "source": "jobstreet",
-        })
+        out.append(
+            {
+                "job_id": str(job_id),
+                "title": job.get("title", ""),
+                "company": company,
+                "location": location_label,
+                "posted_at": job.get("listingDate", ""),
+                "posted_ago": job.get("listingDateDisplay", ""),
+                "work_mode": work_mode,
+                "teaser": job.get("teaser", ""),
+                "url": "",
+                "keyword_used": keyword,
+                "source": "jobstreet",
+            }
+        )
     return out
 
 
@@ -273,11 +276,7 @@ def crawl_list(
                 return all_jobs
 
             jobs = parse_list_page(data, keyword)
-            new_jobs = [
-                job
-                for job in jobs
-                if job["job_id"] not in seen and job["job_id"] not in keyword_seen
-            ]
+            new_jobs = [job for job in jobs if job["job_id"] not in seen and job["job_id"] not in keyword_seen]
             for job in new_jobs:
                 keyword_seen.add(job["job_id"])
                 seen.add(job["job_id"])

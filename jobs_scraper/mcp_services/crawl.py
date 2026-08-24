@@ -1,4 +1,5 @@
 """Shared crawl/sync subprocess orchestration for MCP entrypoints."""
+
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -57,7 +58,9 @@ def build_sheet_sync_args(
     return args
 
 
-def run_and_parse(args: list[str], runner: Runner = RT.run_scraper_subprocess) -> tuple[dict[str, Any], dict[str, Any] | None]:
+def run_and_parse(
+    args: list[str], runner: Runner = RT.run_scraper_subprocess
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     result = runner(args)
     summary = RT.parse_machine_summary(result["stdout_tail"])
     if result["ok"] and summary is None:
@@ -78,8 +81,10 @@ def crawl_payload(
         build_crawl_args(range, source, with_jd=with_jd, max_pages=max_pages, refetch=refetch),
         runner,
     )
-    message = "crawl completed" if result["ok"] else (
-        f"crawl failed (timeout={result['timed_out']}, code={result['error_code']})"
+    message = (
+        "crawl completed"
+        if result["ok"]
+        else (f"crawl failed (timeout={result['timed_out']}, code={result['error_code']})")
     )
     return {
         "ok": result["ok"],
@@ -129,8 +134,10 @@ def sheet_sync_payload(
         ),
         runner,
     )
-    message = "sync completed" if result["ok"] else (
-        f"sync failed (timeout={result['timed_out']}, code={result['error_code']})"
+    message = (
+        "sync completed"
+        if result["ok"]
+        else (f"sync failed (timeout={result['timed_out']}, code={result['error_code']})")
     )
     return {
         "ok": result["ok"],

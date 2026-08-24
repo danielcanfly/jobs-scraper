@@ -61,7 +61,9 @@ def test_service_crawl_payload_preserves_legacy_subprocess_contract():
         refetch=True,
         runner=fake_runner,
     )
-    assert seen_args == [["7d", "--source", "jobstreet", "--with-jd", "--refetch", "--max-pages", "3", "--json-summary"]]
+    assert seen_args == [
+        ["7d", "--source", "jobstreet", "--with-jd", "--refetch", "--max-pages", "3", "--json-summary"]
+    ]
     assert payload["ok"] is True
     assert payload["jobs_found"] == 2
     assert payload["output_file"] == "/tmp/jobs.json"
@@ -69,8 +71,32 @@ def test_service_crawl_payload_preserves_legacy_subprocess_contract():
 
 def test_sheet_analysis_shared_shape_matches_server_models():
     rows = [
-        ["New", "", "2026-08-24", "LinkedIn / jobs-scraper", "https://www.linkedin.com/jobs/view/42", "Acme", "PM", "", "Singapore", "Hybrid", ""],
-        ["New", "", "2026-08-24", "JobStreet / jobs-scraper", "https://sg.jobstreet.com/job/42", "Acme", "PM", "", "Singapore", "Remote", "⚠️ HARD: citizens only"],
+        [
+            "New",
+            "",
+            "2026-08-24",
+            "LinkedIn / jobs-scraper",
+            "https://www.linkedin.com/jobs/view/42",
+            "Acme",
+            "PM",
+            "",
+            "Singapore",
+            "Hybrid",
+            "",
+        ],
+        [
+            "New",
+            "",
+            "2026-08-24",
+            "JobStreet / jobs-scraper",
+            "https://sg.jobstreet.com/job/42",
+            "Acme",
+            "PM",
+            "",
+            "Singapore",
+            "Remote",
+            "⚠️ HARD: citizens only",
+        ],
     ]
     audit = sheet_analysis.audit_rows(rows)
     stats = sheet_analysis.stats_rows(rows)

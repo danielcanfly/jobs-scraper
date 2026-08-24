@@ -6,6 +6,7 @@ legacy public surface. Sessions and sleep functions are injected by the
 orchestration layer so existing monkeypatch and pacing behaviour remains
 observable at the root module boundary.
 """
+
 from __future__ import annotations
 
 import re
@@ -34,7 +35,7 @@ def parse_list_page(html: str, location: str = DEFAULT_LOCATION) -> list[dict]:
     seen: set[str] = set()
     jobs: list[dict] = []
     for href in ap.css("a[href*='/job/']::attr(href)").getall():
-        match = re.search(r'/job/.+?-([a-f0-9]{32})(?:\?|&|$)', href)
+        match = re.search(r"/job/.+?-([a-f0-9]{32})(?:\?|&|$)", href)
         if not match:
             continue
         job_id = match.group(1)
@@ -45,19 +46,21 @@ def parse_list_page(html: str, location: str = DEFAULT_LOCATION) -> list[dict]:
             url = href
         else:
             url = f"{BASE_URL}{href}" if href.startswith("/") else f"{BASE_URL}/{href}"
-        slug_match = re.search(r'/job/([^?]+)\?', href)
+        slug_match = re.search(r"/job/([^?]+)\?", href)
         title_slug = slug_match.group(1) if slug_match else ""
-        title = re.sub(r'-[a-f0-9]{32}$', "", title_slug).replace("-", " ")
-        jobs.append({
-            "job_id": job_id,
-            "title": title,
-            "company": "",
-            "location": location,
-            "posted_at": "",
-            "posted_ago": "",
-            "url": url,
-            "source": "jora",
-        })
+        title = re.sub(r"-[a-f0-9]{32}$", "", title_slug).replace("-", " ")
+        jobs.append(
+            {
+                "job_id": job_id,
+                "title": title,
+                "company": "",
+                "location": location,
+                "posted_at": "",
+                "posted_ago": "",
+                "url": url,
+                "source": "jora",
+            }
+        )
     return jobs
 
 
@@ -81,7 +84,7 @@ def fetch_jd(session, url: str, *, sleep_fn=time.sleep) -> dict:
             break
         if response.status_code == 403:
             wait = 30 * (attempt + 1)
-            print(f"            403 → wait {wait}s (attempt {attempt+1}/3)")
+            print(f"            403 → wait {wait}s (attempt {attempt + 1}/3)")
             sleep_fn(wait)
             continue
         return {
@@ -130,11 +133,7 @@ def fetch_jd(session, url: str, *, sleep_fn=time.sleep) -> dict:
         }
 
     jd_text = " ".join(jd_divs[0].css("::text").getall()).strip()
-    jd_lines = [
-        text.strip()
-        for text in jd_divs[0].css("::text").getall()
-        if text.strip() and len(text.strip()) > 1
-    ]
+    jd_lines = [text.strip() for text in jd_divs[0].css("::text").getall() if text.strip() and len(text.strip()) > 1]
 
     main = ap.css("main")
     h1 = ap.css("h1::text").getall()
@@ -160,10 +159,25 @@ def fetch_jd(session, url: str, *, sleep_fn=time.sleep) -> dict:
                 continue
             if "reviews at" in text.lower():
                 continue
-            if 1 < len(text) < 80 and not text.startswith((
-                "4.", "5.", "Permanent", "Full", "Part", "Contract",
-                "2d", "3d", "1d", "5d", "6d", "1w", "2w", "Today", "Yesterday",
-            )):
+            if 1 < len(text) < 80 and not text.startswith(
+                (
+                    "4.",
+                    "5.",
+                    "Permanent",
+                    "Full",
+                    "Part",
+                    "Contract",
+                    "2d",
+                    "3d",
+                    "1d",
+                    "5d",
+                    "6d",
+                    "1w",
+                    "2w",
+                    "Today",
+                    "Yesterday",
+                )
+            ):
                 company = text
                 break
 
@@ -205,7 +219,7 @@ def crawl_list(
                 break
             if response.status_code == 403:
                 wait = 30 * (attempt + 1)
-                print(f"            403 → wait {wait}s (attempt {attempt+1}/3)")
+                print(f"            403 → wait {wait}s (attempt {attempt + 1}/3)")
                 time.sleep(wait)
                 continue
             print(f"            FAIL: HTTP {response.status_code}")
@@ -218,7 +232,9 @@ def crawl_list(
         for job in new_jobs:
             seen.add(job["job_id"])
             all_jobs.append(job)
-        print(f"            收 {len(jobs)}, 新增 {len(new_jobs)}, 重複 {len(jobs)-len(new_jobs)}, 累計 {len(all_jobs)}")
+        print(
+            f"            收 {len(jobs)}, 新增 {len(new_jobs)}, 重複 {len(jobs) - len(new_jobs)}, 累計 {len(all_jobs)}"
+        )
         if not new_jobs or len(jobs) == 0 or len(new_jobs) < 10:
             print("            到底了")
             break

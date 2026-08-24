@@ -22,6 +22,7 @@ are missing or wrong. The server never falls back to the package author's Sheet.
 Long jobs: subprocess timeout is 7200s. Codex/Claude hosts should also configure
 tool_timeout_sec = 7200 to allow full-JD runs to complete.
 """
+
 from __future__ import annotations
 
 import sys
@@ -31,10 +32,7 @@ try:
     from mcp.server import MCPServer
     from mcp.types import ToolAnnotations
 except ImportError:
-    print(
-        "❌ 沒裝 mcp v2. 跑: pip install 'mcp>=2.0,<3'\n"
-        "   (或 ./setup.sh 會自動裝)", file=sys.stderr
-    )
+    print("❌ 沒裝 mcp v2. 跑: pip install 'mcp>=2.0,<3'\n   (或 ./setup.sh 會自動裝)", file=sys.stderr)
     raise
 
 from pydantic import BaseModel, Field
@@ -202,14 +200,16 @@ def crawl_jobs(
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
     refetch: Annotated[bool, "Re-fetch JDs ignoring cache"] = False,
 ) -> CrawlResult:
-    return CrawlResult(**crawl_service.crawl_payload(
-        source,
-        range,
-        with_jd=with_jd,
-        max_pages=max_pages,
-        refetch=refetch,
-        runner=_run_subprocess,
-    ))
+    return CrawlResult(
+        **crawl_service.crawl_payload(
+            source,
+            range,
+            with_jd=with_jd,
+            max_pages=max_pages,
+            refetch=refetch,
+            runner=_run_subprocess,
+        )
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -242,21 +242,29 @@ def sync_jobs_to_sheet(
     cfg = _check_sheet_config()
     if isinstance(cfg, dict):
         return SyncResult(
-            ok=False, source=source, range=range, exit_code=-1, dry_run=dry_run,
-            target_configured=False, error_code=cfg["error_code"], message=cfg["message"],
+            ok=False,
+            source=source,
+            range=range,
+            exit_code=-1,
+            dry_run=dry_run,
+            target_configured=False,
+            error_code=cfg["error_code"],
+            message=cfg["message"],
         )
     sa_key_path, sheet_id, gid = cfg
-    return SyncResult(**crawl_service.sheet_sync_payload(
-        source,
-        range,
-        sheet_id=sheet_id,
-        gid=gid,
-        with_jd=with_jd,
-        max_pages=max_pages,
-        refetch=refetch,
-        dry_run=dry_run,
-        runner=_run_subprocess,
-    ))
+    return SyncResult(
+        **crawl_service.sheet_sync_payload(
+            source,
+            range,
+            sheet_id=sheet_id,
+            gid=gid,
+            with_jd=with_jd,
+            max_pages=max_pages,
+            refetch=refetch,
+            dry_run=dry_run,
+            runner=_run_subprocess,
+        )
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -287,7 +295,8 @@ def audit_sheet() -> AuditResult:
         return AuditResult(ok=False, error_code=e.error_code, message=e.message)
     except Exception as e:
         return AuditResult(
-            ok=False, error_code="SHEET_NOT_FOUND",
+            ok=False,
+            error_code="SHEET_NOT_FOUND",
             message=f"could not read sheet: {type(e).__name__}: {e}",
         )
 
@@ -323,7 +332,8 @@ def get_stats() -> StatsResult:
         return StatsResult(ok=False, error_code=e.error_code, message=e.message)
     except Exception as e:
         return StatsResult(
-            ok=False, error_code="SHEET_NOT_FOUND",
+            ok=False,
+            error_code="SHEET_NOT_FOUND",
             message=f"could not read sheet: {type(e).__name__}: {e}",
         )
 

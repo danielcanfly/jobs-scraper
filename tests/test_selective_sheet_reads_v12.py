@@ -69,7 +69,20 @@ def test_blank_detection_uses_bounded_header_and_data_probe():
 def test_row_shape_remains_compatible_with_existing_analysis_columns():
     rows = [
         list(JT.HEADERS),
-        ["New", "", "2026-08-24", "LinkedIn / jobs-scraper", "https://example.com/1", "Acme", "PM", "", "Singapore", "Hybrid", "", *[""] * 16],
+        [
+            "New",
+            "",
+            "2026-08-24",
+            "LinkedIn / jobs-scraper",
+            "https://example.com/1",
+            "Acme",
+            "PM",
+            "",
+            "Singapore",
+            "Hybrid",
+            "",
+            *[""] * 16,
+        ],
     ]
     ws = RecordingWorksheet(rows)
     tracker_rows = tracker_audit.read_tracker_rows(ws)

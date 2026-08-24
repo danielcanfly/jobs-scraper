@@ -1,4 +1,5 @@
 """Region-aware MCP service helpers for Job Tracker v1.1."""
+
 from __future__ import annotations
 
 from typing import Any, Callable

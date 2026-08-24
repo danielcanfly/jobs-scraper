@@ -8,6 +8,7 @@ sg_product_jobs — 多源職缺爬蟲 + Google Sheet 同步
 
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
+
 __version__ = "1.0.0"  # 2026-08-23 重構: 抽 helpers + 拆函數, 行為不變
 
 # 原始 module 註解保留:
@@ -51,6 +52,7 @@ _cc_session = cc_requests.Session(impersonate="chrome")
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()  # 自動讀 .env (沒這個檔也不會 error)
 except ImportError:
     pass  # 沒裝 python-dotenv 也沒關係, 用實際 env 變數
@@ -70,35 +72,35 @@ KEYWORDS = (
     '"product manager" OR "product director" OR "director of product" '
     'OR "head of product" OR "product lead" OR "chief of staff"'
 )
-GEO_ID = "102454443"          # Singapore (default; 跑其他國家用 --location/--geo-id 覆寫)
-LOCATION = "Singapore"         # 對應 GEO_ID 的顯示文字
+GEO_ID = "102454443"  # Singapore (default; 跑其他國家用 --location/--geo-id 覆寫)
+LOCATION = "Singapore"  # 對應 GEO_ID 的顯示文字
 # 常用其他 geoId (驗證過)
 KNOWN_GEO_IDS = {
     "Singapore": ("102454443", "Singapore"),
-    "Taiwan":    ("104187078", "Taiwan"),
+    "Taiwan": ("104187078", "Taiwan"),
     "Hong Kong": ("105015875", "Hong Kong"),  # 待驗證
-    "Japan":     ("105080838", "Japan"),      # 待驗證
-    "Shanghai":  ("107388191", "Shanghai"),   # 中國城市, 30,000+ jobs
+    "Japan": ("105080838", "Japan"),  # 待驗證
+    "Shanghai": ("107388191", "Shanghai"),  # 中國城市, 30,000+ jobs
 }
 # 不放 f_WT → onsite/remote/hybrid 全收
-PAGE_SIZE = 10                # Guest API 實際 page size (不是 25)
+PAGE_SIZE = 10  # Guest API 實際 page size (不是 25)
 
 # time range 預設值 + 各 range 的 MAX_PAGES 建議
 TIME_RANGES = {
-    "1h":  ("r3600",     1),
-    "24h": ("r86400",    4),
-    "3d":  ("r259200",   7),
-    "7d":  ("r604800",   15),
-    "14d": ("r1209600",  30),
-    "21d": ("r1814400",  30),  # 3 週
-    "30d": ("r2592000",  25),
+    "1h": ("r3600", 1),
+    "24h": ("r86400", 4),
+    "3d": ("r259200", 7),
+    "7d": ("r604800", 15),
+    "14d": ("r1209600", 30),
+    "21d": ("r1814400", 30),  # 3 週
+    "30d": ("r2592000", 25),
 }
 # Jora (sg.jora.com) — 2026-08-22 設定, Jora SG 9/9 關閉前抓完
 JORA_TPR = {
-    "1h":  "1h",
+    "1h": "1h",
     "24h": "24h",
-    "3d":  "3d",
-    "7d":  "7d",
+    "3d": "3d",
+    "7d": "7d",
     "14d": "14d",
     "21d": "21d",
     "30d": "30d",
@@ -106,10 +108,10 @@ JORA_TPR = {
 # MAX_PAGES 2026-08-22 確認: 每頁 15 unique jobs (HTML render 兩次), double 但 rebalance
 # Coverage: 1d=47%→71% / 3d=36%→55% / 7d=19%→29% / 14d=14%→23% / 21d=11%→18% / 30d=8.6%→14%
 JORA_MAX_PAGES = {
-    "1h":  5,
+    "1h": 5,
     "24h": 10,
-    "3d":  30,
-    "7d":  30,
+    "3d": 30,
+    "7d": 30,
     "14d": 40,
     "21d": 40,
     "30d": 40,
@@ -143,7 +145,7 @@ SLEEP_MAX = 10.0
 
 # 跨 run 的「已抓過 JD」記錄檔
 SEEN_FILE = "seen_jds.jsonl"
-TZ_LOCAL = timezone(timedelta(hours=7))   # GMT+7
+TZ_LOCAL = timezone(timedelta(hours=7))  # GMT+7
 
 # VISA / SPONSORSHIP 偵測 (三層級)
 # 註：先比 SOFT，再比 HARD，最後比 POSITIVE (第一個命中優先)
@@ -221,50 +223,89 @@ DEFAULT_SHEET_SOURCE = "LinkedIn / Minimax"
 # 可被 SHEET_ID / SHEET_GID env var 覆寫 (見上面 env 讀取區塊)
 SG_RAW_GID = int(SHEET_GID_OVERRIDE) if SHEET_GID_OVERRIDE.isdigit() else 0
 SG_RAW_SHEET_ID = SHEET_ID_OVERRIDE or ""
-SG_RAW_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}"
-    f"/edit?gid={SG_RAW_GID}#gid={SG_RAW_GID}"
-)
+SG_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid={SG_RAW_GID}#gid={SG_RAW_GID}"
 # China-Raw (Shanghai 用的, user 2026-08-21 建)
 CHINA_RAW_GID = 488353479
-CHINA_RAW_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}"
-    f"/edit?gid={CHINA_RAW_GID}#gid={CHINA_RAW_GID}"
-)
+CHINA_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid={CHINA_RAW_GID}#gid={CHINA_RAW_GID}"
 
 # JD 抓取前的標題關鍵字過濾 (省配額)
 # 看到這些詞就跳過不抓 JD；比對用 word-boundary + case-insensitive
 DEFAULT_SKIP_KEYWORDS = [
     # 明確太菜
-    "intern", "internship", "trainee", "graduate", "grad",
-    "entry", "entry level", "entry-level", "junior", "jr",
+    "intern",
+    "internship",
+    "trainee",
+    "graduate",
+    "grad",
+    "entry",
+    "entry level",
+    "entry-level",
+    "junior",
+    "jr",
     # 助理/支援 — 但 "assistant" 有 senior 情境 (AVP/Asst Director), 用 whitelist 蓋過
-    "assistant", "support", "coordinator", "administrator", "clerk", "secretary",
+    "assistant",
+    "support",
+    "coordinator",
+    "administrator",
+    "clerk",
+    "secretary",
     # analyst / marketing track (有 "product" 但其實不是 PM)
-    "product marketing", "product analyst",
+    "product marketing",
+    "product analyst",
     # 測試 / QA
-    "qa", "test", "quality assurance",
+    "qa",
+    "test",
+    "quality assurance",
     # Sales / BD / AE
-    "sales", "business development", "account executive",
+    "sales",
+    "business development",
+    "account executive",
     # specialist 偏 IC
     "specialist",
     # 短/臨時
-    "temp", "temporary", "contract",
+    "temp",
+    "temporary",
+    "contract",
 ]
 
 # Senior whitelist: 某些詞雖然在 skip list, 但若後面接這些 senior 詞就不該被擋
 SENIOR_FOLLOWERS = [
-    "vice president", "director", "general manager", "managing director",
-    "president", "ceo", "cfo", "cto", "cmo", "coo", "chairman", "head",
+    "vice president",
+    "director",
+    "general manager",
+    "managing director",
+    "president",
+    "ceo",
+    "cfo",
+    "cto",
+    "cmo",
+    "coo",
+    "chairman",
+    "head",
     "secretary-general",
 ]
 
 # Senior 標記 (anywhere in title)：當 "specialist" 之類 skip 詞出現時,
 # 若 title 任一位置有這些 senior 詞, 就視為高階不擋
 SENIOR_MARKERS_ANYWHERE = [
-    "avp", "vp", "vice president", "director", "head", "chief",
-    "senior", "staff", "principal", "lead", "managing director",
-    "general manager", "president", "ceo", "cfo", "cto", "cmo", "coo",
+    "avp",
+    "vp",
+    "vice president",
+    "director",
+    "head",
+    "chief",
+    "senior",
+    "staff",
+    "principal",
+    "lead",
+    "managing director",
+    "general manager",
+    "president",
+    "ceo",
+    "cfo",
+    "cto",
+    "cmo",
+    "coo",
     "chairman",
 ]
 
@@ -367,8 +408,9 @@ def load_seen_ids(path: Path = Path(SEEN_FILE)) -> set[tuple[str, str]]:
     return seen
 
 
-def append_seen(job_id: str, jd_hash_val: str, title: str, company: str,
-                path: Path = Path(SEEN_FILE), source: str = "linkedin") -> None:
+def append_seen(
+    job_id: str, jd_hash_val: str, title: str, company: str, path: Path = Path(SEEN_FILE), source: str = "linkedin"
+) -> None:
     record = {
         "job_id": job_id,
         "source": source,  # 2026-08-22 新增, 之後區分 LinkedIn / Jora / JobStreet
@@ -381,8 +423,7 @@ def append_seen(job_id: str, jd_hash_val: str, title: str, company: str,
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def load_jd_cache_from_jsons(pattern: str = "*_product_jobs_*_jd.json",
-                               skip_files: set[str] | None = None) -> dict:
+def load_jd_cache_from_jsons(pattern: str = "*_product_jobs_*_jd.json", skip_files: set[str] | None = None) -> dict:
     """
     從所有 *_jd.json 檔案載入 JD cache: {(source, job_id): {jd_text, jd_lines, jd_hash, ...}}。
     用作 enrich_with_jd 的跨 run cache 來源（避免已抓過的 JD 重抓）。
@@ -441,10 +482,7 @@ def reset_seen(path: Path = Path(SEEN_FILE)) -> int:
 # ─────────────────────────────────────────────────────────────
 # Visa / Sponsorship 偵測 (K 欄, 三層級)
 # ─────────────────────────────────────────────────────────────
-_VISA_RES = {
-    level: re.compile("|".join(pats), re.IGNORECASE)
-    for level, pats in VISA_PATTERNS.items()
-}
+_VISA_RES = {level: re.compile("|".join(pats), re.IGNORECASE) for level, pats in VISA_PATTERNS.items()}
 
 
 def detect_visa_signal(jd_text: str) -> str:
@@ -473,6 +511,7 @@ def extract_work_mode(jd_text: str, title: str = "") -> str:
       3) 中文常見 "远程办公" / "混合办公" / "现场办公" / "驻场"
       4) 全文 fallback "fully remote" / "hybrid working" / "onsite role"
     """
+
     # helper: 把 match 結果標準化 ("on-site" / "onsite" / "in office" → "Onsite"; 其他 capitalize)
     def _norm(v: str) -> str:
         v = v.lower().strip()
@@ -610,12 +649,15 @@ def parse_sheet_row_to_key(row: list[str]) -> tuple[str, str] | None:
     return None
 
 
-def push_to_sheet(jobs: list[dict], sheet_url: str,
-                  sa_key_path: str = SHEET_SA_KEY,
-                  source: str = DEFAULT_SHEET_SOURCE,
-                  dry_run: bool = False,
-                  gid: str | int | None = None,
-                  location: str = LOCATION) -> dict:
+def push_to_sheet(
+    jobs: list[dict],
+    sheet_url: str,
+    sa_key_path: str = SHEET_SA_KEY,
+    source: str = DEFAULT_SHEET_SOURCE,
+    dry_run: bool = False,
+    gid: str | int | None = None,
+    location: str = LOCATION,
+) -> dict:
     """
     把 jobs 寫到 Google Sheet。
     欄位對應: A=New, C=今天, D=source, E=API URL hyperlink, F=公司, G=職稱,
@@ -650,7 +692,7 @@ def push_to_sheet(jobs: list[dict], sheet_url: str,
         print(f"  共 {len(jobs)} 筆準備寫入 (after skip/dedup/visa)")
         for j in jobs[:3]:
             e_preview = build_e_formula(j.get("source", "linkedin"), j.get("job_id", ""), j.get("url", ""))
-            print(f"    [preview] title={j.get('title','')[:35]:35}  E={e_preview}")
+            print(f"    [preview] title={j.get('title', '')[:35]:35}  E={e_preview}")
         return {"written": 0, "skipped_dup": 0, "dry_run": True}
 
     # 1) 認證 + 開 sheet
@@ -717,8 +759,7 @@ def _load_sheet_keys(existing: list[list[str]]) -> tuple[set[tuple[str, str]], i
     return existing_keys, next_row
 
 
-def _build_sheet_row(job: dict, source_label: str, location: str,
-                      existing_keys: set[tuple[str, str]]) -> list | None:
+def _build_sheet_row(job: dict, source_label: str, location: str, existing_keys: set[tuple[str, str]]) -> list | None:
     """把一個 job dict 構造為 11 欄 sheet row。
 
     Returns None 表示要跳過 (dedup 命中 或 沒 JD); 否則回傳 11 欄 list。
@@ -742,22 +783,21 @@ def _build_sheet_row(job: dict, source_label: str, location: str,
     work_mode = job.get("work_mode", "") or extract_work_mode(jd_text, job.get("title", ""))
     e_formula = build_e_formula(job_source, job_id, job.get("url", ""))
     return [
-        "New",                                              # A
-        "",                                                 # B (留空)
-        date.today().isoformat(),                           # C
-        source_label,                                       # D
-        e_formula,                                          # E (含超連結)
-        job.get("company", ""),                            # F
-        job.get("title", ""),                              # G
-        jd_oneline,                                         # H (單行, 自動裁切)
-        job.get("location", ""),                           # I
-        work_mode,                                          # J (Remote/Hybrid/Onsite)
-        visa,                                               # K
+        "New",  # A
+        "",  # B (留空)
+        date.today().isoformat(),  # C
+        source_label,  # D
+        e_formula,  # E (含超連結)
+        job.get("company", ""),  # F
+        job.get("title", ""),  # G
+        jd_oneline,  # H (單行, 自動裁切)
+        job.get("location", ""),  # I
+        work_mode,  # J (Remote/Hybrid/Onsite)
+        visa,  # K
     ]
 
 
-def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
-                          skipped_dup: int = 0, skipped_no_jd: int = 0) -> dict:
+def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list], skipped_dup: int = 0, skipped_no_jd: int = 0) -> dict:
     """把 new_rows 寫到 sheet, 回傳 stats dict (跟原本 push_to_sheet 一樣格式)。
 
     三段式寫入 (防 F10 公式注入，且 intentional formula 最後才啟用):
@@ -821,7 +861,11 @@ _clean = linkedin_source._clean
 
 def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
     return linkedin_source.build_list_url(
-        tpr, start, location, geo_id, keywords=KEYWORDS,
+        tpr,
+        start,
+        location,
+        geo_id,
+        keywords=KEYWORDS,
     )
 
 
@@ -831,7 +875,12 @@ def parse_list_page(html: str) -> list[dict]:
 
 def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
     return linkedin_source.fetch_list_page(
-        _cc_session, tpr, start, location, geo_id, keywords=KEYWORDS,
+        _cc_session,
+        tpr,
+        start,
+        location,
+        geo_id,
+        keywords=KEYWORDS,
     )
 
 
@@ -841,6 +890,7 @@ def build_jd_url(job_id: str) -> str:
 
 def fetch_jd(job_id: str) -> dict:
     return linkedin_source.fetch_jd(_cc_session, job_id)
+
 
 # ─────────────────────────────────────────────────────────────
 # 主程式
@@ -858,19 +908,21 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
 
     for p in range(max_pages):
         start = p * PAGE_SIZE
-        print(f"\n  [list page {p+1}] start={start}")
+        print(f"\n  [list page {p + 1}] start={start}")
         try:
             html = fetch_list_page(tpr, start, location, geo_id)
         except Exception as e:
             print(f"            FAIL: {type(e).__name__}: {e}")
             return all_jobs
-        Path(f"raw_list_{p+1}.html").write_text(html)
+        Path(f"raw_list_{p + 1}.html").write_text(html)
         jobs = parse_list_page(html)
         new_jobs = [j for j in jobs if j["job_id"] not in seen]
         for j in new_jobs:
             seen.add(j["job_id"])
             all_jobs.append(j)
-        print(f"            收 {len(jobs)}, 新增 {len(new_jobs)}, 重複 {len(jobs)-len(new_jobs)}, 累計 {len(all_jobs)}")
+        print(
+            f"            收 {len(jobs)}, 新增 {len(new_jobs)}, 重複 {len(jobs) - len(new_jobs)}, 累計 {len(all_jobs)}"
+        )
         if not new_jobs or len(jobs) < PAGE_SIZE:
             print("            到底了")
             break
@@ -884,8 +936,7 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
 # Jora compatibility surface
 # Implementation owner: jobs_scraper.sources.jora
 # ─────────────────────────────────────────────────────────────
-def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD,
-                        location: str = JORA_LOCATION) -> str:
+def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD, location: str = JORA_LOCATION) -> str:
     return jora_source.build_list_url(jora_tpr, page, keyword, location)
 
 
@@ -897,11 +948,11 @@ def fetch_jora_jd(url: str) -> dict:
     return jora_source.fetch_jd(_cc_session, url, sleep_fn=time.sleep)
 
 
-def crawl_jora_list(tpr: str, max_pages: int,
-                    keyword: str = JORA_KEYWORD,
-                    location: str = JORA_LOCATION) -> list[dict]:
+def crawl_jora_list(tpr: str, max_pages: int, keyword: str = JORA_KEYWORD, location: str = JORA_LOCATION) -> list[dict]:
     return jora_source.crawl_list(
-        _cc_session, tpr, max_pages,
+        _cc_session,
+        tpr,
+        max_pages,
         tpr_map=JORA_TPR,
         keyword=keyword,
         location=location,
@@ -916,10 +967,14 @@ def crawl_jora_list(tpr: str, max_pages: int,
 JOBSTREET_DETAIL_QUERY = jobstreet_source.JOBSTREET_DETAIL_QUERY
 
 
-def build_jobstreet_list_url(keyword: str, page: int, daterange: str,
-                              worktype: str = JOBSTREET_WORKTYPE_FT,
-                              where: str = JOBSTREET_LOCATION,
-                              page_size: int = 20) -> str:
+def build_jobstreet_list_url(
+    keyword: str,
+    page: int,
+    daterange: str,
+    worktype: str = JOBSTREET_WORKTYPE_FT,
+    where: str = JOBSTREET_LOCATION,
+    page_size: int = 20,
+) -> str:
     return jobstreet_source.build_list_url(
         keyword,
         page,
@@ -944,9 +999,9 @@ def fetch_jobstreet_jd(job_id: str) -> dict:
     )
 
 
-def crawl_jobstreet_list(daterange: str, max_pages: int,
-                          keywords: list[str] | None = None,
-                          worktype: str = JOBSTREET_WORKTYPE_FT) -> list[dict]:
+def crawl_jobstreet_list(
+    daterange: str, max_pages: int, keywords: list[str] | None = None, worktype: str = JOBSTREET_WORKTYPE_FT
+) -> list[dict]:
     return jobstreet_source.crawl_list(
         _cc_session,
         daterange,
@@ -960,10 +1015,13 @@ def crawl_jobstreet_list(daterange: str, max_pages: int,
     )
 
 
-def enrich_with_jd(jobs: list[dict], skip_pat: re.Pattern | None = None,
-                    seen_ids: set[tuple[str, str]] | None = None,
-                    refetch: bool = False,
-                    json_cache: dict | None = None) -> tuple[list[dict], dict]:
+def enrich_with_jd(
+    jobs: list[dict],
+    skip_pat: re.Pattern | None = None,
+    seen_ids: set[tuple[str, str]] | None = None,
+    refetch: bool = False,
+    json_cache: dict | None = None,
+) -> tuple[list[dict], dict]:
     """
     抓 JD。命中 skip 關鍵字的不抓；已抓過的也不抓。
 
@@ -1056,7 +1114,9 @@ def enrich_with_jd(jobs: list[dict], skip_pat: re.Pattern | None = None,
             if result.get("location"):
                 j2["location"] = result["location"]
             stats["fetched"] += 1
-            print(f"            ✓ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={j2.get('company','')[:30]}")
+            print(
+                f"            ✓ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={j2.get('company', '')[:30]}"
+            )
             # 記到 seen file (只在 seen 沒記錄時 append, 避免重複行)
             # refetch=True 時 seen_ids 會是空 set → 全部都會 append (更新 hash/timestamp)
             seen_key = (src, jid)
@@ -1078,38 +1138,52 @@ def enrich_with_jd(jobs: list[dict], skip_pat: re.Pattern | None = None,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("range", nargs="?", default=DEFAULT_TPR,
-                    choices=list(TIME_RANGES.keys()),
-                    help=f"time range (default {DEFAULT_TPR})")
-    ap.add_argument("--source", default="linkedin", choices=["linkedin", "jora", "jobstreet"],
-                    help="資料來源 (default: linkedin). jora=sg.jora.com (HTML parse), jobstreet=sg.jobstreet.com (API+GraphQL)")
-    ap.add_argument("--location", default=None,
-                    help=f"目標城市/國家 (default: {LOCATION}); 已知 preset: {', '.join(KNOWN_GEO_IDS.keys())}")
-    ap.add_argument("--geo-id", default=None,
-                    help=f"LinkedIn geoId (default: {GEO_ID}); 跟 --location 一起給")
-    ap.add_argument("--with-jd", action="store_true",
-                    help="抓取每個職缺的 JD 全文 (會增加不少時間)")
-    ap.add_argument("--max-pages", type=int, default=None,
-                    help="override 預設頁數上限")
-    ap.add_argument("--skip-keywords", nargs="*", default=None,
-                    help=f"JD 階段要跳過的標題關鍵字（覆寫預設）。"
-                         f"預設: {' '.join(DEFAULT_SKIP_KEYWORDS)}")
-    ap.add_argument("--no-skip", action="store_true",
-                    help="完全跳過 skip 過濾，全部都抓 JD")
-    ap.add_argument("--refetch", action="store_true",
-                    help="忽略 seen_jds.jsonl，重新抓所有 JD")
-    ap.add_argument("--reset-seen", action="store_true",
-                    help="刪掉 seen_jds.jsonl 後結束（清空紀錄）")
-    ap.add_argument("--seen-file", default=SEEN_FILE,
-                    help=f"已抓 JD 記錄檔路徑 (default: {SEEN_FILE})")
-    ap.add_argument("--to-sheet", default=None, metavar="URL_OR_ID",
-                    help=f"抓完後把結果 append 到 Google Sheet (URL 或 ID; 不帶 gid 會報錯, 請用 '{SG_RAW_URL}')")
-    ap.add_argument("--gid", default=None, type=int,
-                    help=f"指定要寫的 worksheet gid (e.g. {SG_RAW_GID}); 不指定時用 URL 內 #gid=")
-    ap.add_argument("--sheet-source", default=DEFAULT_SHEET_SOURCE,
-                    help=f"寫入 Sheet 的 Source 欄位值 (default: {DEFAULT_SHEET_SOURCE})")
-    ap.add_argument("--dry-run-sheet", action="store_true",
-                    help="跟 --to-sheet 一起用，只印將寫入什麼、不真的寫")
+    ap.add_argument(
+        "range",
+        nargs="?",
+        default=DEFAULT_TPR,
+        choices=list(TIME_RANGES.keys()),
+        help=f"time range (default {DEFAULT_TPR})",
+    )
+    ap.add_argument(
+        "--source",
+        default="linkedin",
+        choices=["linkedin", "jora", "jobstreet"],
+        help="資料來源 (default: linkedin). jora=sg.jora.com (HTML parse), jobstreet=sg.jobstreet.com (API+GraphQL)",
+    )
+    ap.add_argument(
+        "--location",
+        default=None,
+        help=f"目標城市/國家 (default: {LOCATION}); 已知 preset: {', '.join(KNOWN_GEO_IDS.keys())}",
+    )
+    ap.add_argument("--geo-id", default=None, help=f"LinkedIn geoId (default: {GEO_ID}); 跟 --location 一起給")
+    ap.add_argument("--with-jd", action="store_true", help="抓取每個職缺的 JD 全文 (會增加不少時間)")
+    ap.add_argument("--max-pages", type=int, default=None, help="override 預設頁數上限")
+    ap.add_argument(
+        "--skip-keywords",
+        nargs="*",
+        default=None,
+        help=f"JD 階段要跳過的標題關鍵字（覆寫預設）。預設: {' '.join(DEFAULT_SKIP_KEYWORDS)}",
+    )
+    ap.add_argument("--no-skip", action="store_true", help="完全跳過 skip 過濾，全部都抓 JD")
+    ap.add_argument("--refetch", action="store_true", help="忽略 seen_jds.jsonl，重新抓所有 JD")
+    ap.add_argument("--reset-seen", action="store_true", help="刪掉 seen_jds.jsonl 後結束（清空紀錄）")
+    ap.add_argument("--seen-file", default=SEEN_FILE, help=f"已抓 JD 記錄檔路徑 (default: {SEEN_FILE})")
+    ap.add_argument(
+        "--to-sheet",
+        default=None,
+        metavar="URL_OR_ID",
+        help=f"抓完後把結果 append 到 Google Sheet (URL 或 ID; 不帶 gid 會報錯, 請用 '{SG_RAW_URL}')",
+    )
+    ap.add_argument(
+        "--gid", default=None, type=int, help=f"指定要寫的 worksheet gid (e.g. {SG_RAW_GID}); 不指定時用 URL 內 #gid="
+    )
+    ap.add_argument(
+        "--sheet-source",
+        default=DEFAULT_SHEET_SOURCE,
+        help=f"寫入 Sheet 的 Source 欄位值 (default: {DEFAULT_SHEET_SOURCE})",
+    )
+    ap.add_argument("--dry-run-sheet", action="store_true", help="跟 --to-sheet 一起用，只印將寫入什麼、不真的寫")
     ap.add_argument("--json-summary", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
@@ -1175,7 +1249,9 @@ def main():
         print(f"==== Jora Jobs / {location} / {args.range} / a={jora_tpr} ====")
     else:
         js_tpr = JOBSTREET_TPR[args.range]
-        print(f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ====")
+        print(
+            f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ===="
+        )
     print(f"==== MAX_PAGES = {max_pages}  (隨機 sleep {SLEEP_MIN}-{SLEEP_MAX}s) ====\n")
     if args.with_jd and skip_pat:
         print(f"==== JD skip 規則: {skip_pat.pattern} ====")
@@ -1200,19 +1276,33 @@ def main():
     if not jobs:
         print("\n無資料，結束。")
         if args.json_summary:
-            print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
-                "jobs_found": 0, "jobs_enriched": 0, "jobs_failed": 0,
-                "output_file": None, "written": 0, "skipped_dup": 0,
-                "skipped_no_jd": 0,
-            }, ensure_ascii=False, separators=(",", ":")))
+            print(
+                "JOBS_SCRAPER_SUMMARY="
+                + json.dumps(
+                    {
+                        "jobs_found": 0,
+                        "jobs_enriched": 0,
+                        "jobs_failed": 0,
+                        "output_file": None,
+                        "written": 0,
+                        "skipped_dup": 0,
+                        "skipped_no_jd": 0,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
         return
 
     # 1.5) 載入 JD cache (跨 run 從 *_jd.json 抓)，跳過當前將輸出的檔
     suffix = f"_{args.range}{'_jd' if args.with_jd else ''}"
     # 檔名以 source + location 為 prefix (sg_product_jobs, tw_, jora_sg_), 避免跨源/跨國 cache 污染
-    location_short = location.lower().replace(' ', '')
+    location_short = location.lower().replace(" ", "")
     short_names = {
-        "singapore": "sg", "taiwan": "tw", "hongkong": "hk", "japan": "jp",
+        "singapore": "sg",
+        "taiwan": "tw",
+        "hongkong": "hk",
+        "japan": "jp",
     }
     loc_prefix = short_names.get(location_short, location_short)
     # 各 source cache 獨立 prefix (sg_, jora_sg_, jobstreet_sg_), 避免跨源/跨國 cache 污染
@@ -1231,16 +1321,18 @@ def main():
     # 2) 抓 JD (可選)
     stats = None
     if args.with_jd:
-        jobs, stats = enrich_with_jd(jobs, skip_pat=skip_pat,
-                                    seen_ids=seen_ids, refetch=args.refetch,
-                                    json_cache=json_cache)
+        jobs, stats = enrich_with_jd(
+            jobs, skip_pat=skip_pat, seen_ids=seen_ids, refetch=args.refetch, json_cache=json_cache
+        )
 
     # 3) 存檔
     out.write_text(json.dumps(jobs, ensure_ascii=False, indent=2))
     print(f"\n==== 寫到 {out.resolve()} ({len(jobs)} 筆) ====")
     if stats:
-        print(f"     JD: skip={stats['skipped']}  cached={stats['cached']}  "
-              f"fetched={stats['fetched']}  failed={stats['failed']}")
+        print(
+            f"     JD: skip={stats['skipped']}  cached={stats['cached']}  "
+            f"fetched={stats['fetched']}  failed={stats['failed']}"
+        )
     if seen_path.exists() and args.with_jd:
         total = sum(1 for _ in open(seen_path, "r", encoding="utf-8") if _.strip())
         print(f"     seen file: {seen_path} ({total} 筆累計)")
@@ -1254,7 +1346,8 @@ def main():
         else:
             print(f"\n==== 寫到 Google Sheet: {args.to_sheet[:50]}... ====")
             sheet_stats = push_to_sheet(
-                jobs, args.to_sheet,
+                jobs,
+                args.to_sheet,
                 sa_key_path=SHEET_SA_KEY,
                 source=args.sheet_source,
                 dry_run=args.dry_run_sheet,
@@ -1264,15 +1357,22 @@ def main():
             print(f"\n  結果: {sheet_stats}")
 
     if args.json_summary:
-        print("JOBS_SCRAPER_SUMMARY=" + json.dumps({
-            "jobs_found": len(jobs),
-            "jobs_enriched": ((stats.get("cached", 0) + stats.get("fetched", 0)) if stats else 0),
-            "jobs_failed": (stats.get("failed", 0) if stats else 0),
-            "output_file": str(out.resolve()),
-            "written": int(sheet_stats.get("written", 0)),
-            "skipped_dup": int(sheet_stats.get("skipped_dup", 0)),
-            "skipped_no_jd": int(sheet_stats.get("skipped_no_jd", 0)),
-        }, ensure_ascii=False, separators=(",", ":")))
+        print(
+            "JOBS_SCRAPER_SUMMARY="
+            + json.dumps(
+                {
+                    "jobs_found": len(jobs),
+                    "jobs_enriched": ((stats.get("cached", 0) + stats.get("fetched", 0)) if stats else 0),
+                    "jobs_failed": (stats.get("failed", 0) if stats else 0),
+                    "output_file": str(out.resolve()),
+                    "written": int(sheet_stats.get("written", 0)),
+                    "skipped_dup": int(sheet_stats.get("skipped_dup", 0)),
+                    "skipped_no_jd": int(sheet_stats.get("skipped_no_jd", 0)),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
 
 
 if __name__ == "__main__":

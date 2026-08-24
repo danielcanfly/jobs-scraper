@@ -12,6 +12,7 @@ v1.1 Sheet contract:
 - GSPREAD_SA_KEY_PATH + SHEET_ID are required for Sheet tools.
 - SHEET_GID is legacy-only for server.py/direct CLI and is not required by server_v1_1.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -61,7 +62,10 @@ def check_files() -> list[tuple[str, str]]:
         (REPO_ROOT / "LICENSE", "LICENSE"),
         (REPO_ROOT / ".gitignore", ".gitignore"),
         (REPO_ROOT / "skills" / "jobs-scraper" / "SKILL.md", "skills/jobs-scraper/SKILL.md"),
-        (REPO_ROOT / "skills" / "jobs-scraper" / "references" / "JOB_TRACKER_SCHEMA.md", "skills/jobs-scraper/references/JOB_TRACKER_SCHEMA.md"),
+        (
+            REPO_ROOT / "skills" / "jobs-scraper" / "references" / "JOB_TRACKER_SCHEMA.md",
+            "skills/jobs-scraper/references/JOB_TRACKER_SCHEMA.md",
+        ),
         (REPO_ROOT / ".codex-plugin" / "plugin.json", ".codex-plugin/plugin.json"),
     ]
     for path, name in required:
@@ -119,6 +123,7 @@ def check_no_secrets_in_git() -> tuple[str, str]:
     """檢查 .env / service-account secret 沒被 git 追蹤。"""
     try:
         import subprocess
+
         out = subprocess.run(
             ["git", "ls-files", "--error-unmatch", ".env", ".secrets/gsheet-sa.json"],
             cwd=str(REPO_ROOT),

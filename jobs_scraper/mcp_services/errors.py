@@ -1,4 +1,5 @@
 """Internal typed service errors for MCP service helpers."""
+
 from __future__ import annotations
 
 

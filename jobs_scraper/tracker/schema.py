@@ -1,4 +1,5 @@
 """Pure Job Tracker schema, region, and header contract helpers."""
+
 from __future__ import annotations
 
 import re
@@ -75,14 +76,23 @@ VALIDATIONS: dict[int, tuple[str, ...]] = {
     1: ("P0", "P1", "P2", "Low"),
     9: ("Remote", "Hybrid", "Onsite", "Unknown"),
     12: (
-        "AI PM", "Growth PM", "Travel / Hospitality", "Founder / 0→1",
-        "Strategy Ops", "Platform / Workflow", "General PM", "Web3 / Fintech",
+        "AI PM",
+        "Growth PM",
+        "Travel / Hospitality",
+        "Founder / 0→1",
+        "Strategy Ops",
+        "Platform / Workflow",
+        "General PM",
+        "Web3 / Fintech",
     ),
     14: ("強烈值得投", "值得投", "邊緣", "不太建議", "不值得投"),
     15: ("Apply", "Maybe", "Skip"),
     16: (
-        "Do not apply", "Quick apply only", "Apply with tailored CV",
-        "Tailored CV + recruiter message", "Tailored CV + hiring manager outreach",
+        "Do not apply",
+        "Quick apply only",
+        "Apply with tailored CV",
+        "Tailored CV + recruiter message",
+        "Tailored CV + hiring manager outreach",
     ),
 }
 
@@ -91,13 +101,33 @@ DEFAULT_REGIONS = RP.DEFAULT_REGIONS
 DEFAULT_SHEET_TITLES = {"sheet1", "工作表1", "工作表 1"}
 
 COLUMN_WIDTHS = (
-    111, 111,
-    124, 124, 124,
-    172, 172, 172,
-    137, 137, 137, 137, 137,
-    133, 133, 133, 133,
-    109, 109, 109, 109, 109, 109, 109, 109,
-    286, 286,
+    111,
+    111,
+    124,
+    124,
+    124,
+    172,
+    172,
+    172,
+    137,
+    137,
+    137,
+    137,
+    137,
+    133,
+    133,
+    133,
+    133,
+    109,
+    109,
+    109,
+    109,
+    109,
+    109,
+    109,
+    109,
+    286,
+    286,
 )
 HEADER_HEIGHT_PX = 52
 

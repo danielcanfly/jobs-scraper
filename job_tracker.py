@@ -1,4 +1,5 @@
 """Compatibility surface for portable Google Sheet Job Tracker v1.1.0."""
+
 from __future__ import annotations
 
 import os
