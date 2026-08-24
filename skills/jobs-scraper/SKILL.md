@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.1.1"
+  version: "1.2.0"
 ---
 
 # Jobs Scraper

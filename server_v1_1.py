@@ -1,4 +1,4 @@
-"""jobs-scraper MCP v1.1.1: portable Job Tracker + region-aware Sheet tools."""
+"""jobs-scraper MCP v1.2.0: portable Job Tracker + region-aware Sheet tools."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ class RegionStatsResult(BaseModel):
 
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.1.1",
+    version="1.2.0",
     description=(
         "Multi-source PM job scraper with a portable Google Sheet Job Tracker. "
         "initialize_job_tracker creates Region-Raw / Region-Selected pairs using the frozen A:AA schema. "
