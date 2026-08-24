@@ -43,6 +43,7 @@ from urllib.parse import urlencode
 from curl_cffi import requests as cc_requests
 from scrapling.parser import Adaptor
 from bs4 import BeautifulSoup
+from jobs_scraper.sources import linkedin as linkedin_source
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
 _cc_session = cc_requests.Session(impersonate="chrome")
@@ -839,141 +840,42 @@ def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list],
 
 
 # ─────────────────────────────────────────────────────────────
-# 列表頁
+# LinkedIn compatibility surface
+# Implementation owner: jobs_scraper.sources.linkedin
 # ─────────────────────────────────────────────────────────────
-JOB_CARD_SEL = "div.base-card"
-TITLE_SEL    = ".base-search-card__title"
-COMPANY_SEL  = "a.hidden-nested-link"
-LOC_SEL      = ".job-search-card__location"
-TIME_SEL     = "time"
-LINK_SEL     = "a.base-card__full-link"
-
-
-def _clean(text_list) -> str:
-    return " ".join(t.strip() for t in text_list if t and t.strip()).strip()
+JOB_CARD_SEL = linkedin_source.JOB_CARD_SEL
+TITLE_SEL = linkedin_source.TITLE_SEL
+COMPANY_SEL = linkedin_source.COMPANY_SEL
+LOC_SEL = linkedin_source.LOC_SEL
+TIME_SEL = linkedin_source.TIME_SEL
+LINK_SEL = linkedin_source.LINK_SEL
+JD_DESC_SEL = linkedin_source.JD_DESC_SEL
+JD_BLOCK_SEL = linkedin_source.JD_BLOCK_SEL
+_clean = linkedin_source._clean
 
 
 def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
-    params = {
-        "keywords": KEYWORDS,
-        "location": location,
-        "geoId": geo_id,
-        "f_TPR": tpr,
-        "sortBy": "DD",
-        "start": str(start),
-    }
-    return (
-        "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-        "?" + urlencode(params)
+    return linkedin_source.build_list_url(
+        tpr, start, location, geo_id, keywords=KEYWORDS,
     )
 
 
 def parse_list_page(html: str) -> list[dict]:
-    page = Adaptor(html)
-    jobs = []
-    for card in page.css(JOB_CARD_SEL):
-        urn = (card.attrib.get("data-entity-urn") or "").strip()
-        job_id = urn.rsplit(":", 1)[-1] if urn else ""
-
-        title   = _clean(card.css(TITLE_SEL + "::text").getall())
-        company = _clean(card.css(COMPANY_SEL + "::text").getall())
-        loc     = _clean(card.css(LOC_SEL + "::text").getall())
-
-        time_node = card.css(TIME_SEL)
-        posted_at = ""
-        posted_ago = ""
-        if time_node:
-            t = time_node[0]
-            posted_at  = (t.attrib.get("datetime") or "").strip()
-            posted_ago = _clean(t.css("::text").getall())
-
-        link_nodes = card.css(LINK_SEL)
-        href = (link_nodes[0].attrib.get("href") if link_nodes else "") or ""
-
-        if not job_id and not title:
-            continue
-        jobs.append({
-            "job_id": job_id,
-            "title": title,
-            "company": company,
-            "location": loc,
-            "posted_at": posted_at,
-            "posted_ago": posted_ago,
-            "url": href or f"https://www.linkedin.com/jobs/view/{job_id}",
-            "source": "linkedin",  # 讓 push_to_sheet / enrich_with_jd 知道
-        })
-    return jobs
+    return linkedin_source.parse_list_page(html)
 
 
 def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
-    r = _cc_session.get(
-        build_list_url(tpr, start, location, geo_id),
-        impersonate="chrome",
-        timeout=20,
-        headers={"Accept-Language": "en-US,en;q=0.9"},
+    return linkedin_source.fetch_list_page(
+        _cc_session, tpr, start, location, geo_id, keywords=KEYWORDS,
     )
-    r.raise_for_status()
-    return r.text
-
-
-# ─────────────────────────────────────────────────────────────
-# JD 抓取 (可選)
-# ─────────────────────────────────────────────────────────────
-JD_DESC_SEL = "div.description__text"
-JD_BLOCK_SEL = "div.description__text p, div.description__text li, " \
-               "div.description__text h1, div.description__text h2, " \
-               "div.description__text h3, div.description__text h4, " \
-               "div.description__text strong, div.description__text span"
 
 
 def build_jd_url(job_id: str) -> str:
-    return f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+    return linkedin_source.build_jd_url(job_id)
 
 
 def fetch_jd(job_id: str) -> dict:
-    """抓單一職缺的 JD 純文字。"""
-    try:
-        r = _cc_session.get(
-            build_jd_url(job_id),
-            impersonate="chrome",
-            timeout=20,
-            headers={"Accept-Language": "en-US,en;q=0.9"},
-        )
-    except Exception as e:
-        return {"jd_text": None, "jd_html": None, "error": f"{type(e).__name__}: {e}"}
-
-    if r.status_code == 429:
-        return {"jd_text": None, "jd_html": None, "error": "429 rate limited"}
-    if r.status_code != 200:
-        return {"jd_text": None, "jd_html": None, "error": f"HTTP {r.status_code}"}
-
-    ap = Adaptor(r.text)
-    desc_nodes = ap.css(JD_DESC_SEL)
-    if not desc_nodes:
-        return {"jd_text": None, "jd_html": None, "error": "no description node found"}
-
-    desc = desc_nodes[0]
-    # ★ 抓全部 ::text (包含裸文字節點，不只 p/li/h*/strong)
-    all_text = desc.css("::text").getall()
-    lines = []
-    for t in all_text:
-        t = t.strip()
-        if t and len(t) > 1:
-            lines.append(t)
-    # 結構化版本 (給想看分段的)
-    structured_lines = []
-    for p in desc.css(JD_BLOCK_SEL):
-        t = (p.css("::text").get() or "").strip()
-        if t and len(t) > 1:
-            structured_lines.append(t)
-
-    return {
-        "jd_text": "\n".join(lines) if lines else None,
-        "jd_lines": structured_lines if structured_lines else lines,
-        "jd_html": None,
-        "error": None,
-    }
-
+    return linkedin_source.fetch_jd(_cc_session, job_id)
 
 # ─────────────────────────────────────────────────────────────
 # 主程式
