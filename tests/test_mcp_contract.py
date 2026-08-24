@@ -54,7 +54,6 @@ def test_dependency_pinned_to_v2():
     # pyproject: same check
     assert re.search(r'"?mcp[><=,\s0-9.]*2(\.0+)?[,\s<>=]"?', pyproject), "pyproject.toml must pin mcp>=2"
     # import the actual installed package to confirm v2
-    import mcp
     from importlib.metadata import version
     v = version("mcp")
     assert v.startswith("2."), f"installed mcp is not v2: {v}"
@@ -163,6 +162,7 @@ def test_all_canonical_tools_have_output_schema():
 # ── Q27: invalid source rejected before subprocess execution ───────
 def test_invalid_source_rejected_by_pydantic():
     from pydantic import ValidationError
+
     from server import CrawlResult
     try:
         CrawlResult(
@@ -177,6 +177,7 @@ def test_invalid_source_rejected_by_pydantic():
 # ── Q28: invalid range rejected by pydantic ────────────────────────
 def test_invalid_range_rejected_by_pydantic():
     from pydantic import ValidationError
+
     from server import CrawlResult
     try:
         CrawlResult(
@@ -191,6 +192,7 @@ def test_invalid_range_rejected_by_pydantic():
 # ── Q29: subprocess uses sys.executable / list args / cwd ──────────
 def test_subprocess_uses_sys_executable_and_cwd():
     import inspect
+
     import runtime_core as RT
     import server
 
@@ -243,7 +245,6 @@ def test_server_instructions_present_and_explicit():
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, fn) for n, fn in globals().items() if n.startswith("test_") and callable(fn)]
     n_pass = n_fail = 0
     for n, fn in tests:

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -165,12 +164,13 @@ def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
         def get_worksheet_by_id(self, gid):
             return _FakeWS()
 
-    import gspread
-    monkey_gspread_authorize = lambda creds: _FakeGC()
-    gspread_mod = sys.modules.get("gspread")
-    if gspread_mod is not None:
-        saved = gspread_mod.authorize
-        gspread_mod.authorize = monkey_gspread_authorize
+    gspread_mod = importlib.import_module("gspread")
+
+    def monkey_gspread_authorize(creds):
+        return _FakeGC()
+
+    saved = gspread_mod.authorize
+    gspread_mod.authorize = monkey_gspread_authorize
     try:
         from google.oauth2 import service_account as sa_mod
         sa_mod.Credentials = _FakeCreds
@@ -179,8 +179,7 @@ def test_read_sheet_rows_uses_readonly_scope(monkeypatch=None):
             f"read tool leaked write scope: {captured.get('scopes')}"
         assert rows == [["a", "b"]]
     finally:
-        if gspread_mod is not None and "saved" in dir():
-            gspread_mod.authorize = saved
+        gspread_mod.authorize = saved
 
 
 # ── Q69: not writing to the author's production Sheet during test ───
@@ -191,7 +190,6 @@ def test_tests_do_not_touch_production_sheet():
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, fn) for n, fn in globals().items() if n.startswith("test_") and callable(fn)]
     n_pass = n_fail = 0
     for n, fn in tests:

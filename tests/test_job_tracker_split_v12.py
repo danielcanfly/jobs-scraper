@@ -5,7 +5,6 @@ import importlib
 import job_tracker as JT
 from jobs_scraper.tracker import audit, client, initializer, schema
 
-
 EXPECTED_PUBLIC_NAMES = {
     "Any",
     "COLUMN_WIDTHS",

@@ -25,7 +25,7 @@ tool_timeout_sec = 7200 to allow full-JD runs to complete.
 from __future__ import annotations
 
 import sys
-from typing import Annotated, Any, Literal
+from typing import Annotated
 
 try:
     from mcp.server import MCPServer
@@ -41,9 +41,7 @@ from pydantic import BaseModel, Field
 
 import runtime_core as RT
 from jobs_scraper.mcp_services import crawl as crawl_service
-from jobs_scraper.mcp_services import errors
-from jobs_scraper.mcp_services import sheet_analysis
-from jobs_scraper.mcp_services import sheet_config
+from jobs_scraper.mcp_services import errors, sheet_analysis, sheet_config
 
 # ──────────────────────────────────────────────────────────────────────
 # Paths / config

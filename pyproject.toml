@@ -35,6 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "ruff>=0.6.0",
 ]
 
 [project.urls]
@@ -58,3 +59,11 @@ packages = ["jobs_scraper", "jobs_scraper.sources", "jobs_scraper.tracker", "job
 [tool.pytest.ini_options]
 testpaths = ["."]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

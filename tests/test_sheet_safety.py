@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -183,7 +182,6 @@ def test_row_has_11_columns():
 
 
 if __name__ == "__main__":
-    import inspect
     tests = [(n, fn) for n, fn in globals().items() if n.startswith("test_") and callable(fn)]
     n_pass = n_fail = 0
     for n, fn in tests:

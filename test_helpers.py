@@ -231,7 +231,6 @@ def test_work_mode_empty():
 # 跑所有測試
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import inspect
     tests = [(name, fn) for name, fn in globals().items() if name.startswith("test_") and callable(fn)]
     n_pass = 0
     n_fail = 0

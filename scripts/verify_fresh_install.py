@@ -102,7 +102,7 @@ def main(target_dir: str | None = None) -> int:
             ))
         else:
             shutil.copy2(s, d)
-    print(f"[fresh-install] copied")
+    print("[fresh-install] copied")
 
     # 2. 建全新 venv (用 Python 3.11+)
     venv = dst / ".venv"

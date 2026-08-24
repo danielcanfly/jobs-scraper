@@ -41,6 +41,9 @@ jobs:
       - name: Compile all
         run: .venv/bin/python -m compileall -q .
 
+      - name: Run Ruff lint/import hygiene
+        run: .venv/bin/python -m ruff check .
+
       - name: Run original 27 helper regressions explicitly
         run: .venv/bin/python test_helpers.py
 

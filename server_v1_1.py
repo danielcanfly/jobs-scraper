@@ -1,7 +1,7 @@
 """jobs-scraper MCP v1.1.1: portable Job Tracker + region-aware Sheet tools."""
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations

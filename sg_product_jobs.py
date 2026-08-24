@@ -32,31 +32,22 @@ __version__ = "1.0.0"  # 2026-08-23 重構: 抽 helpers + 拆函數, 行為不�
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
-import sys
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode
 
 from curl_cffi import requests as cc_requests
-from scrapling.parser import Adaptor
-from bs4 import BeautifulSoup
-from jobs_scraper.sources import jora as jora_source
+
 from jobs_scraper.sources import jobstreet as jobstreet_source
+from jobs_scraper.sources import jora as jora_source
 from jobs_scraper.sources import linkedin as linkedin_source
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
 _cc_session = cc_requests.Session(impersonate="chrome")
 
-
-# ─────────────────────────────────────────────────────────────
-# 環境變數讀取 (2026-08-23 新增, 讓別人 fork repo 自己客製化)
-# 設定方式: 從 .env.example 複製成 .env, 填值; 或直接 export 環境變數
-# 沒設會 fallback 到下面 hardcoded 預設值 (原開發者自己的設定)
-# ─────────────────────────────────────────────────────────────
-import os
 
 try:
     from dotenv import load_dotenv
@@ -639,7 +630,6 @@ def push_to_sheet(jobs: list[dict], sheet_url: str,
     2026-08-23 重構: 拆 3 個 helper 函數 (`_load_sheet_keys` / `_build_sheet_row` / `_write_rows_to_sheet`),
     原本 186 行的單一函數, 拆成 60+30+30 行的 3 個函數 + 60 行的 orchestrator
     """
-    from datetime import date
     import gspread
     from google.oauth2.service_account import Credentials
 
@@ -653,7 +643,7 @@ def push_to_sheet(jobs: list[dict], sheet_url: str,
     gid = str(resolved_gid)
 
     if dry_run:
-        print(f"  [DRY RUN] 不會真的寫入")
+        print("  [DRY RUN] 不會真的寫入")
         print(f"  sheet_id: {sheet_id[:20]}...")
         print(f"  gid: {gid}")
         print(f"  source label = {source!r}")
@@ -734,7 +724,6 @@ def _build_sheet_row(job: dict, source_label: str, location: str,
     Returns None 表示要跳過 (dedup 命中 或 沒 JD); 否則回傳 11 欄 list。
     跳過原因要從呼叫端用 existing_keys 跟 jd_text 判斷 (這裡只負責構造 row)。
     """
-    from datetime import date
     job_id = job.get("job_id", "")
     if not job_id:
         return None
