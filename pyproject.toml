@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobs-scraper"
-version = "1.2.1"
-description = "Multi-source product-management job scraper with LinkedIn/Jora/JobStreet integrations, a local MCP server + Agent Skill, and portable Region-Raw/Region-Selected Google Sheet Job Tracker onboarding."
+version = "1.3.0"
+description = "LinkedIn Guest API product-management job scraper with a local MCP server + Agent Skill and portable Region-Raw/Region-Selected Google Sheet Job Tracker onboarding."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "danielcanfly" }]
-keywords = ["jobs", "scraper", "linkedin", "jora", "jobstreet", "product-manager", "mcp", "google-sheets"]
+keywords = ["jobs", "scraper", "linkedin", "product-manager", "mcp", "google-sheets"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -27,7 +27,6 @@ dependencies = [
     "scrapling>=0.4.14,<0.5",
     "gspread>=6.0.0",
     "google-auth>=2.23.0",
-    "beautifulsoup4>=4.12.0",
     "python-dotenv>=1.0.0",
     "mcp>=2.0,<3",
 ]

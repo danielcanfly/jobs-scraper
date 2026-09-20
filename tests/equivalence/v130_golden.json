@@ -1,0 +1,61 @@
+{
+  "baseline": {
+    "release": "v1.3.0",
+    "authorized_delta": "retire-jora-jobstreet-active-sources",
+    "parent_main": "2bd40f0f169cc17b0cf57b166b11759e69790278"
+  },
+  "urls": {
+    "linkedin_list_base": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+    "linkedin_list_query": {
+      "keywords": "\"product manager\" OR \"product director\" OR \"director of product\" OR \"head of product\" OR \"product lead\" OR \"chief of staff\"",
+      "location": "Taiwan",
+      "geoId": "104187078",
+      "f_TPR": "r604800",
+      "sortBy": "DD",
+      "start": "20"
+    },
+    "linkedin_jd": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342"
+  },
+  "legacy_rows": {
+    "jora": [
+      "jora",
+      "3edbbb646574ed2a0a926fee537b0e7c"
+    ],
+    "jobstreet": [
+      "jobstreet",
+      "94145676"
+    ]
+  },
+  "mcp": {
+    "source_enum": [
+      "linkedin"
+    ],
+    "range_enum": [
+      "1h",
+      "24h",
+      "3d",
+      "7d",
+      "14d",
+      "21d",
+      "30d"
+    ],
+    "legacy_tools": [
+      "audit_sheet",
+      "crawl_jobs",
+      "get_stats",
+      "sync_jobs_to_sheet"
+    ],
+    "v11_tools": [
+      "audit_sheet",
+      "crawl_jobs",
+      "get_stats",
+      "initialize_job_tracker",
+      "sync_jobs_to_sheet"
+    ],
+    "region_enum": [
+      "SG",
+      "TW",
+      "China"
+    ]
+  }
+}

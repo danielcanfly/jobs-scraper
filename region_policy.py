@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-SourceName = Literal["linkedin", "jora", "jobstreet"]
+SourceName = Literal["linkedin"]
 PublicRegion = Literal["SG", "TW", "China"]
 
 
@@ -24,7 +24,7 @@ REGION_POLICIES: dict[PublicRegion, RegionPolicy] = {
     "SG": RegionPolicy(
         key="SG",
         location="Singapore",
-        supported_sources=frozenset({"linkedin", "jora", "jobstreet"}),
+        supported_sources=frozenset({"linkedin"}),
     ),
     "TW": RegionPolicy(
         key="TW",
@@ -59,15 +59,13 @@ REGION_LOCATIONS: dict[PublicRegion, str] = {key: policy.location for key, polic
 
 SOURCE_LABELS: dict[SourceName, str] = {
     "linkedin": "LinkedIn / jobs-scraper",
-    "jora": "Jora / jobs-scraper",
-    "jobstreet": "JobStreet / jobs-scraper",
 }
 
 
 def source_region_supported(source: str, region: str) -> tuple[bool, str | None]:
-    """Preserve the v1.1 public source/region capability contract."""
-    if source in {"jora", "jobstreet"} and region != "SG":
-        return False, f"{source} is currently Singapore-only in v1.1.0; use source='linkedin' for region={region}"
+    """Fail closed for retired sources while preserving one shared policy gate."""
+    if source != "linkedin":
+        return False, f"source={source!r} is not supported; supported source: linkedin"
     return True, None
 
 

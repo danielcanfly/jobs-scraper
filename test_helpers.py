@@ -21,28 +21,14 @@ def test_build_e_formula_linkedin():
     ), f"got: {e}"
 
 
-def test_build_e_formula_jora():
-    e = M.build_e_formula("jora", "abc123def456", "https://sg.jora.com/job/Product-Manager-abc123def456")
-    assert "sg.jora.com/job/Product-Manager-abc123def456" in e
-    assert e.startswith("=HYPERLINK(")
-
-
-def test_build_e_formula_jora_no_url():
-    """沒給 url 時 fallback 到 JORA_BASE"""
-    e = M.build_e_formula("jora", "abc123def456", "")
-    assert f"{M.JORA_BASE}/job/Product-Manager-abc123def456" in e
-
-
-def test_build_e_formula_jobstreet():
-    """2026-08-23 改: 純 id 格式, 沒 slug"""
-    e = M.build_e_formula("jobstreet", "94145676", "")
-    assert e == '=HYPERLINK("https://sg.jobstreet.com/job/94145676","https://sg.jobstreet.com/job/94145676")'
-
-
-def test_build_e_formula_unknown_source():
-    """未知 source fallback 到 linkedin 格式 (跟原本行為一致)"""
-    e = M.build_e_formula("unknown", "12345", "")
-    assert "linkedin.com/jobs-guest/jobs/api/jobPosting/12345" in e
+def test_build_e_formula_rejects_retired_sources():
+    for source in ("jora", "jobstreet", "unknown"):
+        try:
+            M.build_e_formula(source, "12345", "")
+        except ValueError as exc:
+            assert "supported source: linkedin" in str(exc)
+        else:
+            raise AssertionError(f"expected retired source rejection: {source}")
 
 
 def test_parse_sheet_row_linkedin_short_id():
@@ -69,7 +55,7 @@ def test_parse_sheet_row_linkedin_api_url():
     assert M.parse_sheet_row_to_key(row) == ("linkedin", "4430572342")
 
 
-def test_parse_sheet_row_jora():
+def test_parse_legacy_sheet_row_jora():
     """Jora sheet row: 32-char hex hash 在 URL 尾"""
     row = [
         "New",
@@ -87,7 +73,7 @@ def test_parse_sheet_row_jora():
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
-def test_parse_sheet_row_jora_with_query():
+def test_parse_legacy_sheet_row_jora_with_query():
     """Jora URL 帶 query string"""
     row = [
         "New",
@@ -105,7 +91,7 @@ def test_parse_sheet_row_jora_with_query():
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
-def test_parse_sheet_row_jobstreet():
+def test_parse_legacy_sheet_row_jobstreet():
     """JobStreet sheet row: /job/{digit} 純 id"""
     row = [
         "New",
@@ -194,23 +180,23 @@ def test_load_sheet_keys_empty():
 def test_build_sheet_row_normal():
     """正常 job → 回傳 11 欄 row"""
     job = {
-        "job_id": "94145676",
+        "job_id": "4430572342",
         "title": "Product Manager",
         "company": "Tech Co",
         "location": "Singapore",
-        "source": "jobstreet",
+        "source": "linkedin",
         "jd_text": "Sample JD with location info",
         "jd_hash": "abc123",
-        "url": "https://sg.jobstreet.com/job/94145676",
+        "url": "https://www.linkedin.com/jobs/view/4430572342",
     }
     existing_keys = set()
-    row = M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys)
+    row = M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys)
     assert row is not None
     assert len(row) == 11
     assert row[0] == "New"  # A
     assert row[1] == ""  # B
-    assert row[3] == "JobStreet / Minimax"  # D
-    assert "94145676" in row[4]  # E (formula)
+    assert row[3] == "LinkedIn / Minimax"  # D
+    assert "4430572342" in row[4]  # E (formula)
     assert row[5] == "Tech Co"  # F
     assert row[6] == "Product Manager"  # G
     assert row[7] == "Sample JD with location info"  # H
@@ -221,23 +207,23 @@ def test_build_sheet_row_normal():
 
 def test_build_sheet_row_dedup_skip():
     """job_id 已在 existing_keys 裡 → 回 None"""
-    job = {"job_id": "94145676", "source": "jobstreet", "jd_text": "JD"}
-    existing_keys = {("jobstreet", "94145676")}
-    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
+    job = {"job_id": "4430572342", "source": "linkedin", "jd_text": "JD"}
+    existing_keys = {("linkedin", "4430572342")}
+    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_no_jd_skip():
     """沒 jd_text → 回 None (即使不在 dedup 內)"""
-    job = {"job_id": "94145676", "source": "jobstreet", "jd_text": ""}
+    job = {"job_id": "4430572342", "source": "linkedin", "jd_text": ""}
     existing_keys = set()
-    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
+    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_no_job_id_skip():
     """沒 job_id → 回 None"""
-    job = {"title": "X", "source": "jobstreet", "jd_text": "JD"}
+    job = {"title": "X", "source": "linkedin", "jd_text": "JD"}
     existing_keys = set()
-    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
+    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_visa_only_sg():

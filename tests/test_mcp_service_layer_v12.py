@@ -54,16 +54,14 @@ def test_service_crawl_payload_preserves_legacy_subprocess_contract():
         }
 
     payload = crawl.crawl_payload(
-        "jobstreet",
+        "linkedin",
         "7d",
         with_jd=True,
         max_pages=3,
         refetch=True,
         runner=fake_runner,
     )
-    assert seen_args == [
-        ["7d", "--source", "jobstreet", "--with-jd", "--refetch", "--max-pages", "3", "--json-summary"]
-    ]
+    assert seen_args == [["7d", "--source", "linkedin", "--with-jd", "--refetch", "--max-pages", "3", "--json-summary"]]
     assert payload["ok"] is True
     assert payload["jobs_found"] == 2
     assert payload["output_file"] == "/tmp/jobs.json"

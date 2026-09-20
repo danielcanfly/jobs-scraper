@@ -115,7 +115,7 @@ def test_sync_propagates_exact_config_and_structured_counts(monkeypatch, tmp_pat
             result = await client.call_tool(
                 "sync_jobs_to_sheet",
                 arguments={
-                    "source": "jobstreet",
+                    "source": "linkedin",
                     "range": "7d",
                     "dry_run": True,
                 },

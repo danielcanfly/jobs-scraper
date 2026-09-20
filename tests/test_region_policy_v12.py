@@ -26,31 +26,20 @@ def test_region_locations_preserve_v111_contract():
     assert RP.location_for("China") == "Shanghai"
 
 
-def test_source_region_capability_preserves_v111_contract():
+def test_source_region_capability_is_linkedin_only():
     assert RP.source_region_supported("linkedin", "SG") == (True, None)
     assert RP.source_region_supported("linkedin", "TW") == (True, None)
     assert RP.source_region_supported("linkedin", "China") == (True, None)
-    assert RP.source_region_supported("jora", "SG") == (True, None)
-    assert RP.source_region_supported("jobstreet", "SG") == (True, None)
-    assert RP.source_region_supported("jora", "TW") == (
-        False,
-        "jora is currently Singapore-only in v1.1.0; use source='linkedin' for region=TW",
-    )
-    assert RP.source_region_supported("jobstreet", "China") == (
-        False,
-        "jobstreet is currently Singapore-only in v1.1.0; use source='linkedin' for region=China",
-    )
+    for source in ("jora", "jobstreet", "unknown"):
+        ok, reason = RP.source_region_supported(source, "SG")
+        assert ok is False
+        assert reason == f"source={source!r} is not supported; supported source: linkedin"
     assert S._source_region_supported("jobstreet", "China") == RP.source_region_supported("jobstreet", "China")
 
 
-def test_source_labels_preserve_v111_contract():
-    assert RP.SOURCE_LABELS == {
-        "linkedin": "LinkedIn / jobs-scraper",
-        "jora": "Jora / jobs-scraper",
-        "jobstreet": "JobStreet / jobs-scraper",
-    }
-    for source, label in RP.SOURCE_LABELS.items():
-        assert RP.source_label(source) == label
+def test_source_labels_are_linkedin_only():
+    assert RP.SOURCE_LABELS == {"linkedin": "LinkedIn / jobs-scraper"}
+    assert RP.source_label("linkedin") == "LinkedIn / jobs-scraper"
 
 
 def test_tracker_custom_region_passthrough_is_not_narrowed():

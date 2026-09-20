@@ -1,11 +1,11 @@
 ---
 name: jobs-scraper
-description: Search and track product-management job postings from LinkedIn Guest API, Jora, and JobStreet; initialize a portable Region-Raw/Region-Selected Google Sheet Job Tracker; sync jobs by region; audit duplicates/visa/work-mode fields; and inspect scraper statistics.
+description: Search and track product-management job postings from the LinkedIn Guest API; initialize a portable Region-Raw/Region-Selected Google Sheet Job Tracker; sync jobs by region; audit duplicates/visa/work-mode fields; and inspect scraper statistics.
 license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.2.1"
+  version: "1.3.0"
 ---
 
 # Jobs Scraper
@@ -57,7 +57,7 @@ The server must never fall back to the package author's Sheet.
 For v1.1.0, MCP region input is `SG | TW | China`.
 
 - LinkedIn uses LinkedIn `geoId` for location targeting.
-- Jora and JobStreet remain Singapore-only in this release. Do not silently route them to a non-SG region.
+- LinkedIn is the only active crawl/sync source in v1.3.0. Historical Jora/JobStreet tracker rows remain readable for audit/dedup only.
 - A region write targets only `<REGION>-Raw`; `Selected` is not a scraper dump target.
 - Before sync/audit, the runtime safety gate checks the exact A:AA header write-compatibility contract. Full visual formatting/dropdown creation belongs to initialization and is not re-audited on every sync.
 

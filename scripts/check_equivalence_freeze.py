@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail closed if the frozen v1.1.1 behaviour-equivalence oracle drifts."""
+"""Fail closed if the frozen v1.3.0 LinkedIn-only behaviour-equivalence oracle drifts."""
+
 from __future__ import annotations
 
 import json

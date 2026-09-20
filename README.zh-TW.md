@@ -8,7 +8,7 @@
 
 這是一套以本機優先為原則的產品管理職缺搜尋自動化工具，提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
 
-`jobs-scraper` v1.2.1 是建立在 v1.2.0 架構整理之上的 clean-defaults patch。它保留本機優先 runtime 與品質 gate，並讓職稱 skip filter 改為 opt-in。
+`jobs-scraper` v1.3.0 是 LinkedIn-only 來源版本。它保留本機優先 runtime、Tracker 安全 gate 與歷史資料可讀性，同時移除 Jora 與 JobStreet 的網路整合。
 
 ## 概覽
 
@@ -31,7 +31,7 @@
 
 ## 功能
 
-- 爬取 LinkedIn、Jora、JobStreet 職缺。
+- 爬取 LinkedIn Guest API 職缺。
 - 可選擇抓取完整 JD。
 - 以 `(source, job_id)` 去重。
 - 可選擇在完整 JD enrichment 前套用使用者自訂的職稱 skip filter。
@@ -46,7 +46,7 @@ v1.2.0 保持對外行為不變，並把程式碼整理成更清楚的區塊：
 
 - 共用 runtime / execution helpers；
 - 集中的 region / source policy；
-- LinkedIn、Jora、JobStreet 的 source adapters；
+- LinkedIn Guest API source adapter；
 - 拆分後的 Job Tracker modules；
 - MCP service layer；
 - selective Google Sheet reads；
@@ -61,10 +61,8 @@ v1.2.0 保持對外行為不變，並把程式碼整理成更清楚的區塊：
 | Source | 地點指定方式 |
 |---|---|
 | LinkedIn | LinkedIn 使用 LinkedIn `geoId` 指定地點 |
-| Jora | Singapore only |
-| JobStreet | Singapore only |
 
-這個版本中，Jora 與 JobStreet 僅支援新加坡。非 SG 的請求必須 fail closed，並回傳 `SOURCE_REGION_UNSUPPORTED`。
+v1.3.0 已移除 Jora 與 JobStreet 主動來源。任何新的 Jora／JobStreet 請求都必須在 subprocess 執行前 fail closed。
 
 ## 快速開始
 
@@ -184,7 +182,7 @@ sync_jobs_to_sheet(
 
 | Tool | Sheet write? | 用途 |
 |---|---:|---|
-| `crawl_jobs` | 否 | 爬取 LinkedIn、Jora 或 JobStreet；可能更新本機快取。 |
+| `crawl_jobs` | 否 | 爬取 LinkedIn；可能更新本機快取。 |
 | `initialize_job_tracker` | 只有 `dry_run=false` 才會 | 建立或驗證 Region-Raw / Region-Selected 追蹤表。 |
 | `sync_jobs_to_sheet` | 是 | 針對指定區域的明確寫入邊界。 |
 | `audit_sheet` | 否 | 只讀稽核選定的 Region-Raw tab。 |
@@ -211,7 +209,7 @@ sync_jobs_to_sheet(
 .venv/bin/python sg_product_jobs.py [range] [options]
 
 range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
---source:         linkedin | jora | jobstreet
+--source:         linkedin
 --with-jd:        抓取完整 JD
 --to-sheet:       Google Sheet URL 或 raw ID
 --gid:            舊版 direct CLI 用的 worksheet GID
@@ -281,7 +279,7 @@ claude mcp add jobs-scraper \
 - 使用你自己的 Google 試算表與 service account。
 - 不要在聊天中分享私密金鑰。
 - 把 scraped job content 視為不可信資料。
-- 這個版本不保證 Jora / JobStreet 在新加坡以外可用。
+- v1.3.0 已移除 Jora / JobStreet 主動網路來源；舊 Tracker rows 仍可被 audit 讀取。
 - 不要把讀取請求轉成寫入請求。
 - 正式初始化前先用 `dry_run=true` 預覽。
 - `crawl_jobs`、`audit_sheet`、`get_stats` 都不會寫 Google Sheets。
@@ -317,18 +315,18 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `CREDENTIAL_FILE_MISSING`：確認 service-account JSON 在本機存在。
 - `REGION_NOT_INITIALIZED`：先執行 `initialize_job_tracker(..., dry_run=true)`。
 - `SCHEMA_MISMATCH`：目標 tab 與公開 tracker contract 不一致。
-- `SOURCE_REGION_UNSUPPORTED`：這個版本中 Jora / JobStreet 只支援新加坡。
+- `SOURCE_REGION_UNSUPPORTED`：請求的來源／地區組合不受支援；v1.3.0 僅接受 LinkedIn。
 - `SHEET_NOT_FOUND`：確認 spreadsheet ID 與分享權限。
 - `LinkedIn 403/429`：縮小範圍或稍後再試。
 
 ## 版本與發版說明
 
-`v1.2.1` 是建立在已通過驗證的 v1.2.0 之上的 clean-defaults patch。
+`v1.3.0` 移除 Jora 與 JobStreet 網路整合，主動來源 contract 收斂為 LinkedIn，同時保留歷史 Tracker row 的解析能力。
 
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- frozen equivalence baseline 仍然是 `v1.1.1`。
+- 目前 frozen equivalence baseline 為 `v1.3.0`，明確保護 LinkedIn-only source contract。
 
 ## 授權
 

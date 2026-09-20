@@ -1,6 +1,6 @@
 # jobs-scraper — Public Technical Rules
 
-> Public-safe technical reference for jobs-scraper v1.2.1.
+> Public-safe technical reference for jobs-scraper v1.3.0.
 >
 > This file documents scraper/runtime behaviour without embedding any package-author production Sheet IDs, worksheet IDs, service-account identities, private credential paths, or local-machine paths. User-owned Google configuration belongs in `.env`, never in this repository.
 
@@ -9,7 +9,7 @@
 The executable implementation remains authoritative:
 
 - `sg_product_jobs.py`: frozen v1.0 scraper engine and direct CLI;
-- `server.py`: legacy v1.0 local STDIO MCP entrypoint;
+- `server.py`: legacy four-tool local STDIO MCP compatibility entrypoint; its active source policy follows v1.3.0;
 - `server_v1_1.py`: current region-aware local STDIO MCP entrypoint;
 - `job_tracker.py`: portable Job Tracker Sheet schema/bootstrap implementation;
 - `skills/jobs-scraper/SKILL.md`: Agent routing/write-boundary contract;
@@ -56,41 +56,6 @@ Useful known direct-CLI examples:
 | Taiwan | `104187078` | `Taiwan` |
 | China | `107388191` | `Shanghai` |
 
-### Jora
-
-Singapore HTML integration:
-
-```text
-https://sg.jora.com/j
-```
-
-The implementation assembles source-specific time-range/location/query/page parameters. Jora is Singapore-only in the v1.1 MCP contract.
-
-### JobStreet
-
-List API:
-
-```text
-https://sg.jobstreet.com/api/jobsearch/v5/search
-```
-
-Important list parameters include:
-
-- `siteKey=SG-Main`
-- `keywords`
-- `where`
-- `worktype=242`
-- `daterange`
-- `page`
-- `pageSize=20`
-
-Full JD is fetched through:
-
-```text
-POST https://sg.jobstreet.com/graphql
-```
-
-The GraphQL request sends the job ID as a variable and reads the returned job detail/content fields. JobStreet HTML detail pages are not the canonical JD path. JobStreet is Singapore-only in the v1.1 MCP contract.
 
 ## 3. Time ranges and crawl bounds
 
@@ -106,7 +71,7 @@ Do not remove rate-limit protection merely to make a run finish faster.
 
 ## 4. Title filtering
 
-The v1.2.1 default is clean: full-JD enrichment does not skip titles unless the user supplies `--skip-keywords`.
+The v1.3.0 default is clean: full-JD enrichment does not skip titles unless the user supplies `--skip-keywords`.
 
 Users can opt into a title skip filter:
 
@@ -224,10 +189,8 @@ Current source location targeting:
 | Source | Location targeting |
 |---|---|
 | LinkedIn | Uses LinkedIn `geoId` |
-| Jora | Singapore only |
-| JobStreet | Singapore only |
 
-Unsupported Jora/JobStreet region requests must fail before the scraper subprocess executes.
+Any retired or unknown source request must fail before the scraper subprocess executes.
 
 Missing `<REGION>-Raw` or a mismatched A:AA header contract must also fail before scraper execution.
 
@@ -261,7 +224,7 @@ Current `server_v1_1.py` exposes five tools:
 4. `audit_sheet`
 5. `get_stats`
 
-Legacy `server.py` remains the four-tool compatibility entrypoint for the qualified v1.0 lane.
+Legacy `server.py` remains the four-tool compatibility entrypoint, but its active source policy follows v1.3.0 and accepts LinkedIn only.
 
 Google Sheet write boundaries are explicit:
 

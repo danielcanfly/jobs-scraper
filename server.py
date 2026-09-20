@@ -127,9 +127,9 @@ class StatsResult(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.0.0",
+    version="1.3.0",
     description=(
-        "Multi-source Singapore product-management job scraper. "
+        "LinkedIn Guest API product-management job scraper. "
         "Read tools (crawl_jobs, audit_sheet, get_stats) never write to Google Sheets. "
         "sync_jobs_to_sheet is the only write tool and requires configured SHEET_ID/SHEET_GID/GSPREAD_SA_KEY_PATH. "
         "The server never invents Sheet IDs or service-account credentials. "
@@ -181,7 +181,7 @@ _parse_machine_summary = RT.parse_machine_summary
     name="crawl_jobs",
     title="Crawl jobs (no Sheet write)",
     description=(
-        "Crawl public job sources (LinkedIn Guest API / Jora / JobStreet) and "
+        "Crawl public job sources (LinkedIn Guest API) and "
         "optionally enrich each job with its full description. Never writes to Google Sheets, "
         "but may create or update local JSON/cache/seen artifacts. Use sync_jobs_to_sheet for explicit Sheet writes."
     ),
@@ -194,7 +194,7 @@ _parse_machine_summary = RT.parse_machine_summary
     structured_output=True,
 )
 def crawl_jobs(
-    source: Annotated[Source, "Job source: linkedin | jora | jobstreet"] = "linkedin",
+    source: Annotated[Source, "Job source: linkedin"] = "linkedin",
     range: Annotated[Range, "Time range: 1h | 24h | 3d | 7d | 14d | 21d | 30d"] = "7d",
     with_jd: Annotated[bool, "Fetch full JD content (slow, 50-100 min)"] = False,
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
@@ -232,7 +232,7 @@ def crawl_jobs(
     structured_output=True,
 )
 def sync_jobs_to_sheet(
-    source: Annotated[Source, "Job source: linkedin | jora | jobstreet"] = "linkedin",
+    source: Annotated[Source, "Job source: linkedin"] = "linkedin",
     range: Annotated[Range, "Time range: 1h | 24h | 3d | 7d | 14d | 21d | 30d"] = "7d",
     with_jd: Annotated[bool, "Fetch full JD content before sync"] = True,
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
