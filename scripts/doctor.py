@@ -41,7 +41,7 @@ def check_python() -> tuple[str, str]:
 
 def check_imports() -> tuple[str, str]:
     missing = []
-    for mod in ("mcp", "gspread", "google", "bs4", "dotenv", "curl_cffi"):
+    for mod in ("mcp", "gspread", "google", "dotenv", "curl_cffi"):
         try:
             __import__(mod)
         except ImportError:
