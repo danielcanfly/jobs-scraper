@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.0 — 2026-09-20
+
+LinkedIn-only source release.
+
+- Removed active Jora and JobStreet network adapters, crawl branches, configuration, and source-specific tests.
+- Narrowed CLI and MCP source contracts to linkedin.
+- Removed the JobStreet-only BeautifulSoup dependency.
+- Preserved read-only parsing of historical Jora/JobStreet tracker/cache rows so existing audits and deduplication continue to work.
+- Rebased the active behaviour-equivalence gate on the v1.3.0 LinkedIn-only contract.
+- Updated public docs, Agent Skill metadata, CI assertions, and plugin/package version metadata.
+
 ## v1.1.1 — 2026-08-24
 
 Narrow repository-hygiene hardening release. Scraper business behaviour is unchanged from v1.1.0.

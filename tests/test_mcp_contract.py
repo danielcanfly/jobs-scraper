@@ -106,11 +106,12 @@ def test_sync_jobs_to_sheet_present_as_write():
     assert t.annotations.idempotent_hint is False
 
 
-# ── Q19: source input restricted to linkedin/jora/jobstreet ────────
-def test_source_input_enum():
+# ── Q19: source input restricted to linkedin ────────
+def test_source_input_is_linkedin_only():
     t = _by_name("crawl_jobs")
-    enum = t.input_schema["properties"]["source"].get("enum") or []
-    assert enum == ["linkedin", "jora", "jobstreet"], f"got {enum}"
+    schema = t.input_schema["properties"]["source"]
+    allowed = schema.get("enum") or ([schema["const"]] if "const" in schema else [])
+    assert allowed == ["linkedin"], f"got {schema}"
 
 
 # ── Q20: range input restricted to 7 supported ranges ──────────────

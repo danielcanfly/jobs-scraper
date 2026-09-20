@@ -1,4 +1,4 @@
-"""jobs-scraper MCP v1.2.1: portable Job Tracker + region-aware Sheet tools."""
+"""jobs-scraper MCP v1.3.0: portable Job Tracker + region-aware Sheet tools."""
 
 from __future__ import annotations
 
@@ -112,9 +112,9 @@ class RegionStatsResult(BaseModel):
 
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.2.1",
+    version="1.3.0",
     description=(
-        "Multi-source PM job scraper with a portable Google Sheet Job Tracker. "
+        "LinkedIn Guest API PM job scraper with a portable Google Sheet Job Tracker. "
         "initialize_job_tracker creates Region-Raw / Region-Selected pairs using the frozen A:AA schema. "
         "sync_jobs_to_sheet resolves the Region-Raw worksheet automatically, so users configure SHEET_ID but not GID."
     ),
@@ -135,7 +135,7 @@ mcp = MCPServer(
     name="crawl_jobs",
     title="Crawl jobs (no Sheet write)",
     description=(
-        "Crawl LinkedIn Guest API / Jora / JobStreet and optionally enrich full JDs. "
+        "Crawl LinkedIn Guest API and optionally enrich full JDs. "
         "Never writes Google Sheets, but may update local crawl/cache artifacts."
     ),
     annotations=ToolAnnotations(
@@ -147,7 +147,7 @@ mcp = MCPServer(
     structured_output=True,
 )
 def crawl_jobs(
-    source: Annotated[Source, "Job source: linkedin | jora | jobstreet"] = "linkedin",
+    source: Annotated[Source, "Job source: linkedin"] = "linkedin",
     range: Annotated[Range, "Time range: 1h | 24h | 3d | 7d | 14d | 21d | 30d"] = "7d",
     with_jd: Annotated[bool, "Fetch full JD content (slow, 50-100 min)"] = False,
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,
@@ -217,7 +217,7 @@ def initialize_job_tracker(
 )
 def sync_jobs_to_sheet(
     region: Annotated[Region, "Target tracker region: SG | TW | China"] = "SG",
-    source: Annotated[Source, "Job source: linkedin | jora | jobstreet"] = "linkedin",
+    source: Annotated[Source, "Job source: linkedin"] = "linkedin",
     range: Annotated[Range, "Time range: 1h | 24h | 3d | 7d | 14d | 21d | 30d"] = "7d",
     with_jd: Annotated[bool, "Fetch full JD content before sync"] = True,
     max_pages: Annotated[int | None, Field(ge=1, le=200, description="Override max pages (1..200)")] = None,

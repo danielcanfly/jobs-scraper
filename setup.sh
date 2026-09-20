@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# jobs-scraper v1.1.0 one-shot local setup (fail-fast, idempotent, preserves .env/.secrets)
+# jobs-scraper v1.3.0 one-shot local setup (fail-fast, idempotent, preserves .env/.secrets)
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
 VENV_PY="$VENV_DIR/bin/python"
 
-echo "🚀 jobs-scraper v1.1.0 setup"
+echo "🚀 jobs-scraper v1.3.0 setup"
 echo "=================================="
 echo "  repo:  $REPO_ROOT"
 echo "  venv:  $VENV_DIR"
@@ -74,7 +74,7 @@ fi
 printf '\n==================================\n'
 echo "🎉 Setup complete"
 echo ""
-echo "MCP v1.1.0 STDIO command:"
+echo "MCP v1.3.0 STDIO command:"
 echo "  $VENV_PY $REPO_ROOT/server_v1_1.py"
 echo ""
 echo "First crawl (no Google config required):"

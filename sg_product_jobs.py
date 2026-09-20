@@ -1,15 +1,16 @@
 """
-sg_product_jobs — 多源職缺爬蟲 + Google Sheet 同步
+sg_product_jobs — LinkedIn Guest API 職缺爬蟲 + Google Sheet 同步
 
-支援的 source:
-  - linkedin:  /jobs-guest/jobs/api/...  (Guest API, 不需 cookie)
-  - jora:      sg.jora.com  (HTML parse, 9/9/2026 關站前)
-  - jobstreet: sg.jobstreet.com  (公開 API + GraphQL)
+Active source:
+  - linkedin: /jobs-guest/jobs/api/... (Guest API, no cookie)
 
-Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
+Jora and JobStreet network integrations were retired in v1.3.0. Historical
+Sheet/cache rows from those sources remain parseable for audit and dedup only.
+
+Single source of truth: RULES.md (LinkedIn URLs, MAX_PAGES, skip list, sheet columns, dedup, visa)
 """
 
-__version__ = "1.0.0"  # 2026-08-23 重構: 抽 helpers + 拆函數, 行為不變
+__version__ = "1.3.0"
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺
@@ -42,8 +43,6 @@ from pathlib import Path
 
 from curl_cffi import requests as cc_requests
 
-from jobs_scraper.sources import jobstreet as jobstreet_source
-from jobs_scraper.sources import jora as jora_source
 from jobs_scraper.sources import linkedin as linkedin_source
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
@@ -61,8 +60,6 @@ except ImportError:
 SHEET_SA_KEY = os.getenv("GSPREAD_SA_KEY_PATH", ".secrets/gsheet-sa.json")
 SHEET_ID_OVERRIDE = os.getenv("SHEET_ID", "")  # 留空 → SG_RAW_SHEET_ID="" → 寫入/讀取 fail-closed
 SHEET_GID_OVERRIDE = os.getenv("SHEET_GID", "")  # 留空 → SG_RAW_GID=0 → 寫入/讀取 fail-closed
-JOBSTREET_KEYWORDS_OVERRIDE = os.getenv("JOBSTREET_KEYWORDS", "")  # 留空 = 用預設 5 kw
-# 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -95,48 +92,6 @@ TIME_RANGES = {
     "21d": ("r1814400", 30),  # 3 週
     "30d": ("r2592000", 25),
 }
-# Jora (sg.jora.com) — 2026-08-22 設定, Jora SG 9/9 關閉前抓完
-JORA_TPR = {
-    "1h": "1h",
-    "24h": "24h",
-    "3d": "3d",
-    "7d": "7d",
-    "14d": "14d",
-    "21d": "21d",
-    "30d": "30d",
-}
-# MAX_PAGES 2026-08-22 確認: 每頁 15 unique jobs (HTML render 兩次), double 但 rebalance
-# Coverage: 1d=47%→71% / 3d=36%→55% / 7d=19%→29% / 14d=14%→23% / 21d=11%→18% / 30d=8.6%→14%
-JORA_MAX_PAGES = {
-    "1h": 5,
-    "24h": 10,
-    "3d": 30,
-    "7d": 30,
-    "14d": 40,
-    "21d": 40,
-    "30d": 40,
-}
-JORA_KEYWORD = "product manager"
-JORA_LOCATION = "Singapore"
-JORA_BASE = "https://sg.jora.com"
-
-# JobStreet (sg.jobstreet.com) — 2026-08-22 整合
-# 用 /api/jobsearch/v5/search 抓 list + /graphql 抓 JD content
-# HTML 頁 100% Cloudflare blocked, 走 GraphQL 完全 OK (詳見 RULES.md §12.5)
-JOBSTREET_TPR = jobstreet_source.TPR
-JOBSTREET_MAX_PAGES = jobstreet_source.MAX_PAGES
-# 可被 JOBSTREET_KEYWORDS env var 覆寫 (見上面 env 讀取區塊)
-# 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
-if JOBSTREET_KEYWORDS_OVERRIDE:
-    JOBSTREET_KEYWORDS = [k.strip() for k in JOBSTREET_KEYWORDS_OVERRIDE.split(",") if k.strip()]
-else:
-    JOBSTREET_KEYWORDS = list(jobstreet_source.DEFAULT_KEYWORDS)
-JOBSTREET_LOCATION = jobstreet_source.DEFAULT_LOCATION
-JOBSTREET_LIST_API = jobstreet_source.LIST_API
-JOBSTREET_GRAPHQL = jobstreet_source.GRAPHQL
-JOBSTREET_BASE = jobstreet_source.BASE_URL
-JOBSTREET_WORKTYPE_FT = jobstreet_source.WORKTYPE_FT
-
 DEFAULT_TPR = "24h"
 
 # 隨機 sleep 區間 (人類節奏)
@@ -228,7 +183,7 @@ SG_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid
 CHINA_RAW_GID = 488353479
 CHINA_RAW_URL = f"https://docs.google.com/spreadsheets/d/{SG_RAW_SHEET_ID}/edit?gid={CHINA_RAW_GID}#gid={CHINA_RAW_GID}"
 
-# v1.1.1 frozen-equivalence fixture. Not used as the active runtime default after v1.2.1.
+# Historical title-filter fixture retained for compatibility; active default remains opt-in after v1.2.1.
 DEFAULT_SKIP_KEYWORDS = [
     # 明確太菜
     "intern",
@@ -388,8 +343,8 @@ def jd_hash(jd_text: str) -> str:
 def load_seen_ids(path: Path = Path(SEEN_FILE)) -> set[tuple[str, str]]:
     """讀 seen_jds.jsonl，回傳 set of (source, job_id)。壞行跳過不炸。
 
-    ⚠️ 跨 source 區分: LinkedIn / JobStreet 都是純數字, 會撞; Jora 是 32-char hex 不撞
-    舊記錄沒 source 欄位 → 從 job_id 推斷:
+    Historical compatibility: old Jora/JobStreet records may still exist in local cache.
+    Old records without a source field are inferred from job_id shape:
       - 32-char hex → "jora"
       - 純數字 → "linkedin" (預設, 因 2026-08-22 之前都是 LinkedIn + Jora)
     """
@@ -426,7 +381,7 @@ def append_seen(
 ) -> None:
     record = {
         "job_id": job_id,
-        "source": source,  # 2026-08-22 新增, 之後區分 LinkedIn / Jora / JobStreet
+        "source": source,  # historical cache format; active writes use linkedin
         "jd_hash": jd_hash_val,
         "fetched_at": datetime.now(TZ_LOCAL).isoformat(timespec="seconds"),
         "title": (title or "")[:200],
@@ -441,7 +396,7 @@ def load_jd_cache_from_jsons(pattern: str = "*_product_jobs_*_jd.json", skip_fil
     從所有 *_jd.json 檔案載入 JD cache: {(source, job_id): {jd_text, jd_lines, jd_hash, ...}}。
     用作 enrich_with_jd 的跨 run cache 來源（避免已抓過的 JD 重抓）。
 
-    2026-08-22 改: 從 {job_id: ...} 改為 {(source, job_id): ...}, 避免 LinkedIn / JobStreet 數字 ID 撞
+    Cache keys remain (source, job_id) so historical multi-source caches stay unambiguous.
 
     Args:
         pattern: glob pattern, 預設掃所有 *_jd.json
@@ -611,17 +566,10 @@ def extract_gid(url_or_id: str) -> str | None:
 # Sheet 寫入輔助函數 (2026-08-23 重構抽出, 行為與原本一致)
 # ─────────────────────────────────────────────────────────────
 def build_e_formula(source: str, job_id: str, url: str = "") -> str:
-    """構造 sheet E 欄的 =HYPERLINK() formula, 依 source 不同:
-    - linkedin:  =HYPERLINK(".../jobPosting/{id}", "{id}")
-    - jora:      =HYPERLINK("{full_jora_url}", "{full_jora_url}")
-    - jobstreet: =HYPERLINK(".../job/{id}", ".../job/{id}")  (2026-08-23 從 slug-id 改純 id)
-    """
-    if source == "jora":
-        full_url = url or f"{JORA_BASE}/job/Product-Manager-{job_id}"
-    elif source == "jobstreet":
-        full_url = f"{JOBSTREET_BASE}/job/{job_id}"
-    else:  # linkedin (default)
-        full_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+    """Construct the Sheet E-column hyperlink for the active LinkedIn source."""
+    if source != "linkedin":
+        raise ValueError(f"source={source!r} is retired; supported source: linkedin")
+    full_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
     return f'=HYPERLINK("{full_url}","{full_url}")'
 
 
@@ -629,8 +577,8 @@ def parse_sheet_row_to_key(row: list[str]) -> tuple[str, str] | None:
     """從 sheet 的某 row 解出 (source, job_id), 用於 dedup。
 
     輸入 row 格式: [A=New, B='', C=date, D=source_label, E=URL, F=company, G=title, H=JD, I=loc, J=wm, K=visa]
-    D 欄解 source: "LinkedIn / Minimax" → linkedin, "Jora / Minimax" → jora, "JobStreet / Minimax" → jobstreet
-    E 欄解 job_id: 依 source 不同用不同 regex (LinkedIn digit / jobPosting/digit / Jora 32-hex / JobStreet /job/digit)
+    Active writes use LinkedIn only. Legacy Jora/JobStreet rows remain readable so
+    existing tracker history can still be audited and deduplicated safely.
 
     Returns None 如果 row 沒 E 欄或解不出 job_id (e.g. J 欄空 + 沒 K 欄的 header row).
     """
@@ -945,89 +893,6 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
     return all_jobs
 
 
-# ─────────────────────────────────────────────────────────────
-# Jora compatibility surface
-# Implementation owner: jobs_scraper.sources.jora
-# ─────────────────────────────────────────────────────────────
-def build_jora_list_url(jora_tpr: str, page: int, keyword: str = JORA_KEYWORD, location: str = JORA_LOCATION) -> str:
-    return jora_source.build_list_url(jora_tpr, page, keyword, location)
-
-
-def parse_jora_list_page(html: str, location: str = JORA_LOCATION) -> list[dict]:
-    return jora_source.parse_list_page(html, location=location)
-
-
-def fetch_jora_jd(url: str) -> dict:
-    return jora_source.fetch_jd(_cc_session, url, sleep_fn=time.sleep)
-
-
-def crawl_jora_list(tpr: str, max_pages: int, keyword: str = JORA_KEYWORD, location: str = JORA_LOCATION) -> list[dict]:
-    return jora_source.crawl_list(
-        _cc_session,
-        tpr,
-        max_pages,
-        tpr_map=JORA_TPR,
-        keyword=keyword,
-        location=location,
-        sleep_fn=human_sleep,
-    )
-
-
-# ─────────────────────────────────────────────────────────────
-# JobStreet compatibility surface
-# Implementation owner: jobs_scraper.sources.jobstreet
-# ─────────────────────────────────────────────────────────────
-JOBSTREET_DETAIL_QUERY = jobstreet_source.JOBSTREET_DETAIL_QUERY
-
-
-def build_jobstreet_list_url(
-    keyword: str,
-    page: int,
-    daterange: str,
-    worktype: str = JOBSTREET_WORKTYPE_FT,
-    where: str = JOBSTREET_LOCATION,
-    page_size: int = 20,
-) -> str:
-    return jobstreet_source.build_list_url(
-        keyword,
-        page,
-        daterange,
-        worktype=worktype,
-        where=where,
-        page_size=page_size,
-        list_api=JOBSTREET_LIST_API,
-    )
-
-
-def parse_jobstreet_list_page(data: dict, keyword: str) -> list[dict]:
-    return jobstreet_source.parse_list_page(data, keyword)
-
-
-def fetch_jobstreet_jd(job_id: str) -> dict:
-    return jobstreet_source.fetch_jd(
-        _cc_session,
-        job_id,
-        graphql_url=JOBSTREET_GRAPHQL,
-        query=JOBSTREET_DETAIL_QUERY,
-    )
-
-
-def crawl_jobstreet_list(
-    daterange: str, max_pages: int, keywords: list[str] | None = None, worktype: str = JOBSTREET_WORKTYPE_FT
-) -> list[dict]:
-    return jobstreet_source.crawl_list(
-        _cc_session,
-        daterange,
-        max_pages,
-        keywords=keywords if keywords is not None else JOBSTREET_KEYWORDS,
-        worktype=worktype,
-        where=JOBSTREET_LOCATION,
-        page_size=20,
-        list_api=JOBSTREET_LIST_API,
-        sleep_fn=human_sleep,
-    )
-
-
 def enrich_with_jd(
     jobs: list[dict],
     skip_pat: re.Pattern | None = None,
@@ -1045,7 +910,7 @@ def enrich_with_jd(
 
     --refetch 時跳過所有 cache，強制重抓。
 
-    2026-08-22: json_cache / seen_ids 都改成 (source, job_id) tuple, 避免 LinkedIn / JobStreet 數字 ID 撞
+    Historical cache compatibility keeps (source, job_id) tuple keys.
     """
     skip_pat = skip_pat or _make_skip_pattern([])
     seen_ids = seen_ids or set()
@@ -1109,19 +974,16 @@ def enrich_with_jd(
                 print(f"  [{i}/{n_total}] 💾 cached (json) {j['title'][:55]}")
                 out.append(j2)
                 continue
-        # 3) 抓 JD (依 source 決定 fetcher)
+        # 3) Fetch a fresh JD only from the active source.
         print(f"  [{i}/{n_total}] {j['job_id']} {j['title'][:50]}")
-        if src == "jora":
-            result = fetch_jora_jd(j.get("url", f"{JORA_BASE}/job/Product-Manager-{jid}"))
-        elif src == "jobstreet":
-            result = fetch_jobstreet_jd(jid)
-        else:
-            result = fetch_jd(jid)
+        if src != "linkedin":
+            raise ValueError(f"source={src!r} is retired; fresh JD fetch supports linkedin only")
+        result = fetch_jd(jid)
         if result.get("jd_text"):
             j2["jd_text"] = result["jd_text"]
             j2["jd_lines"] = result["jd_lines"]
             j2["jd_hash"] = jd_hash(result["jd_text"])
-            # 從 JD result 補公司/位置 (Jora 列表頁沒公司, LinkedIn 已有, 但安全起見都覆寫)
+            # Safely refresh company/location when the LinkedIn JD payload provides them.
             if result.get("company"):
                 j2["company"] = result["company"]
             if result.get("location"):
@@ -1161,8 +1023,8 @@ def main():
     ap.add_argument(
         "--source",
         default="linkedin",
-        choices=["linkedin", "jora", "jobstreet"],
-        help="資料來源 (default: linkedin). jora=sg.jora.com (HTML parse), jobstreet=sg.jobstreet.com (API+GraphQL)",
+        choices=["linkedin"],
+        help="資料來源 (v1.3.0 起僅支援 linkedin)",
     )
     ap.add_argument(
         "--location",
@@ -1208,10 +1070,6 @@ def main():
         return
 
     tpr, default_max = TIME_RANGES[args.range]
-    if args.source == "jora":
-        default_max = JORA_MAX_PAGES[args.range]
-    elif args.source == "jobstreet":
-        default_max = JOBSTREET_MAX_PAGES[args.range]
     max_pages = args.max_pages or default_max
 
     skip_pat = None
@@ -1219,7 +1077,7 @@ def main():
     if skip_words:
         skip_pat = _make_skip_pattern(skip_words)
 
-    # 解析 location/geo-id (preset 優先: --location 從 KNOWN_GEO_IDS 取 geo-id, 或自己給)
+    # Resolve LinkedIn location/geo-id.
     location = args.location
     geo_id = args.geo_id
     if location and not geo_id and location in KNOWN_GEO_IDS:
@@ -1228,43 +1086,10 @@ def main():
         location = LOCATION
     if not geo_id:
         geo_id = GEO_ID
+    if args.sheet_source == DEFAULT_SHEET_SOURCE:
+        args.sheet_source = "LinkedIn / Minimax"
 
-    # 解析 location/geo-id (preset 優先: --location 從 KNOWN_GEO_IDS 取 geo-id, 或自己給)
-    location = args.location
-    geo_id = args.geo_id
-    if args.source == "linkedin":
-        if location and not geo_id and location in KNOWN_GEO_IDS:
-            geo_id, location = KNOWN_GEO_IDS[location]
-        if not location:
-            location = LOCATION
-        if not geo_id:
-            geo_id = GEO_ID
-        # LinkedIn 預設 source label
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "LinkedIn / Minimax"
-    elif args.source == "jora":
-        if not location:
-            location = JORA_LOCATION
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "Jora / Minimax"
-    else:  # jobstreet
-        if not location:
-            location = JOBSTREET_LOCATION
-        # JobStreet 不需要 geo_id
-        geo_id = None
-        if args.sheet_source == DEFAULT_SHEET_SOURCE:
-            args.sheet_source = "JobStreet / Minimax"
-
-    if args.source == "linkedin":
-        print(f"==== LinkedIn Jobs / {location} (geoId={geo_id}) / {args.range} / f_TPR={tpr} ====")
-    elif args.source == "jora":
-        jora_tpr = JORA_TPR[args.range]
-        print(f"==== Jora Jobs / {location} / {args.range} / a={jora_tpr} ====")
-    else:
-        js_tpr = JOBSTREET_TPR[args.range]
-        print(
-            f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ===="
-        )
+    print(f"==== LinkedIn Jobs / {location} (geoId={geo_id}) / {args.range} / f_TPR={tpr} ====")
     print(f"==== MAX_PAGES = {max_pages}  (隨機 sleep {SLEEP_MIN}-{SLEEP_MAX}s) ====\n")
     if args.with_jd and skip_pat and skip_words:
         print(f"==== JD skip 規則: {skip_pat.pattern} ====")
@@ -1279,13 +1104,7 @@ def main():
         print(f"==== 載入 {len(seen_ids)} 筆 seen job_ids (refetch={args.refetch}) ====")
 
     # 1) 抓列表
-    if args.source == "jora":
-        jobs = crawl_jora_list(args.range, max_pages)
-    elif args.source == "jobstreet":
-        js_tpr = JOBSTREET_TPR[args.range]
-        jobs = crawl_jobstreet_list(js_tpr, max_pages, keywords=JOBSTREET_KEYWORDS)
-    else:
-        jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
+    jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
     if not jobs:
         print("\n無資料，結束。")
         if args.json_summary:
@@ -1309,7 +1128,7 @@ def main():
 
     # 1.5) 載入 JD cache (跨 run 從 *_jd.json 抓)，跳過當前將輸出的檔
     suffix = f"_{args.range}{'_jd' if args.with_jd else ''}"
-    # 檔名以 source + location 為 prefix (sg_product_jobs, tw_, jora_sg_), 避免跨源/跨國 cache 污染
+    # Output/cache files remain location-scoped for the active LinkedIn source.
     location_short = location.lower().replace(" ", "")
     short_names = {
         "singapore": "sg",
@@ -1318,13 +1137,7 @@ def main():
         "japan": "jp",
     }
     loc_prefix = short_names.get(location_short, location_short)
-    # 各 source cache 獨立 prefix (sg_, jora_sg_, jobstreet_sg_), 避免跨源/跨國 cache 污染
-    if args.source == "jora":
-        prefix = f"jora_{loc_prefix}"
-    elif args.source == "jobstreet":
-        prefix = f"jobstreet_{loc_prefix}"
-    else:
-        prefix = loc_prefix
+    prefix = loc_prefix
     out = Path(f"{prefix}_product_jobs{suffix}.json")
     json_cache = {}
     if args.with_jd and not args.refetch:

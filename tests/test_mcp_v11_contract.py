@@ -23,7 +23,7 @@ def _by_name(name: str):
 def test_v11_server_version_and_tool_set():
     import server_v1_1
 
-    assert server_v1_1.mcp.version == "1.2.1"
+    assert server_v1_1.mcp.version == "1.3.0"
     assert {t.name for t in _tools()} == {
         "crawl_jobs",
         "initialize_job_tracker",
@@ -73,12 +73,12 @@ def test_v11_config_no_longer_requires_sheet_gid(monkeypatch, tmp_path):
     assert cfg[1] == "user-owned-sheet-id-1234567890"
 
 
-def test_non_sg_jora_and_jobstreet_fail_before_crawl():
+def test_retired_sources_fail_before_crawl():
     import server_v1_1
 
-    for source in ("jora", "jobstreet"):
-        ok, reason = server_v1_1._source_region_supported(source, "TW")
+    for source in ("jora", "jobstreet", "unknown"):
+        ok, reason = server_v1_1._source_region_supported(source, "SG")
         assert ok is False
-        assert "Singapore-only" in (reason or "")
+        assert "supported source: linkedin" in (reason or "")
     assert server_v1_1._source_region_supported("linkedin", "TW")[0] is True
     assert server_v1_1._source_region_supported("linkedin", "China")[0] is True

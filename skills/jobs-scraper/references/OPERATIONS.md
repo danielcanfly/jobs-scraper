@@ -2,9 +2,9 @@
 
 ## Supported sources
 
-- LinkedIn guest jobs endpoints
-- Jora Singapore while available
-- JobStreet public/API-backed integration used by the scraper
+- LinkedIn Guest API (active crawl and JD source)
+
+Jora and JobStreet network integrations were retired in v1.3.0. Existing tracker rows from those sources remain readable for audit/dedup compatibility only.
 
 ## Time ranges
 
@@ -44,13 +44,10 @@ If a non-empty target tab already exists with the wrong A:AA header contract, in
 
 ## Region routing
 
-`sync_jobs_to_sheet(region=...)`, `audit_sheet(region=...)`, and `get_stats(region=...)` resolve `<REGION>-Raw` automatically.
+sync_jobs_to_sheet(region=...), audit_sheet(region=...), and get_stats(region=...) resolve <REGION>-Raw automatically.
 
 - LinkedIn: SG, TW, China (China uses the validated Shanghai LinkedIn preset).
-- Jora: SG only.
-- JobStreet: SG only.
-
-A non-SG Jora/JobStreet request fails with `SOURCE_REGION_UNSUPPORTED`; it must not silently write to an SG tab.
+- A retired source is rejected before configuration lookup or subprocess execution.
 
 ## Local MCP
 
@@ -66,8 +63,8 @@ Full-JD calls may require a host tool timeout around two hours. Codex sample con
 
 ## Public-source crawling without Google Sheets
 
-`crawl_jobs` does not require `SHEET_ID` or `GSPREAD_SA_KEY_PATH`. A fresh install can list and enrich jobs from LinkedIn / Jora / JobStreet without any Google configuration.
+`crawl_jobs` does not require `SHEET_ID` or `GSPREAD_SA_KEY_PATH`. A fresh install can list and enrich LinkedIn jobs without any Google configuration.
 
 ## Backward compatibility
 
-`server.py` remains the frozen v1.0.0 entrypoint during the v1.1.0 development/qualification line. It still supports the legacy explicit `SHEET_GID` flow. The v1.1.0 host entrypoint is `server_v1_1.py`.
+`server.py` remains the legacy four-tool compatibility entrypoint and still supports the explicit `SHEET_GID` flow. Its active source policy follows v1.3.0 (LinkedIn only). `server_v1_1.py` remains the region-aware host entrypoint.

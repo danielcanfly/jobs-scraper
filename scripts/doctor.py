@@ -108,7 +108,7 @@ def check_sheet_config() -> tuple[str, str]:
     missing = [k for k in REQUIRED_SHEET_KEYS_V11 if not proc_env.get(k, "")]
     if missing:
         return (
-            f"v1.1 未設定: {', '.join(missing)} — crawl_jobs 仍可用；Sheet tools 會 fail closed。SHEET_GID 不需設定",
+            f"v1.3 未設定: {', '.join(missing)} — crawl_jobs 仍可用；Sheet tools 會 fail closed。SHEET_GID 不需設定",
             "WARN",
         )
 
@@ -139,7 +139,7 @@ def check_no_secrets_in_git() -> tuple[str, str]:
 
 
 def main() -> int:
-    print("🩺 jobs-scraper v1.1 doctor")
+    print("🩺 jobs-scraper v1.3 doctor")
     print("=" * 60)
     order = {"PASS": 0, "WARN": 1, "FAIL": 2}
     worst = "PASS"

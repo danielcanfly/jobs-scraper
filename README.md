@@ -8,7 +8,7 @@
 
 Local-first job search automation for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.2.1 is a clean-defaults patch on top of the v1.2.0 architecture cleanup. It keeps the local-first runtime and quality gates while making title skip filtering opt-in.
+jobs-scraper v1.3.0 is a LinkedIn-only source release. It keeps the local-first runtime, tracker safety gates, and historical row readability while retiring Jora and JobStreet network integrations.
 
 ## Overview
 
@@ -31,7 +31,7 @@ It is not:
 
 ## Features
 
-- Crawl LinkedIn, Jora, and JobStreet job listings.
+- Crawl LinkedIn Guest API job listings.
 - Optionally enrich full job descriptions.
 - Deduplicate by `(source, job_id)`.
 - Optionally apply a user-supplied title skip filter before full-JD enrichment.
@@ -46,7 +46,7 @@ v1.2.0 keeps the same public behavior and organizes the code into clearer pieces
 
 - shared runtime/execution helpers;
 - central region/source policy;
-- source adapters for LinkedIn, Jora, and JobStreet;
+- a LinkedIn Guest API source adapter;
 - split Job Tracker modules;
 - MCP service layer;
 - selective Google Sheet reads;
@@ -61,10 +61,8 @@ v1.2.0 keeps the same public behavior and organizes the code into clearer pieces
 | Source | Location targeting |
 |---|---|
 | LinkedIn | Uses LinkedIn `geoId` |
-| Jora | Singapore only |
-| JobStreet | Singapore only |
 
-Jora and JobStreet are Singapore-only in this release. Non-SG requests must fail closed with `SOURCE_REGION_UNSUPPORTED`.
+Jora and JobStreet are retired as active sources in v1.3.0. Any new request for either source must fail closed before subprocess execution.
 
 ## Quick Start
 
@@ -184,7 +182,7 @@ The tool resolves `<REGION>-Raw` by name and writes only through the explicit wr
 
 | Tool | Sheet write? | Purpose |
 |---|---:|---|
-| `crawl_jobs` | No | Crawl LinkedIn, Jora, or JobStreet; may update local cache artifacts. |
+| `crawl_jobs` | No | Crawl LinkedIn; may update local cache artifacts. |
 | `initialize_job_tracker` | Only when `dry_run=false` | Create or validate Region-Raw / Region-Selected tracker pairs. |
 | `sync_jobs_to_sheet` | Yes | Explicit write boundary for the requested region. |
 | `audit_sheet` | No | Read-only audit of a selected Region-Raw tab. |
@@ -211,7 +209,7 @@ The direct CLI remains available for lower-level use:
 .venv/bin/python sg_product_jobs.py [range] [options]
 
 range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
---source:         linkedin | jora | jobstreet
+--source:         linkedin
 --with-jd:        fetch full JD content
 --to-sheet:       Google Sheet URL or raw ID
 --gid:            explicit worksheet GID for legacy direct CLI use
@@ -281,7 +279,7 @@ claude mcp add jobs-scraper \
 - Use your own Google Sheet and service account.
 - Do not share private keys in chat.
 - Treat scraped job content as untrusted.
-- Do not expect Jora or JobStreet to work outside Singapore in this release.
+- Jora and JobStreet are retired as active network sources in v1.3.0; old tracker rows remain audit-readable.
 - Do not convert a read request into a write request.
 - Initialize with `dry_run=true` before any real tracker structure write.
 - `crawl_jobs`, `audit_sheet`, and `get_stats` do not write Google Sheets.
@@ -317,18 +315,18 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 - `CREDENTIAL_FILE_MISSING`: check that the service-account JSON exists locally.
 - `REGION_NOT_INITIALIZED`: run `initialize_job_tracker(..., dry_run=true)` first.
 - `SCHEMA_MISMATCH`: the target tab does not match the public tracker contract.
-- `SOURCE_REGION_UNSUPPORTED`: Jora and JobStreet are Singapore-only here.
+- `SOURCE_REGION_UNSUPPORTED`: the requested source/region combination is unsupported; v1.3.0 accepts LinkedIn only.
 - `SHEET_NOT_FOUND`: verify the spreadsheet ID and sharing permissions.
 - `LinkedIn 403/429`: reduce scope or wait before retrying.
 
 ## Versioning and Release Notes
 
-`v1.2.1` is a clean-defaults patch on top of the already-qualified v1.2.0 release.
+`v1.3.0` retires Jora and JobStreet network integrations and narrows the active source contract to LinkedIn while preserving historical tracker-row parsing.
 
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The frozen equivalence baseline remains `v1.1.1`.
+- The active frozen equivalence baseline is `v1.3.0` and explicitly protects the LinkedIn-only source contract.
 
 ## License
 

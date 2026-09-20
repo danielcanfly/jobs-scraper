@@ -223,9 +223,20 @@ def test_schema_mismatch_blocks_subprocess(monkeypatch):
 def test_unsupported_source_region_blocks_before_config_or_subprocess(monkeypatch):
     monkeypatch.setattr(S, "_cfg_or_error", lambda: pytest.fail("config must not be consulted"))
     monkeypatch.setattr(S.RT, "run_scraper_subprocess", lambda _args: pytest.fail("subprocess must not run"))
-    result = S.sync_jobs_to_sheet(region="TW", source="jobstreet", range="7d")
-    assert result.ok is False
-    assert result.error_code == "SOURCE_REGION_UNSUPPORTED"
+    payload = S.tracker_service.sync_region_payload(
+        "TW",
+        "jobstreet",
+        "7d",
+        with_jd=True,
+        max_pages=None,
+        refetch=False,
+        dry_run=False,
+        cfg_reader=S._cfg_or_error,
+        runner=S.RT.run_scraper_subprocess,
+    )
+    assert payload["ok"] is False
+    assert payload["error_code"] == "SOURCE_REGION_UNSUPPORTED"
+    assert payload["message"] == "source='jobstreet' is not supported; supported source: linkedin"
 
 
 def test_sync_dry_run_resolves_readonly_and_uses_internal_gid(monkeypatch):

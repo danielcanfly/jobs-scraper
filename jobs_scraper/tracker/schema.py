@@ -45,7 +45,7 @@ HEADER_NOTES = (
     "工作流狀態：New / Scored / Applied / Interviewing / Pending。",
     "投遞優先級：P0 / P1 / P2 / Low。用來排序實際處理順序，不只看總分。",
     "職缺加入或最近完成評分的日期。",
-    "例如 LinkedIn、Jora、JobStreet、referral、company site。",
+    "例如 LinkedIn、referral、company site；舊資料也可能保留已退役來源名稱。",
     "原始職缺 URL 或 jobs-scraper 產生的安全 HYPERLINK。",
     "公司名稱。",
     "職缺標題。",

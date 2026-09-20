@@ -1,21 +1,14 @@
 {
-  "freeze_version": 1,
+  "freeze_version": 2,
   "baseline": {
-    "tag": "v1.1.1",
-    "commit": "8fbf32484418c2d5edd1fc1e0e451232515dadd8",
-    "tree": "f0ba649aa4d989fceffa51b14c49a1f4b7e311c4"
-  },
-  "phase_a_green_evidence": {
-    "commit": "2f162aa00f284cfea5d404938269f9dce697e07e",
-    "tree": "ad6ba974d5fb2d9f08605730339ab0e7e1d2d8c8",
-    "official_ci_run": 32665110754,
-    "equivalence_named_gate": "success",
-    "full_ci": "success"
+    "release": "v1.3.0",
+    "authorized_delta": "retire-jora-jobstreet-active-sources",
+    "parent_main": "2bd40f0f169cc17b0cf57b166b11759e69790278"
   },
   "frozen_blobs": {
-    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "f2eeb57efde1a1f1f36b825ad322edd702f24ad4",
-    "tests/equivalence/v111_golden.json": "c2d4f557a74cafc2d33d86d75e95a412e88a422c",
-    "tests/equivalence/test_v111_equivalence.py": "958fbac88bf8e9cc28dee8156eb959fa0e305b0a"
+    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "978c6c1ad8a730eb4cc92317dba5aa8246a1ee64",
+    "tests/equivalence/v130_golden.json": "d3f3aaedd075b9292a76b51d89fba3bf47b9f747",
+    "tests/equivalence/test_v130_equivalence.py": "5e1004cb77fc4425538441560c175bc1452538d5"
   },
-  "policy": "During Phase B/C architecture cleanup, frozen harness blobs may not change. Product behaviour changes require a separate explicitly authorized delta, not a golden rewrite inside the refactor."
+  "policy": "The v1.3.0 LinkedIn-only source contract is frozen. Retired-source network capability may not be reintroduced by refactor; future source expansion requires an explicit authorized contract change."
 }

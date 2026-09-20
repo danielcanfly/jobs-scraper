@@ -74,4 +74,4 @@ def test_tracker_public_payload_keeps_existing_error_code_and_message():
     )
     assert payload["ok"] is False
     assert payload["error_code"] == "SOURCE_REGION_UNSUPPORTED"
-    assert payload["message"] == "jobstreet is currently Singapore-only in v1.1.0; use source='linkedin' for region=TW"
+    assert payload["message"] == "source='jobstreet' is not supported; supported source: linkedin"

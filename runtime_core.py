@@ -22,7 +22,7 @@ OUTPUT_TAIL_STDOUT = 5_000
 OUTPUT_TAIL_STDERR = 2_000
 SUMMARY_PREFIX = "JOBS_SCRAPER_SUMMARY="
 
-Source = Literal["linkedin", "jora", "jobstreet"]
+Source = Literal["linkedin"]
 Range = Literal["1h", "24h", "3d", "7d", "14d", "21d", "30d"]
 
 

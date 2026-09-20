@@ -7,23 +7,17 @@
 #    curl_cffi: 偽裝瀏覽器 TLS fingerprint, 避免被 LinkedIn ban
 curl-cffi>=0.5.10
 
-# 2. Jora HTML parse (沒有 API)
+# 2. LinkedIn HTML parse
 scrapling>=0.4.14,<0.5
 
-# 3. JobStreet GraphQL (不需要 Cloudflare solve)
-#    用 curl_cffi 就夠, 不需要 scrapling 的 StealthyFetcher (managed CF 解不動)
-
-# 4. Google Sheets 寫入
+# 3. Google Sheets 寫入
 gspread>=6.0.0
 google-auth>=2.23.0
 
-# 5. JobStreet JD HTML 轉純文字
-beautifulsoup4>=4.12.0
-
-# 6. 讀 .env 自動載入環境變數
+# 4. 讀 .env 自動載入環境變數
 python-dotenv>=1.0.0
 
-# 7. MCP server (給 Codex / 其他 MCP 工具用)
+# 5. MCP server (給 Codex / 其他 MCP 工具用)
 #    v1.1.x provides crawl_jobs / initialize_job_tracker / sync_jobs_to_sheet / audit_sheet / get_stats
 #    升 MCP v2 stable line (FastMCP 已 rename 為 MCPServer)
 mcp>=2.0,<3
