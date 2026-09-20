@@ -6,13 +6,13 @@
 
 # jobs-scraper
 
-这是一个以本地优先为原则的产品管理职位搜索自动化工具，提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
+这是一个面向 LinkedIn 职位的本地爬虫与追踪工具，主要用于产品管理相关岗位，并提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
 
-`jobs-scraper` v1.3.0 是 LinkedIn-only 来源版本。它保留本地优先 runtime、Tracker 安全 gate 和历史数据可读性，同时移除 Jora 与 JobStreet 网络集成。
+`jobs-scraper` v1.3.0 专注于 LinkedIn 职位搜索、完整 JD enrichment 和追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
 
 ## 概览
 
-这个仓库适合想在本地抓取产品管理职位、把凭证留在自己电脑上，并按需同步到自己 Google 表格的人。
+这个仓库适合想在本地抓取和追踪 LinkedIn 产品管理职位、把凭证留在自己电脑上，并按需同步到自己 Google 表格的人。
 
 它是：
 
@@ -56,13 +56,11 @@ v1.2.0 保持对外行为不变，并把代码整理成更清楚的区块：
 - mypy scaffold；
 - coverage 报告。
 
-## 支持来源与地点指定方式
+## LinkedIn 地点指定
 
-| Source | 地点指定方式 |
-|---|---|
-| LinkedIn | LinkedIn 使用 LinkedIn `geoId` 指定地点 |
+爬虫使用 LinkedIn Guest API，并通过 LinkedIn `geoId` 指定搜索地点。
 
-v1.3.0 已移除 Jora 和 JobStreet 主动来源。任何新的 Jora／JobStreet 请求都必须在 subprocess 执行前 fail closed。
+为兼容已有数据，旧版 Jora／JobStreet 集成曾写入的 Tracker / cache rows 仍可用于 audit 和 dedup；新的网络请求不再使用这些旧集成。
 
 ## 快速开始
 

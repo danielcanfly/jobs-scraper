@@ -6,13 +6,13 @@
 
 # jobs-scraper
 
-這是一套以本機優先為原則的產品管理職缺搜尋自動化工具，提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
+這是一套給 LinkedIn 職缺使用的本機爬蟲與追蹤工具，主要面向產品管理相關職位，並提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
 
-`jobs-scraper` v1.3.0 是 LinkedIn-only 來源版本。它保留本機優先 runtime、Tracker 安全 gate 與歷史資料可讀性，同時移除 Jora 與 JobStreet 的網路整合。
+`jobs-scraper` v1.3.0 專注於 LinkedIn 職缺搜尋、完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
 
 ## 概覽
 
-這個 repo 適合想要在本機爬取產品管理職缺、把憑證留在自己電腦上，並視需要同步結果到自己 Google 試算表的人。
+這個 repo 適合想要在本機爬取與追蹤 LinkedIn 產品管理職缺、把憑證留在自己電腦上，並視需要同步結果到自己 Google 試算表的人。
 
 它是：
 
@@ -56,13 +56,11 @@ v1.2.0 保持對外行為不變，並把程式碼整理成更清楚的區塊：
 - mypy scaffold；
 - coverage 報告。
 
-## 支援來源與地點指定方式
+## LinkedIn 地點指定
 
-| Source | 地點指定方式 |
-|---|---|
-| LinkedIn | LinkedIn 使用 LinkedIn `geoId` 指定地點 |
+爬蟲使用 LinkedIn Guest API，並透過 LinkedIn `geoId` 指定搜尋地點。
 
-v1.3.0 已移除 Jora 與 JobStreet 主動來源。任何新的 Jora／JobStreet 請求都必須在 subprocess 執行前 fail closed。
+為了相容既有資料，舊版 Jora／JobStreet 整合曾寫入的 Tracker / cache rows 仍可用於 audit 與 dedup；新的網路請求則不再使用這些舊整合。
 
 ## 快速開始
 

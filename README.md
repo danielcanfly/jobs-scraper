@@ -6,13 +6,13 @@
 
 # jobs-scraper
 
-Local-first job search automation for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
+A local-first LinkedIn job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.3.0 is a LinkedIn-only source release. It keeps the local-first runtime, tracker safety gates, and historical row readability while retiring Jora and JobStreet network integrations.
+jobs-scraper v1.3.0 is designed for LinkedIn job discovery, JD enrichment, and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
-This repository is for people who want to crawl product-management jobs locally, keep credentials on their own machine, and optionally sync results into their own Google Sheet.
+This repository is for people who want to crawl and track product-management roles on LinkedIn locally, keep credentials on their own machine, and optionally sync results into their own Google Sheet.
 
 It is:
 
@@ -56,13 +56,11 @@ v1.2.0 keeps the same public behavior and organizes the code into clearer pieces
 - mypy scaffold;
 - coverage reporting.
 
-## Supported Sources and Location Targeting
+## LinkedIn Location Targeting
 
-| Source | Location targeting |
-|---|---|
-| LinkedIn | Uses LinkedIn `geoId` |
+The scraper uses LinkedIn's Guest API and supports location targeting through LinkedIn `geoId` values.
 
-Jora and JobStreet are retired as active sources in v1.3.0. Any new request for either source must fail closed before subprocess execution.
+For backward compatibility, historical tracker/cache rows created by older Jora or JobStreet integrations remain readable for audit and deduplication. Those integrations are no longer used for new network requests.
 
 ## Quick Start
 
