@@ -8,6 +8,7 @@ and connection-pool behaviour remains observable at the legacy boundary.
 
 from __future__ import annotations
 
+import time
 from urllib.parse import urlencode
 
 from scrapling.parser import Adaptor
@@ -106,14 +107,40 @@ def fetch_list_page(
     *,
     keywords: str = DEFAULT_KEYWORDS,
 ) -> str:
-    r = session.get(
-        build_list_url(tpr, start, location, geo_id, keywords=keywords),
-        impersonate="chrome",
-        timeout=20,
-        headers={"Accept-Language": "en-US,en;q=0.9"},
-    )
-    r.raise_for_status()
-    return r.text
+    """LinkedIn list page 帶 30/60/90s retry (對齊 cake/104 pattern).
+
+    2026-10-07 fix: 原本沒 retry, list page 撞 429 → r.raise_for_status() → HTTPError
+    → crawler 整個 list crawl hard abort, 只跑 6-12 頁 (~57 jobs) coverage 嚴重不完整。
+    429 / 5xx / connection error → sleep 30/60/90s → retry (共 4 次 attempt)。
+    4xx (非 429) 直接 raise, 視為 caller bug。
+    Raises: RuntimeError if all retries exhausted.
+    """
+    backoff = [30, 60, 90]
+    last_err = None
+    url = build_list_url(tpr, start, location, geo_id, keywords=keywords)
+    for attempt in range(4):
+        try:
+            r = session.get(
+                url,
+                impersonate="chrome",
+                timeout=20,
+                headers={"Accept-Language": "en-US,en;q=0.9"},
+            )
+            if r.status_code == 200:
+                return r.text
+            if r.status_code == 429 or r.status_code >= 500:
+                last_err = f"http {r.status_code}"
+            else:
+                r.raise_for_status()
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {str(e)[:50]}"
+        if attempt < 3:
+            print(
+                f"    [LINKEDIN LIST RETRY {attempt+1}/3] start={start} 失敗 ({last_err}), sleep {backoff[attempt]}s",
+                flush=True,
+            )
+            time.sleep(backoff[attempt])
+    raise RuntimeError(f"linkedin list fetch failed after 4 attempts: {last_err}")
 
 
 def build_jd_url(job_id: str) -> str:
