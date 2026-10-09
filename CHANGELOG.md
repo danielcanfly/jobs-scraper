@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.1 — 2026-10-09
+
+LinkedIn list page 429 hard-abort fix.
+
+- Added 30/60/90s backoff retry to `jobs_scraper/sources/linkedin.py::fetch_list_page`.
+- Without retry, list page 429 → `r.raise_for_status()` → HTTPError → caller hard abort, leaving 14d/21d/30d runs at 6-12 pages (~57 jobs) instead of the full 30 pages (~286 jobs).
+- Retry triggers on 429, 5xx, or connection error; 4 attempts; 4xx (non-429) raises immediately.
+- Single page can now sustain up to 3.5 min of backoff (30+60+90s) before giving up.
+
 ## v1.3.0 — 2026-09-20
 
 LinkedIn-only source release.
