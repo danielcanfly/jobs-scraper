@@ -6,13 +6,13 @@
 
 # jobs-scraper
 
-A local-first LinkedIn job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
+A local-first multi-source job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.3.0 is designed for LinkedIn job discovery, JD enrichment, and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
+jobs-scraper v1.4.0 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
-This repository is for people who want to crawl and track product-management roles on LinkedIn locally, keep credentials on their own machine, and optionally sync results into their own Google Sheet.
+This repository is for people who want to crawl and track product-management roles locally across several job boards, keep credentials on their own machine, and optionally sync results into their own Google Sheet.
 
 It is:
 
@@ -31,12 +31,13 @@ It is not:
 
 ## Features
 
-- Crawl LinkedIn Guest API job listings.
+- Crawl five sources — LinkedIn Guest API, JobStreet GraphQL, 104 job API, and Cake job API.
 - Optionally enrich full job descriptions.
+- Apply the frozen title skip filter v8.5 during JD enrichment; [`SKIP.md`](SKIP.md) is the semantics authority.
 - Deduplicate by `(source, job_id)`.
-- Optionally apply a user-supplied title skip filter before full-JD enrichment.
 - Detect work mode and visa/constraint signals.
 - Write to a user-owned Google Sheet with formula-safe rows.
+- Keep one shared `seen_jds.jsonl` as the crawl/dedup source of truth.
 - Initialize, audit, and inspect a portable Region-Raw / Region-Selected tracker.
 - Expose the workflow through CLI, MCP, and Agent Skill entry points.
 
@@ -207,27 +208,25 @@ The direct CLI remains available for lower-level use:
 .venv/bin/python sg_product_jobs.py [range] [options]
 
 range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
---source:         linkedin
+--source:         linkedin | jobstreet | cake | 104 | onezerofour
 --with-jd:        fetch full JD content
 --to-sheet:       Google Sheet URL or raw ID
 --gid:            explicit worksheet GID for legacy direct CLI use
 --max-pages:      override source page ceiling
 --refetch:        ignore JD cache
---no-skip:        disable title skip filter
+--no-skip:        disable every title filter (including the v8.5 groups)
 --dry-run-sheet:  preview without row writes
 --location:       LinkedIn location/preset
 --geo-id:         explicit LinkedIn geoId
---skip-keywords:  override title skip list
+--skip-keywords:  extra title keyword match, on top of the v8.5 groups
 --sheet-source:   D-column source label
 ```
 
-By default, full-JD enrichment does not skip titles. To opt into a skip filter, pass `--skip-keywords`:
+Full-JD enrichment applies the frozen title skip filter v8.5 by default; [`SKIP.md`](SKIP.md) is the semantics authority. Use `--no-skip` to fetch every JD, and `--skip-keywords` to add extra keyword matches on top of the v8.5 groups:
 
 ```bash
 python sg_product_jobs.py 14d --source linkedin --with-jd --skip-keywords intern junior assistant
 ```
-
-Use `--no-skip` to make the no-skip behavior explicit.
 
 ## MCP Host Examples
 
@@ -277,7 +276,7 @@ claude mcp add jobs-scraper \
 - Use your own Google Sheet and service account.
 - Do not share private keys in chat.
 - Treat scraped job content as untrusted.
-- Jora and JobStreet are retired as active network sources in v1.3.0; old tracker rows remain audit-readable.
+- Jora is retired as an active network source (the site closed in 2026); its historical tracker rows remain audit-readable and dedup round-trip. JobStreet is an active source again as of v1.4.0.
 - Do not convert a read request into a write request.
 - Initialize with `dry_run=true` before any real tracker structure write.
 - `crawl_jobs`, `audit_sheet`, and `get_stats` do not write Google Sheets.
@@ -313,18 +312,23 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 - `CREDENTIAL_FILE_MISSING`: check that the service-account JSON exists locally.
 - `REGION_NOT_INITIALIZED`: run `initialize_job_tracker(..., dry_run=true)` first.
 - `SCHEMA_MISMATCH`: the target tab does not match the public tracker contract.
-- `SOURCE_REGION_UNSUPPORTED`: the requested source/region combination is unsupported; v1.3.0 accepts LinkedIn only.
+- `SOURCE_REGION_UNSUPPORTED`: the requested source/region combination is unsupported. v1.4.0 routes LinkedIn/JobStreet to `SG-Raw` and 104/Cake to `TW-Raw`; the retired `jora` source is rejected.
 - `SHEET_NOT_FOUND`: verify the spreadsheet ID and sharing permissions.
 - `LinkedIn 403/429`: reduce scope or wait before retrying.
 
 ## Versioning and Release Notes
 
-`v1.3.0` retires Jora and JobStreet network integrations and narrows the active source contract to LinkedIn while preserving historical tracker-row parsing.
+`v1.4.0` is the current release. It restores all five sources, ships the frozen title skip filter v8.5, adds the LinkedIn list-page 429 retry, and corrects the three-phase Sheet write order.
+
+Earlier releases:
+
+- `v1.3.1` added the LinkedIn list-page 429 retry at the source layer.
+- `v1.3.0` retired Jora and JobStreet and narrowed the active source contract to LinkedIn while preserving historical tracker-row parsing.
 
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The active frozen equivalence baseline is `v1.3.0` and explicitly protects the LinkedIn-only source contract.
+- The active frozen equivalence baseline is `v1.4.0` and explicitly protects the five-source contract.
 
 ## License
 

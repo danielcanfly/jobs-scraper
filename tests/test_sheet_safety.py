@@ -16,6 +16,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
+# Reuse the repository hygiene guard's forbidden-value table instead of keeping
+# a second copy of the package author's tab GID in this file.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from check_repo_hygiene import FORBIDDEN_EXACT  # noqa: E402
+from conftest import clean_env_module  # noqa: E402
 
 import sg_product_jobs as M  # noqa: E402
 
@@ -165,13 +170,14 @@ def test_dry_run_does_not_invoke_update():
 def test_gid_zero_is_explicit_not_default():
     """The fallback gid is 0; push_to_sheet/get_worksheet_by_id should be called
     with the user-provided gid (not a historical hardcoded author GID)."""
-    import sg_product_jobs as M
-
-    # The default gid when env is empty is 0 (sentinel for "not configured").
-    assert M.SG_RAW_GID == 0
+    # Re-import with a scrubbed environment: the module reads Sheet config at
+    # import time, so an ambient .env would make the default assertion false.
+    with clean_env_module("sg_product_jobs") as M:
+        # The default gid when env is empty is 0 (sentinel for "not configured").
+        assert M.SG_RAW_GID == 0
     # And the hardcoded historical default must be gone.
     src = (REPO_ROOT / "sg_product_jobs.py").read_text(encoding="utf-8")
-    author_gid = "111" + "9491672"
+    author_gid = FORBIDDEN_EXACT["author_production_tab_gid"]
     assert f"else {author_gid}" not in src
 
 

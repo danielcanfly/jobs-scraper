@@ -8,7 +8,7 @@
 
 这是一个面向 LinkedIn 职位的本地爬虫与追踪工具，主要用于产品管理相关岗位，并提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
 
-`jobs-scraper` v1.3.0 专注于 LinkedIn 职位搜索、完整 JD enrichment 和追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
+`jobs-scraper` v1.4.0 在五个来源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）抓取产品管理职位，并提供完整 JD enrichment 与追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
 
 ## 概览
 
@@ -207,27 +207,25 @@ sync_jobs_to_sheet(
 .venv/bin/python sg_product_jobs.py [range] [options]
 
 range:            1h | 24h | 3d | 7d | 14d | 21d | 30d
---source:         linkedin
+--source:         linkedin | jobstreet | cake | 104 | onezerofour
 --with-jd:        抓取完整 JD
 --to-sheet:       Google Sheet URL 或 raw ID
 --gid:            旧版 direct CLI 用的 worksheet GID
 --max-pages:      覆写来源页数上限
 --refetch:        忽略 JD cache
---no-skip:        停用 title skip filter
+--no-skip:        关闭所有标题过滤（包含 v8.5 语义群组）
 --dry-run-sheet:  预览，不写入行数据
 --location:       LinkedIn location/preset
 --geo-id:         明确指定 LinkedIn geoId
---skip-keywords:   覆写 title skip list
+--skip-keywords:   额外的标题关键词比对，叠加在 v8.5 语义群组之上
 --sheet-source:   D 栏 source label
 ```
 
-默认不套用职位标题 skip filter。需要时可用 `--skip-keywords` 自定义：
+完整 JD enrichment 默认会套用冻结的 title skip filter v8.5，语义规范以 [`SKIP.md`](SKIP.md) 为准。用 `--no-skip` 可抓取每一份 JD；用 `--skip-keywords` 可在 v8.5 语义群组之上额外加上关键词比对：
 
 ```bash
 python sg_product_jobs.py 14d --source linkedin --with-jd --skip-keywords intern junior assistant
 ```
-
-也可以使用 `--no-skip` 明确表示不套用 skip。
 
 ## MCP Host 示例
 
@@ -277,7 +275,7 @@ claude mcp add jobs-scraper \
 - 使用你自己的 Google 表格与 service account。
 - 不要在聊天中分享私钥。
 - 把 scraped job content 视为不可信数据。
-- v1.3.0 已移除 Jora / JobStreet 主动网络来源；旧 Tracker rows 仍可被 audit 读取。
+- Jora 已从主动网络来源移除（网站已关站）；旧 Tracker rows 仍可被 audit 读取并正常 dedup round-trip。JobStreet 自 v1.4.0 起重新成为主动来源。
 - 不要把读取请求转成写入请求。
 - 正式初始化前先用 `dry_run=true` 预览。
 - `crawl_jobs`、`audit_sheet`、`get_stats` 都不会写 Google Sheets。
@@ -313,18 +311,23 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 - `CREDENTIAL_FILE_MISSING`：确认 service-account JSON 在本地存在。
 - `REGION_NOT_INITIALIZED`：先运行 `initialize_job_tracker(..., dry_run=true)`。
 - `SCHEMA_MISMATCH`：目标 tab 与公开 tracker contract 不一致。
-- `SOURCE_REGION_UNSUPPORTED`：请求的来源／地区组合不受支持；v1.3.0 仅接受 LinkedIn。
+- `SOURCE_REGION_UNSUPPORTED`：请求的来源／地区组合不受支持。v1.4.0 将 LinkedIn / JobStreet 导向 `SG-Raw`，104 / Cake 导向 `TW-Raw`；已退役的 `jora` 会被拒绝。
 - `SHEET_NOT_FOUND`：确认 spreadsheet ID 与分享权限。
 - `LinkedIn 403/429`：缩小范围或稍后再试。
 
 ## 版本与发布说明
 
-`v1.3.0` 移除 Jora 与 JobStreet 网络集成，主动来源 contract 收敛为 LinkedIn，同时保留历史 Tracker row 的解析能力。
+`v1.4.0` 为当前版本：恢复全部五个来源、内置冻结的 title skip filter v8.5、新增 LinkedIn list page 429 retry，并修正 Sheet 三段式写入顺序。
+
+较早版本：
+
+- `v1.3.1` 在 source layer 新增 LinkedIn list page 429 retry。
+- `v1.3.0` 移除 Jora 与 JobStreet 网络集成，主动来源 contract 收敛为 LinkedIn，同时保留历史 Tracker row 的解析能力。
 
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 对外提供 MCP server 版本。
-- 当前 frozen equivalence baseline 为 `v1.3.0`，明确保护 LinkedIn-only source contract。
+- 当前 frozen equivalence baseline 为 `v1.4.0`，明确保护五来源 contract。
 
 ## 许可
 

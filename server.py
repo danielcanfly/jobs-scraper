@@ -127,7 +127,7 @@ class StatsResult(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.3.0",
+    version="1.4.0",
     description=(
         "LinkedIn Guest API product-management job scraper. "
         "Read tools (crawl_jobs, audit_sheet, get_stats) never write to Google Sheets. "

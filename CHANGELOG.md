@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.4.0 — 2026-10-26
+
+Single version line. The plugin runtime, working copies, and this repository now carry one identical build.
+
+Restored sources (the v1.3.0 release was LinkedIn-only; all five sources are back):
+
+- `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` all live in `sg_product_jobs.py`, which owns URL building, list parsing, JD fetch, the title skip filter, dedup, and Sheet row writes.
+- `jora` stays retired from active sources (the site closed in 2026) and is kept only for back-compat dedup of historical rows.
+
+Fixed regressions:
+
+- Sheet write order. `_write_rows_to_sheet` now writes `A:D RAW` -> `F:K RAW` -> `E USER_ENTERED`, so the E-column HYPERLINK is the last phase. Previously the formula was written first in the plugin build, and the working copy wrote all of `A:K` in a single `USER_ENTERED` call — which weakened the formula-injection boundary and could leave a live hyperlink behind when a data phase failed.
+- LinkedIn list-page 429 hard abort. `fetch_list_page` retries on 429 / 5xx / connection error with 30/60/90s backoff across 4 attempts; a non-429 4xx raises immediately. Without it, one 429 aborted the whole list crawl and long-range runs covered only a fraction of their pages.
+
+Title filtering:
+
+- Skip filter v8.5 (Repair7, qualified) is the shipped default. `SKIP.md` is the semantics authority; the filter logic is a frozen contract and is not changed by this release.
+
+State:
+
+- `seen_jds.jsonl` is now a single source of truth shared by every execution context. Independent copies caused silent duplicates: a job fetched in one context was not recognised in the other and was written to the Sheet twice.
+
+Removed:
+
+- `jobs_scraper/sources/` — an unused duplicate of the LinkedIn adapter with no importer.
+
+Also in this release:
+
+- Version metadata unified to `1.4.0` across `sg_product_jobs.py`, `pyproject.toml`, `.minimax-plugin/plugin.json`, `.codex-plugin/plugin.json`, `server.py`, `server_v1_1.py`, and the Agent Skill.
+- `RULES.md` merged into a single public-safe technical reference covering all five sources.
+
+# Changelog
+
 ## v1.3.1 — 2026-10-09
 
 LinkedIn list page 429 hard-abort fix.

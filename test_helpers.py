@@ -21,14 +21,32 @@ def test_build_e_formula_linkedin():
     ), f"got: {e}"
 
 
-def test_build_e_formula_rejects_retired_sources():
-    for source in ("jora", "jobstreet", "unknown"):
-        try:
-            M.build_e_formula(source, "12345", "")
-        except ValueError as exc:
-            assert "supported source: linkedin" in str(exc)
-        else:
-            raise AssertionError(f"expected retired source rejection: {source}")
+# DEPRECATED 2026-09-09: Jora SG 已關站, 以下 build_e_formula 測試改為 back-compat 驗證
+# (驗證既有 ~885 筆 sheet rows 的 E 欄 formula 仍能被 round-trip 解析)
+def test_build_e_formula_jora_deprecated_backcompat():
+    """DEPRECATED 2026-09-09: Jora SG 關站後, 既有 sheet rows 的 E 欄 formula 仍應能 round-trip。
+    不會再有新 jora jobs, 但 build_e_formula("jora", ...) 保留給舊 sheet rows dedup 用。"""
+    e = M.build_e_formula("jora", "abc123def456", "https://sg.jora.com/job/Product-Manager-abc123def456")
+    assert "sg.jora.com/job/Product-Manager-abc123def456" in e
+    assert e.startswith("=HYPERLINK(")
+
+
+def test_build_e_formula_jora_no_url_deprecated_backcompat():
+    """DEPRECATED 2026-09-09: 沒給 url 時 fallback 到 JORA_BASE (back-compat)。"""
+    e = M.build_e_formula("jora", "abc123def456", "")
+    assert f"{M.JORA_BASE}/job/Product-Manager-abc123def456" in e
+
+
+def test_build_e_formula_jobstreet():
+    """2026-08-23 改: 純 id 格式, 沒 slug"""
+    e = M.build_e_formula("jobstreet", "94145676", "")
+    assert e == '=HYPERLINK("https://sg.jobstreet.com/job/94145676","https://sg.jobstreet.com/job/94145676")'
+
+
+def test_build_e_formula_unknown_source():
+    """未知 source fallback 到 linkedin 格式 (跟原本行為一致)"""
+    e = M.build_e_formula("unknown", "12345", "")
+    assert "linkedin.com/jobs-guest/jobs/api/jobPosting/12345" in e
 
 
 def test_parse_sheet_row_linkedin_short_id():
@@ -55,8 +73,9 @@ def test_parse_sheet_row_linkedin_api_url():
     assert M.parse_sheet_row_to_key(row) == ("linkedin", "4430572342")
 
 
-def test_parse_legacy_sheet_row_jora():
-    """Jora sheet row: 32-char hex hash 在 URL 尾"""
+def test_parse_sheet_row_jora_deprecated_backcompat():
+    """DEPRECATED 2026-09-09: Jora SG 關站後, 既有 ~885 筆 sheet rows 的 (D, E) 欄仍要能 round-trip。
+    D 欄 "Jora / Minimax" → src="jora", E 欄 32-hex hash 解出 job_id。"""
     row = [
         "New",
         "",
@@ -73,8 +92,8 @@ def test_parse_legacy_sheet_row_jora():
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
-def test_parse_legacy_sheet_row_jora_with_query():
-    """Jora URL 帶 query string"""
+def test_parse_sheet_row_jora_with_query_deprecated_backcompat():
+    """DEPRECATED 2026-09-09: Jora URL 帶 query string 也要能解出 (jora, 32-hex)。"""
     row = [
         "New",
         "",
@@ -91,7 +110,7 @@ def test_parse_legacy_sheet_row_jora_with_query():
     assert M.parse_sheet_row_to_key(row) == ("jora", "3edbbb646574ed2a0a926fee537b0e7c")
 
 
-def test_parse_legacy_sheet_row_jobstreet():
+def test_parse_sheet_row_jobstreet():
     """JobStreet sheet row: /job/{digit} 純 id"""
     row = [
         "New",
@@ -180,23 +199,23 @@ def test_load_sheet_keys_empty():
 def test_build_sheet_row_normal():
     """正常 job → 回傳 11 欄 row"""
     job = {
-        "job_id": "4430572342",
+        "job_id": "94145676",
         "title": "Product Manager",
         "company": "Tech Co",
         "location": "Singapore",
-        "source": "linkedin",
+        "source": "jobstreet",
         "jd_text": "Sample JD with location info",
         "jd_hash": "abc123",
-        "url": "https://www.linkedin.com/jobs/view/4430572342",
+        "url": "https://sg.jobstreet.com/job/94145676",
     }
     existing_keys = set()
-    row = M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys)
+    row = M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys)
     assert row is not None
     assert len(row) == 11
     assert row[0] == "New"  # A
     assert row[1] == ""  # B
-    assert row[3] == "LinkedIn / Minimax"  # D
-    assert "4430572342" in row[4]  # E (formula)
+    assert row[3] == "JobStreet / Minimax"  # D
+    assert "94145676" in row[4]  # E (formula)
     assert row[5] == "Tech Co"  # F
     assert row[6] == "Product Manager"  # G
     assert row[7] == "Sample JD with location info"  # H
@@ -207,23 +226,23 @@ def test_build_sheet_row_normal():
 
 def test_build_sheet_row_dedup_skip():
     """job_id 已在 existing_keys 裡 → 回 None"""
-    job = {"job_id": "4430572342", "source": "linkedin", "jd_text": "JD"}
-    existing_keys = {("linkedin", "4430572342")}
-    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
+    job = {"job_id": "94145676", "source": "jobstreet", "jd_text": "JD"}
+    existing_keys = {("jobstreet", "94145676")}
+    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_no_jd_skip():
     """沒 jd_text → 回 None (即使不在 dedup 內)"""
-    job = {"job_id": "4430572342", "source": "linkedin", "jd_text": ""}
+    job = {"job_id": "94145676", "source": "jobstreet", "jd_text": ""}
     existing_keys = set()
-    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
+    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_no_job_id_skip():
     """沒 job_id → 回 None"""
-    job = {"title": "X", "source": "linkedin", "jd_text": "JD"}
+    job = {"title": "X", "source": "jobstreet", "jd_text": "JD"}
     existing_keys = set()
-    assert M._build_sheet_row(job, "LinkedIn / Minimax", "Singapore", existing_keys) is None
+    assert M._build_sheet_row(job, "JobStreet / Minimax", "Singapore", existing_keys) is None
 
 
 def test_build_sheet_row_visa_only_sg():
@@ -267,6 +286,42 @@ def test_work_mode_onsite_jd():
 def test_work_mode_empty():
     """沒 match 應該回空字串"""
     assert M.extract_work_mode("random text without any mode", "Title") == ""
+
+
+# ─────────────────────────────────────────────────────────────
+# Back-compat smoke test: 載入現有 seen_jds.jsonl (含 jora 32-char hex entries)
+# 驗證 dedup 邏輯仍能正確識別 jora IDs (DEPRECATED 2026-09-09)
+# ─────────────────────────────────────────────────────────────
+def test_load_seen_ids_smoke_with_real_seen_file():
+    """DEPRECATED 2026-09-09 smoke test: 載入 plugin cwd 的 seen_jds.jsonl 不 crash, 且能正確 dedup
+    jora 32-char hex entries (跟既有 sheet 內 ~885 筆 jora jobs 配對)。"""
+    from pathlib import Path
+
+    seen_path = Path(__file__).parent / "seen_jds.jsonl"
+    if not seen_path.exists():
+        # 沒檔就 skip (e.g. CI environment)
+        print(f"  (skip) {seen_path} 不存在")
+        return
+    seen = M.load_seen_ids(seen_path)
+    assert isinstance(seen, set), f"load_seen_ids 應該回 set, got {type(seen)}"
+    # 應該至少有一些 jora 32-char hex entries (從 2026-08-22 跑的 jora_sg_* 寫入)
+    jora_keys = [k for k in seen if k[0] == "jora"]
+    linkedin_keys = [k for k in seen if k[0] == "linkedin"]
+    jobstreet_keys = [k for k in seen if k[0] == "jobstreet"]
+    print(
+        f"  smoke: seen {len(seen)} 筆 (linkedin={len(linkedin_keys)}, jora={len(jora_keys)}, jobstreet={len(jobstreet_keys)})"
+    )
+    # 確認 jora 32-char hex 推斷邏輯真的從 job_id 推出 "jora"
+    if jora_keys:
+        for src, jid in jora_keys[:3]:
+            assert src == "jora"
+            import re
+
+            assert re.fullmatch(r"[a-f0-9]{32}", jid), f"jora key 應為 32-char hex, got {jid!r}"
+    # 全部 key 都是 (str, str) tuple
+    for k in seen:
+        assert isinstance(k, tuple) and len(k) == 2
+        assert isinstance(k[0], str) and isinstance(k[1], str)
 
 
 # ─────────────────────────────────────────────────────────────

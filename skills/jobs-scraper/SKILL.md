@@ -1,16 +1,41 @@
 ---
 name: jobs-scraper
-description: Search and track product-management job postings on LinkedIn using the LinkedIn Guest API; initialize a portable Region-Raw/Region-Selected Google Sheet Job Tracker; sync jobs by region; audit duplicates/visa/work-mode fields; and inspect scraper statistics.
+description: Search and track product-management job postings across LinkedIn, JobStreet, 104, and Cake; initialize a portable Region-Raw/Region-Selected Google Sheet Job Tracker; sync jobs by region; audit duplicates/visa/work-mode fields; and inspect scraper statistics.
 license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.3.0"
+  version: "1.4.0"
 ---
 
 # Jobs Scraper
 
 Use the bundled MCP tools when they are available. Do not reimplement scraping logic, URL assembly, GraphQL, Sheet schema, or write routing in the model.
+
+## Build map — which code actually runs
+
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.4.0` engine:
+
+| Artifact | Path | Version |
+|---|---|---|
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.4.0` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.4.0` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.4.0` |
+| Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
+
+`sg_product_jobs.py` owns URL building, list parsing, JD fetch, the title skip filter, dedup, and Sheet row writes for **all five sources**: `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour`. `jora` is retired from active sources (the site closed in 2026) and is kept only for back-compat dedup of historical rows.
+
+Single CLI entry point; MCP and shell both funnel through it:
+
+```
+sg_product_jobs.py --source {linkedin|jobstreet|cake|104|onezerofour} <RANGE> --with-jd --to-sheet <SHEET_ID> --gid <GID>
+```
+
+- `<RANGE>` is a positional argument (`1h`, `24h`, `3d`, `7d`, `14d`, `21d`, `30d`) — not a `--range` flag.
+- Taiwan LinkedIn must add `--location Taiwan`; TW sources (`104`, `onezerofour`, `cake`) always route to TW-Raw.
+- `--with-jd` requires `--to-sheet`.
+
+Local crawl state (`seen_jds.jsonl`) is a **single source of truth** shared by every execution context. Never keep a second copy — two copies cause the same posting to be written to the Sheet twice.
 
 ## Route the request
 
