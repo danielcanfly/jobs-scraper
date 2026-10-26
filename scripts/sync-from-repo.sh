@@ -118,19 +118,20 @@ verify_against_upstream() {
 
   for d in "${SYNC_DIRS[@]}"; do
     if [ -d "$tmp/$d" ]; then
-      (cd "$tmp" && find "$d" -type f -not -path "*/__pycache__/*" -print0) \
-        | while IFS= read -r -d '' rel; do
-          if [ -f "$REPO_DIR/$rel" ]; then
-            checked=$((checked+1))
-            if ! cmp -s "$tmp/$rel" "$REPO_DIR/$rel"; then
-              echo "  ✗ $rel  (plugin 與 upstream 不一致)"
-              drift=$((drift+1))
-            fi
-          else
-            echo "  ✗ $rel  (upstream 有, plugin 缺)"
+      # process substitution, not a pipe: a pipe would run the loop in a
+      # subshell and the counters would never reach the caller.
+      while IFS= read -r -d '' rel; do
+        if [ -f "$REPO_DIR/$rel" ]; then
+          checked=$((checked+1))
+          if ! cmp -s "$tmp/$rel" "$REPO_DIR/$rel"; then
+            echo "  ✗ $rel  (plugin 與 upstream 不一致)"
             drift=$((drift+1))
           fi
-        done
+        else
+          echo "  ✗ $rel  (upstream 有, plugin 缺)"
+          drift=$((drift+1))
+        fi
+      done < <(cd "$tmp" && find "$d" -type f -not -path "*/__pycache__/*" -print0)
     fi
   done
 
