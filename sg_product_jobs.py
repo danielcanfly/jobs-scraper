@@ -14,9 +14,7 @@ back-compat 保留: JORA_BASE 常數、`build_e_formula("jora", ...)` 分支、
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
 
-__version__ = (
-    "1.4.0"  # 2026-10-26: unified single-line release (5 sources + skip filter v8.5 + 429 retry + 3-phase sheet write)
-)
+__version__ = "1.5.0"  # 2026-10-26: stage-2 modular split (5 sources behind jobs_scraper/sources/)
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺
@@ -46,11 +44,13 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode
 
-from bs4 import BeautifulSoup
 from curl_cffi import requests as cc_requests
-from scrapling.parser import Adaptor
+
+from jobs_scraper.sources import cake as _cake
+from jobs_scraper.sources import jobstreet as _jobstreet
+from jobs_scraper.sources import linkedin as _linkedin
+from jobs_scraper.sources import onezerofour as _onezerofour
 
 # 全域 session: 維持 cookies 跟 connection pool, 降低被 LinkedIn rate limit 觸發 429 的機率
 _cc_session = cc_requests.Session(impersonate="chrome")
@@ -76,38 +76,34 @@ JOBSTREET_KEYWORDS_OVERRIDE = os.getenv("JOBSTREET_KEYWORDS", "")  # 留空 = �
 # 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
 CAKE_KEYWORDS_OVERRIDE = os.getenv("CAKE_KEYWORDS", "")  # 留空 = 用預設 9 kw
 # 例: CAKE_KEYWORDS="product manager,產品經理,product director"
+# (解析成 keyword 集合的是 adapter: jobs_scraper/sources/cake.py::keywords)
 
 
 # ─────────────────────────────────────────────────────────────
 # 篩選條件
 # ─────────────────────────────────────────────────────────────
-KEYWORDS = (
-    '"product manager" OR "product director" OR "director of product" '
-    'OR "head of product" OR "product lead" OR "chief of staff"'
-)
-GEO_ID = "102454443"  # Singapore (default; 跑其他國家用 --location/--geo-id 覆寫)
-LOCATION = "Singapore"  # 對應 GEO_ID 的顯示文字
+#
+# 抓取層已搬到 jobs_scraper/sources/linkedin.py; 這裡保留同名常數,
+# 讓既有的 `sg_product_jobs.KEYWORDS` / `GEO_ID` / `LOCATION` 引用繼續有效。
+KEYWORDS = _linkedin.KEYWORDS
+GEO_ID = _linkedin.GEO_ID  # Singapore (default; 跑其他國家用 --location/--geo-id 覆寫)
+LOCATION = _linkedin.LOCATION  # 對應 GEO_ID 的顯示文字
 # 常用其他 geoId (驗證過)
-KNOWN_GEO_IDS = {
-    "Singapore": ("102454443", "Singapore"),
-    "Taiwan": ("104187078", "Taiwan"),
-    "Hong Kong": ("105015875", "Hong Kong"),  # 待驗證
-    "Japan": ("105080838", "Japan"),  # 待驗證
-    "Shanghai": ("107388191", "Shanghai"),  # 中國城市, 30,000+ jobs
-}
+KNOWN_GEO_IDS = _linkedin.KNOWN_GEO_IDS
 # 不放 f_WT → onsite/remote/hybrid 全收
-PAGE_SIZE = 10  # Guest API 實際 page size (不是 25)
+PAGE_SIZE = _linkedin.PAGE_SIZE  # Guest API 實際 page size (不是 25)
 
 # time range 預設值 + 各 range 的 MAX_PAGES 建議
-TIME_RANGES = {
-    "1h": ("r3600", 1),
-    "24h": ("r86400", 4),
-    "3d": ("r259200", 7),
-    "7d": ("r604800", 15),
-    "14d": ("r1209600", 30),
-    "21d": ("r1814400", 30),  # 3 週
-    "30d": ("r2592000", 25),
-}
+TIME_RANGES = _linkedin.TIME_RANGES
+# LinkedIn 專屬別名 (跟 ONEZEROFOUR_* / CAKE_* / JOBSTREET_* 一樣的命名慣例)
+LINKEDIN_KEYWORDS = _linkedin.KEYWORDS
+LINKEDIN_GEO_ID = _linkedin.GEO_ID
+LINKEDIN_LOCATION = _linkedin.LOCATION
+LINKEDIN_KNOWN_GEO_IDS = _linkedin.KNOWN_GEO_IDS
+LINKEDIN_PAGE_SIZE = _linkedin.PAGE_SIZE
+LINKEDIN_TIME_RANGES = _linkedin.TIME_RANGES
+LINKEDIN_SOURCE = _linkedin.SOURCE
+LINKEDIN_SHEET_SOURCE_LABEL = _linkedin.SHEET_SOURCE_LABEL
 # JORA_BASE — DEPRECATED 2026-09-09: Jora SG 關站
 # 只保留給 `build_e_formula("jora", ...)` back-compat 分支用 (讓既有 ~885 筆 sheet rows 的 E 欄
 # formula 仍能被 round-trip 解析)
@@ -116,157 +112,72 @@ JORA_BASE = "https://sg.jora.com"
 # JobStreet (sg.jobstreet.com) — 2026-08-22 整合
 # 用 /api/jobsearch/v5/search 抓 list + /graphql 抓 JD content
 # HTML 頁 100% Cloudflare blocked, 走 GraphQL 完全 OK (詳見 RULES.md §12.5)
-JOBSTREET_TPR = {
-    "1h": "1",
-    "24h": "1",
-    "3d": "3",
-    "7d": "7",
-    "14d": "14",
-    "21d": "21",
-    "30d": "30",
-}
+#
+# 抓取層已搬到 jobs_scraper/sources/jobstreet.py; 這裡保留同名常數,
+# 讓既有的 `sg_product_jobs.JOBSTREET_*` 引用繼續有效。
+JOBSTREET_TPR = _jobstreet.TPR
 # MAX_PAGES 跟 LinkedIn 一樣 (邏輯都跟 LinkedIn 一樣), 50% 軟停由 crawl_jobstreet_list 跑時判斷
-# 預期覆蓋 (product manager + FT + 5 keyword + dedup):
-# 1d=1 / 3d=7*20=140 raw → ~80 unique / 7d=15*20=300 → ~200 / 14d=30*20=600 → ~400 / 30d=25*20=500 → ~350
-# 7d 的 totalCount 是 953, 5 keyword × 15 page × 20 = 1500 raw, 預期 unique ~600
-JOBSTREET_MAX_PAGES = {
-    "1h": 1,
-    "24h": 4,
-    "3d": 7,
-    "7d": 15,
-    "14d": 30,
-    "21d": 30,
-    "30d": 25,
-}
+JOBSTREET_MAX_PAGES = _jobstreet.MAX_PAGES
 # 可被 JOBSTREET_KEYWORDS env var 覆寫 (見上面 env 讀取區塊)
 # 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
-if JOBSTREET_KEYWORDS_OVERRIDE:
-    JOBSTREET_KEYWORDS = [k.strip() for k in JOBSTREET_KEYWORDS_OVERRIDE.split(",") if k.strip()]
-else:
-    JOBSTREET_KEYWORDS = [
-        "product manager",
-        "product director",
-        "director of product",
-        "head of product",
-        "product lead",
-    ]
-JOBSTREET_LOCATION = "Singapore"
-JOBSTREET_LIST_API = "https://sg.jobstreet.com/api/jobsearch/v5/search"
-JOBSTREET_GRAPHQL = "https://sg.jobstreet.com/graphql"
-JOBSTREET_BASE = "https://sg.jobstreet.com"
-JOBSTREET_WORKTYPE_FT = "242"
+JOBSTREET_KEYWORDS = _jobstreet.keywords(JOBSTREET_KEYWORDS_OVERRIDE)
+JOBSTREET_LOCATION = _jobstreet.LOCATION
+JOBSTREET_LIST_API = _jobstreet.LIST_API
+JOBSTREET_GRAPHQL = _jobstreet.GRAPHQL
+JOBSTREET_BASE = _jobstreet.BASE  # https://sg.jobstreet.com
+JOBSTREET_WORKTYPE_FT = _jobstreet.WORKTYPE_FT
 
 # Cake (www.cake.me) — 2026-08-30 整合
 # Search API 是 POST JSON; list response 內就帶完整 JD description, detail URL 可由 page.path + path 組出
-CAKE_API_BASE = "https://api.cake.me/api/client/v2"
-CAKE_WEB_BASE = "https://www.cake.me"
-CAKE_LIST_API = f"{CAKE_API_BASE}/jobs/search"
-CAKE_FACET_API = f"{CAKE_API_BASE}/jobs/facet-search"
-CAKE_SUGGESTION_API = f"{CAKE_API_BASE}/jobs/query-suggestion/search"
-CAKE_DETAIL_PAGE_URL = f"{CAKE_WEB_BASE}/companies/{{page_path}}/jobs/{{job_path}}"
-CAKE_JOB_SOURCE = ["cake", "external"]
-CAKE_JOB_TYPES = ["full_time"]
-CAKE_SENIORITY_LEVELS = ["mid_senior_level", "executive", "director"]
-CAKE_LOCATIONS = [
-    "香港",
-    "Singapore",
-    "United States",
-    "Taipei City",
-    "China",
-    "台北市, 台灣",
-    "新北市, 台灣",
-    "New Taipei City",
-]
-CAKE_PAGE_SIZE = 10
+#
+# 抓取層已搬到 jobs_scraper/sources/cake.py; 這裡保留同名常數,
+# 讓既有的 `sg_product_jobs.CAKE_*` 引用繼續有效。
+CAKE_API_BASE = _cake.API_BASE
+CAKE_WEB_BASE = _cake.WEB_BASE
+CAKE_LIST_API = _cake.LIST_API
+CAKE_FACET_API = _cake.FACET_API
+CAKE_SUGGESTION_API = _cake.SUGGESTION_API
+CAKE_DETAIL_PAGE_URL = _cake.DETAIL_PAGE_URL
+CAKE_JOB_SOURCE = _cake.JOB_SOURCE
+CAKE_JOB_TYPES = _cake.JOB_TYPES
+CAKE_SENIORITY_LEVELS = _cake.SENIORITY_LEVELS
+CAKE_LOCATIONS = _cake.LOCATIONS
+CAKE_PAGE_SIZE = _cake.PAGE_SIZE
 # P1-03: 預設 sort_by="latest" (popularity 不能證明 ranged coverage COMPLETE)
-CAKE_SORT_BY = os.getenv("CAKE_SORT_BY", "latest")
-CAKE_LOCATION_SCOPE = "Global"
-CAKE_SHEET_SOURCE_LABEL = "Cake / Minimax"
-if CAKE_KEYWORDS_OVERRIDE:
-    CAKE_KEYWORDS = [k.strip() for k in CAKE_KEYWORDS_OVERRIDE.split(",") if k.strip()]
-else:
-    CAKE_KEYWORDS = [
-        "product manager",
-        "product director",
-        "director of product",
-        "head of product",
-        "product lead",
-        "產品經理",
-        "產品總監",
-        "產品主管",
-        "PM",
-    ]
+CAKE_SORT_BY = _cake.sort_by_default()
+CAKE_LOCATION_SCOPE = _cake.LOCATION_SCOPE
+CAKE_SHEET_SOURCE_LABEL = _cake.SHEET_SOURCE_LABEL
+# 可被 CAKE_KEYWORDS env var 覆寫 (跟 104 一樣設計); 解析後的 keyword 集合在 adapter 裡
+CAKE_KEYWORDS = _cake.keywords()
 # Cake API 本身沒有捕捉到穩定的 time filter；這裡仍沿用 range→max_pages 的節流方式，
 # 只是 page budget，不是時間窗。client-side 會用 content_updated_at 過濾 (見 crawl_cake_list)。
 # 14d/21d/30d 從 ONEZEROFOUR_MAX_PAGES 對齊降一階 (cake server 對高 page 429 敏感, 2026-08-30 實測)
-CAKE_MAX_PAGES = {
-    "1h": 1,
-    "24h": 4,
-    "3d": 7,
-    "7d": 15,
-    "14d": 15,
-    "21d": 20,
-    "30d": 25,
-}
+CAKE_MAX_PAGES = _cake.MAX_PAGES
 # Client-side time filter (content_updated_at 對 cutoff 過濾)
 # Repair9 P1-02: 1h 改 1 hour (不是 1 day); 24h/3d/7d/14d/21d/30d 維持 days
 # 注意: content_updated_at 精度是秒級 (ISO 8601 UTC), 但 Cake API 沒 h/m 級的時間窗 server filter
 # 所以 client-side 仍然要算實際 hours/days 對 content_updated_at 過濾
-CAKE_TIME_FILTER = {
-    "1h": ("hours", 1),
-    "24h": ("days", 1),
-    "3d": ("days", 3),
-    "7d": ("days", 7),
-    "14d": ("days", 14),
-    "21d": ("days", 21),
-    "30d": ("days", 30),
-}
+CAKE_TIME_FILTER = _cake.TIME_FILTER
 
 # 104 (www.104.com.tw) — 2026-08-29 整合 (A 階段: 從 smoke_104.py 搬進主流程)
 # 半公開 API, 沒 Cloudflare, 純 Referer + User-Agent header 就通
 # 8 keyword × MAX_PAGES 平行 (8 workers), detail API 2 階段抓完整 JD
 # RULES.md §15 完整設計文檔
-ONEZEROFOUR_LIST_API = "https://www.104.com.tw/jobs/search/api/jobs"
-ONEZEROFOUR_DETAIL_API = "https://www.104.com.tw/job/ajax/content/{slug}"  # {slug} placeholder
-ONEZEROFOUR_BASE_URL = "https://www.104.com.tw"
-ONEZEROFOUR_AREAS = "6001001000,6001002000"  # 台北+新北 (硬寫, 不開放 CLI 改)
+#
+# 抓取層已搬到 jobs_scraper/sources/onezerofour.py; 這裡保留同名常數,
+# 讓既有的 `sg_product_jobs.ONEZEROFOUR_*` 引用繼續有效。
+ONEZEROFOUR_LIST_API = _onezerofour.LIST_API
+ONEZEROFOUR_DETAIL_API = _onezerofour.DETAIL_API
+ONEZEROFOUR_BASE_URL = _onezerofour.BASE_URL
+ONEZEROFOUR_AREAS = _onezerofour.AREAS
 # isnew 合法值: 0/3/7/14/30 (其他 400, 含 21, RULES §15.7)
-ONEZEROFOUR_TPR = {
-    "1h": 0,  # 退化: 1h 沒對應合法值, 用 0
-    "24h": 0,
-    "3d": 3,
-    "7d": 7,
-    "14d": 14,
-    "21d": 30,  # 退化: 21 會 400, 用 30
-    "30d": 30,
-}
+ONEZEROFOUR_TPR = _onezerofour.TPR
 # MAX_PAGES 跟 LinkedIn/JobStreet 對齊 (邏輯統一); 30d 額外加 50 涵蓋
-ONEZEROFOUR_MAX_PAGES = {
-    "1h": 1,
-    "24h": 4,
-    "3d": 7,
-    "7d": 15,
-    "14d": 30,
-    "21d": 30,
-    "30d": 50,  # 30d 用 50 (B 階段實測, 涵蓋 ~14%)
-}
+ONEZEROFOUR_MAX_PAGES = _onezerofour.MAX_PAGES
 # 可被 ONEZEROFOUR_KEYWORDS env var 覆寫 (跟 JobStreet 一樣設計)
-if ONEZEROFOUR_KEYWORDS_OVERRIDE := os.getenv("ONEZEROFOUR_KEYWORDS", ""):
-    ONEZEROFOUR_KEYWORDS = [k.strip() for k in ONEZEROFOUR_KEYWORDS_OVERRIDE.split(",") if k.strip()]
-else:
-    ONEZEROFOUR_KEYWORDS = [
-        "Product Manager",
-        "Product Director",
-        "Director of Product",
-        "Head of product",
-        "Product Lead",
-        "產品經理",
-        "產品總監",
-        "產品主管",
-        "PM",
-    ]
-ONEZEROFOUR_LOCATION = "Taiwan"  # 104 只抓台灣, 跟 LinkedIn/Jora/JobStreet 限定 SG 不一樣
-ONEZEROFOUR_SHEET_SOURCE_LABEL = "104 / Minimax"
+ONEZEROFOUR_KEYWORDS = _onezerofour.keywords()
+ONEZEROFOUR_LOCATION = _onezerofour.LOCATION  # 104 只抓台灣, 跟 LinkedIn/Jora/JobStreet 限定 SG 不一樣
+ONEZEROFOUR_SHEET_SOURCE_LABEL = _onezerofour.SHEET_SOURCE_LABEL
 # 104/Cake 寫到 TW-Raw。Repair10 canonical default gid=764063873。
 # Plugin vNext 可顯式提供 TW_RAW_GID；未提供時仍精確維持 canonical default。
 TW_RAW_GID_OVERRIDE = os.getenv("TW_RAW_GID", "").strip()
@@ -2075,170 +1986,97 @@ def _write_rows_to_sheet(ws, next_row: int, new_rows: list[list], skipped_dup: i
 
 
 # ─────────────────────────────────────────────────────────────
-# 列表頁
+# 列表頁 (LinkedIn Guest API)
 # ─────────────────────────────────────────────────────────────
-JOB_CARD_SEL = "div.base-card"
-TITLE_SEL = ".base-search-card__title"
-COMPANY_SEL = "a.hidden-nested-link"
-LOC_SEL = ".job-search-card__location"
-TIME_SEL = "time"
-LINK_SEL = "a.base-card__full-link"
-
-
-def _clean(text_list) -> str:
-    return " ".join(t.strip() for t in text_list if t and t.strip()).strip()
+#
+# 抓取層已搬到 jobs_scraper/sources/linkedin.py; 這裡保留同名 wrapper,
+# 讓既有的 `sg_product_jobs.build_list_url` / `parse_list_page` /
+# `fetch_list_page` 呼叫端與測試不需要改動。
+# session / sleep / URL builder 都在呼叫時才讀取, 所以測試可以繼續 patch
+# `sg_product_jobs._cc_session` 與 `sg_product_jobs.time`。
 
 
 def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
-    params = {
-        "keywords": KEYWORDS,
-        "location": location,
-        "geoId": geo_id,
-        "f_TPR": tpr,
-        "sortBy": "DD",
-        "start": str(start),
-    }
-    return "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?" + urlencode(params)
+    """組 LinkedIn Guest API list URL。"""
+    return _linkedin.build_list_url(tpr, start, location, geo_id)
 
 
 def parse_list_page(html: str) -> list[dict]:
-    page = Adaptor(html)
-    jobs = []
-    for card in page.css(JOB_CARD_SEL):
-        urn = (card.attrib.get("data-entity-urn") or "").strip()
-        job_id = urn.rsplit(":", 1)[-1] if urn else ""
-
-        title = _clean(card.css(TITLE_SEL + "::text").getall())
-        company = _clean(card.css(COMPANY_SEL + "::text").getall())
-        loc = _clean(card.css(LOC_SEL + "::text").getall())
-
-        time_node = card.css(TIME_SEL)
-        posted_at = ""
-        posted_ago = ""
-        if time_node:
-            t = time_node[0]
-            posted_at = (t.attrib.get("datetime") or "").strip()
-            posted_ago = _clean(t.css("::text").getall())
-
-        link_nodes = card.css(LINK_SEL)
-        href = (link_nodes[0].attrib.get("href") if link_nodes else "") or ""
-
-        if not job_id and not title:
-            continue
-        jobs.append(
-            {
-                "job_id": job_id,
-                "title": title,
-                "company": company,
-                "location": loc,
-                "posted_at": posted_at,
-                "posted_ago": posted_ago,
-                "url": href or f"https://www.linkedin.com/jobs/view/{job_id}",
-                "source": "linkedin",  # 讓 push_to_sheet / enrich_with_jd 知道
-            }
-        )
-    return jobs
+    """從 LinkedIn list HTML 解 jobs。"""
+    return _linkedin.parse_list_page(html)
 
 
 def fetch_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
     """LinkedIn list page 帶 30/60/90s retry (對齊 cake/104 pattern, RULES §15.13 #11)。
 
-    2026-10-07 fix: 原本沒 retry, list page 撞 429 → r.raise_for_status() → HTTPError
-    → crawl_list line 2053 return all_jobs → 整個 list crawl hard abort。
-    Sep 30 14d run 撞 page 13 abort, Oct 07 14d 撞 page 7 abort, 兩次都只跑 6-12 頁 (~57 jobs),
-    coverage 嚴重不完整。Retry 後單頁最多撐 3.5 分鐘 (30+60+90 backoff)。
-
     429 / 5xx / connection error → sleep 30/60/90s → retry (共 4 次 attempt)。
     4xx (非 429) 直接 raise, 視為 caller bug。
     Raises: RuntimeError if all retries exhausted.
     """
-    backoff = [30, 60, 90]
-    last_err = None
-    url = build_list_url(tpr, start, location, geo_id)
-    for attempt in range(4):
-        try:
-            r = _cc_session.get(
-                url,
-                impersonate="chrome",
-                timeout=20,
-                headers={"Accept-Language": "en-US,en;q=0.9"},
-            )
-            if r.status_code == 200:
-                return r.text
-            if r.status_code == 429 or r.status_code >= 500:
-                last_err = f"http {r.status_code}"
-            else:
-                r.raise_for_status()
-        except Exception as e:
-            last_err = f"{type(e).__name__}: {str(e)[:50]}"
-        if attempt < 3:
-            print(
-                f"    [LINKEDIN LIST RETRY {attempt + 1}/3] start={start} 失敗 ({last_err}), sleep {backoff[attempt]}s",
-                flush=True,
-            )
-            time.sleep(backoff[attempt])
-    raise RuntimeError(f"linkedin list fetch failed after 4 attempts: {last_err}")
+    return _linkedin.fetch_list_page(
+        tpr,
+        start,
+        location,
+        geo_id,
+        session=_cc_session,
+        sleep=time.sleep,
+        build_url=build_list_url,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
 # JD 抓取 (可選)
 # ─────────────────────────────────────────────────────────────
-JD_DESC_SEL = "div.description__text"
-JD_BLOCK_SEL = (
-    "div.description__text p, div.description__text li, "
-    "div.description__text h1, div.description__text h2, "
-    "div.description__text h3, div.description__text h4, "
-    "div.description__text strong, div.description__text span"
-)
 
 
 def build_jd_url(job_id: str) -> str:
-    return f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+    """LinkedIn JD API URL。"""
+    return _linkedin.build_jd_url(job_id)
 
 
 def fetch_jd(job_id: str) -> dict:
     """抓單一職缺的 JD 純文字。"""
-    try:
-        r = _cc_session.get(
-            build_jd_url(job_id),
-            impersonate="chrome",
-            timeout=20,
-            headers={"Accept-Language": "en-US,en;q=0.9"},
-        )
-    except Exception as e:
-        return {"jd_text": None, "jd_html": None, "error": f"{type(e).__name__}: {e}"}
+    return _linkedin.fetch_jd(job_id, session=_cc_session, build_url=build_jd_url)
 
-    if r.status_code == 429:
-        return {"jd_text": None, "jd_html": None, "error": "429 rate limited"}
-    if r.status_code != 200:
-        return {"jd_text": None, "jd_html": None, "error": f"HTTP {r.status_code}"}
 
-    ap = Adaptor(r.text)
-    desc_nodes = ap.css(JD_DESC_SEL)
-    if not desc_nodes:
-        return {"jd_text": None, "jd_html": None, "error": "no description node found"}
+# ─────────────────────────────────────────────────────────────
+# LinkedIn 具名 wrapper (跟 build_onezerofour_list_url 一樣的命名慣例)
+# 讓 frozen AST gate (`test_engine_keeps_only_thin_wrappers_over_the_adapters`)
+# 也能驗到 LinkedIn 這條線: 每個 engine function 都必須 delegate 給 adapter。
+# ─────────────────────────────────────────────────────────────
 
-    desc = desc_nodes[0]
-    # ★ 抓全部 ::text (包含裸文字節點，不只 p/li/h*/strong)
-    all_text = desc.css("::text").getall()
-    lines = []
-    for t in all_text:
-        t = t.strip()
-        if t and len(t) > 1:
-            lines.append(t)
-    # 結構化版本 (給想看分段的)
-    structured_lines = []
-    for p in desc.css(JD_BLOCK_SEL):
-        t = (p.css("::text").get() or "").strip()
-        if t and len(t) > 1:
-            structured_lines.append(t)
 
-    return {
-        "jd_text": "\n".join(lines) if lines else None,
-        "jd_lines": structured_lines if structured_lines else lines,
-        "jd_html": None,
-        "error": None,
-    }
+def build_linkedin_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
+    """LinkedIn list URL (跟 build_list_url 等義)。"""
+    return _linkedin.build_list_url(tpr, start, location, geo_id)
+
+
+def parse_linkedin_list_page(html: str) -> list[dict]:
+    """LinkedIn list parser (跟 parse_list_page 等義)。"""
+    return _linkedin.parse_list_page(html)
+
+
+def fetch_linkedin_list_page(tpr: str, start: int, location: str = LOCATION, geo_id: str = GEO_ID) -> str:
+    """LinkedIn list fetch + 30/60/90s retry (跟 fetch_list_page 等義)。"""
+    return _linkedin.fetch_list_page(
+        tpr,
+        start,
+        location,
+        geo_id,
+        session=_cc_session,
+        sleep=time.sleep,
+        build_url=build_linkedin_list_url,
+    )
+
+
+def build_linkedin_jd_url(job_id: str) -> str:
+    """LinkedIn JD URL (跟 build_jd_url 等義)。"""
+    return _linkedin.build_jd_url(job_id)
+
+
+def fetch_linkedin_jd(job_id: str) -> dict:
+    """LinkedIn JD fetch (跟 fetch_jd 等義)。"""
+    return _linkedin.fetch_jd(job_id, session=_cc_session, build_url=build_linkedin_jd_url)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2252,16 +2090,17 @@ def human_sleep(label: str = ""):
 
 
 # Cake 專用 sleep (2026-08-30 加): 跟全域同 3.0-10.0s, 2-5s 測試發現 14 page 就 429
-# 跟全域 SLEEP_MIN/SLEEP_MAX 隔開, 之後如要調 sleep 改這裡就好
-CAKE_SLEEP_MIN = 3.0
-CAKE_SLEEP_MAX = 10.0
+# 跟全域 SLEEP_MIN/SLEEP_MAX 隔開, 之後如要調 sleep 改 adapter 就好
+CAKE_SLEEP_MIN = _cake.SLEEP_MIN
+CAKE_SLEEP_MAX = _cake.SLEEP_MAX
 
 
 def cake_human_sleep(label: str = ""):
-    s = random.uniform(CAKE_SLEEP_MIN, CAKE_SLEEP_MAX)
-    if label:
-        print(f"            sleep {s:.1f}s ({label})", flush=True)
-    time.sleep(s)
+    """Cake 專用 sleep。
+
+    `sleep` 在呼叫時才讀取, 所以測試可以繼續 patch `sg_product_jobs.time`。
+    """
+    return _cake.human_sleep(label, sleep=time.sleep)
 
 
 def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str = GEO_ID) -> list[dict]:
@@ -2314,27 +2153,11 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
 # ─────────────────────────────────────────────────────────────
 # JobStreet SG 來源 (sg.jobstreet.com) — 2026-08-22 整合
 # 公開 List API + GraphQL, 不需 Cloudflare solve; HTML 頁 100% 擋, 走 GraphQL 拿 content
+#
+# 抓取層已搬到 jobs_scraper/sources/jobstreet.py; 這裡保留同名函式,
+# 讓既有的呼叫端與測試不需要改動。
 # ─────────────────────────────────────────────────────────────
-JOBSTREET_DETAIL_QUERY = """
-query getJobDetails($jobId: ID!) {
-  jobDetails(id: $jobId) {
-    job {
-      id
-      title
-      abstract
-      content
-      status
-      isExpired
-      createdAt { dateTimeUtc }
-      updatedAt { dateTimeUtc }
-      expiresAt { dateTimeUtc }
-      advertiser { id name }
-      location { label }
-      workTypes { label }
-    }
-  }
-}
-"""
+JOBSTREET_DETAIL_QUERY = _jobstreet.DETAIL_QUERY
 
 
 def build_jobstreet_list_url(
@@ -2346,143 +2169,20 @@ def build_jobstreet_list_url(
     page_size: int = 20,
 ) -> str:
     """組 JobStreet list API URL。"""
-    import urllib.parse
-
-    params = {
-        "siteKey": "SG-Main",
-        "keywords": keyword,
-        "where": where,
-        "worktype": worktype,
-        "daterange": str(daterange),
-        "page": str(page),
-        "pageSize": str(page_size),
-    }
-    return f"{JOBSTREET_LIST_API}?{urllib.parse.urlencode(params)}"
+    return _jobstreet.build_list_url(keyword, page, daterange, worktype=worktype, where=where, page_size=page_size)
 
 
 def parse_jobstreet_list_page(data: dict, keyword: str) -> list[dict]:
     """從 JobStreet list API JSON 抓 jobs。"""
-    jobs_raw = data.get("data") or []
-    out = []
-    for j in jobs_raw:
-        jid = j.get("id")
-        if not jid:
-            continue
-        # 公司優先用 employer.name, 退到 advertiser.description
-        emp = j.get("employer") or {}
-        adv = j.get("advertiser") or {}
-        company = emp.get("name") or adv.get("description") or j.get("companyName") or ""
-        # locations → 用第一個 label
-        locs = j.get("locations") or []
-        loc_label = locs[0].get("label", "") if locs else ""
-        # workArrangements (Remote / Hybrid / Onsite) — 2026-08-23 統一 "Onsite" 沒 hyphen
-        wm = ""
-        wa = (j.get("workArrangements") or {}).get("data") or []
-        if wa and isinstance(wa, list) and wa[0].get("label"):
-            wm = wa[0]["label"].get("text", "")
-            wm = wm.replace("On-site", "Onsite")  # JobStreet API 給 "On-site" 統一轉 "Onsite"
-        out.append(
-            {
-                "job_id": str(jid),
-                "title": j.get("title", ""),
-                "company": company,
-                "location": loc_label,
-                "posted_at": j.get("listingDate", ""),
-                "posted_ago": j.get("listingDateDisplay", ""),
-                "work_mode": wm,
-                "teaser": j.get("teaser", ""),
-                "url": "",  # 不在 list 階段組, enrich 階段補 (要用 title slug)
-                "keyword_used": keyword,  # debug 用, 哪個 keyword 撈到的
-                "source": "jobstreet",
-            }
-        )
-    return out
+    return _jobstreet.parse_list_page(data, keyword)
 
 
 def fetch_jobstreet_jd(job_id: str) -> dict:
-    """打 GraphQL 拿單一職缺完整 content (HTML JD), BS4 轉純文字。"""
-    try:
-        r = _cc_session.post(
-            JOBSTREET_GRAPHQL,
-            json={"query": JOBSTREET_DETAIL_QUERY, "variables": {"jobId": str(job_id)}},
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json", "Content-Type": "application/json"},
-            timeout=30,
-            impersonate="chrome",
-        )
-    except Exception as e:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": str(e),
-        }
-    if r.status_code != 200:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": f"HTTP {r.status_code}",
-        }
-    try:
-        data = r.json()
-    except Exception as e:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": f"JSON fail: {e}",
-        }
-    if "errors" in data:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": str(data["errors"][:1]),
-        }
-    job = (data.get("data") or {}).get("jobDetails", {}).get("job")
-    if not job:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": "no job in response",
-        }
-    # content (HTML) → plain text
-    content_html = job.get("content") or ""
-    if content_html:
-        soup = BeautifulSoup(content_html, "html.parser")
-        jd_text = re.sub(r"\s+", " ", soup.get_text(separator=" ", strip=True)).strip()
-        jd_lines = [t.strip() for t in soup.stripped_strings if len(t.strip()) > 1]
-    else:
-        jd_text = None
-        jd_lines = None
-    # 公司/位置 fallback (從 GraphQL 補)
-    adv = job.get("advertiser") or {}
-    loc = job.get("location") or {}
-    return {
-        "jd_text": jd_text,
-        "jd_lines": jd_lines,
-        "jd_html": content_html or None,
-        "company": adv.get("name", ""),
-        "location": (loc.get("label") if isinstance(loc, dict) else "") or "",
-        "title": job.get("title", ""),
-        "error": None if jd_text else "empty JD",
-    }
+    """打 GraphQL 拿單一職缺完整 content (HTML JD), BS4 轉純文字。
+
+    session 在呼叫時才讀取, 所以測試可以繼續 patch `sg_product_jobs._cc_session`。
+    """
+    return _jobstreet.fetch_jd(job_id, session=_cc_session)
 
 
 def crawl_jobstreet_list(
@@ -2491,99 +2191,43 @@ def crawl_jobstreet_list(
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
     50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
+
+    session / sleep / list helper 在呼叫時才讀取, 所以測試可以繼續 patch
+    `sg_product_jobs._cc_session`、`sg_product_jobs.human_sleep` (內含 `sg_product_jobs.time`)
+    與 `sg_product_jobs.build_jobstreet_list_url` / `sg_product_jobs.parse_jobstreet_list_page`。
     """
     if keywords is None:
         keywords = JOBSTREET_KEYWORDS
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    for kw in keywords:
-        kw_seen: set[str] = set()
-        for p in range(1, max_pages + 1):
-            url = build_jobstreet_list_url(kw, p, daterange, worktype=worktype)
-            try:
-                r = _cc_session.get(url, timeout=20, impersonate="chrome")
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code != 200:
-                print(f"  [jobstreet {kw} p{p}] FAIL: HTTP {r.status_code}")
-                return all_jobs
-            try:
-                data = r.json()
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL JSON: {e}")
-                return all_jobs
-            jobs = parse_jobstreet_list_page(data, kw)
-            new_jobs = [j for j in jobs if j["job_id"] not in seen and j["job_id"] not in kw_seen]
-            for j in new_jobs:
-                kw_seen.add(j["job_id"])
-                seen.add(j["job_id"])
-                all_jobs.append(j)
-            total_count = data.get("totalCount", "?")
-            print(
-                f"  [jobstreet {kw} p{p}] 收 {len(jobs):3} | 新增 {len(new_jobs):3} | kw 累計 {len(kw_seen):3} | 跨 kw 累計 {len(all_jobs):3} | totalCount={total_count}"
-            )
-            # 50% 軟停
-            if not new_jobs or len(new_jobs) < 10 or len(jobs) == 0:
-                print("            50% 軟停 (新增 < 10 或 jobs 空)")
-                break
-            if p < max_pages:
-                human_sleep("list")
-    return all_jobs
+    return _jobstreet.crawl_list(
+        daterange,
+        max_pages,
+        keywords,
+        worktype=worktype,
+        session=_cc_session,
+        sleep=human_sleep,
+        build_url=build_jobstreet_list_url,
+        parse_page=parse_jobstreet_list_page,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
 # Cake (www.cake.me) — 2026-08-30 整合
 # Search API 走 POST JSON; list response 內就帶完整 JD description
 # detail page route: /companies/{page.path}/jobs/{path}
+#
+# 抓取層已搬到 jobs_scraper/sources/cake.py; 這裡保留同名函式與簽名,
+# 讓既有的呼叫端與測試不需要改動。
+# session / sleep / hit function 在呼叫時才讀取, 所以測試可以繼續 patch
+# `sg_product_jobs._cc_session`、`sg_product_jobs.time` 與 source-level 函式。
 # ─────────────────────────────────────────────────────────────
 def _cake_proxies() -> dict[str, str] | None:
-    """從 env 讀 proxy。
-
-    優先順序:
-      1) CAKE_HTTP_PROXY
-      2) HTTPS_PROXY / HTTP_PROXY / ALL_PROXY
-
-    空字串或都沒設 → None
-    """
-    proxy = (
-        os.getenv("CAKE_HTTP_PROXY", "").strip()
-        or os.getenv("HTTPS_PROXY", "").strip()
-        or os.getenv("HTTP_PROXY", "").strip()
-        or os.getenv("ALL_PROXY", "").strip()
-    )
-    if not proxy:
-        return None
-    if "://" not in proxy:
-        proxy = f"http://{proxy}"
-    return {"http": proxy, "https": proxy}
+    """從 env 讀 proxy。"""
+    return _cake.proxies()
 
 
 def _cake_headers(*, accept: str = "application/json", referer: str = "https://www.cake.me/") -> dict:
     """Cake API / HTML 共用 browser-like headers。"""
-    headers = {
-        "Accept": accept,
-        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-        "Cache-Control": "no-cache",
-        "Content-Type": "application/json",
-        "Origin": "https://www.cake.me",
-        "Pragma": "no-cache",
-        "Referer": referer,
-        "Sec-Ch-Ua": '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
-        "Sec-Ch-Ua-Mobile": "?1",
-        "Sec-Ch-Ua-Platform": '"Android"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36",
-    }
-    auth = os.getenv("CAKE_AUTHORIZATION", "").strip() or os.getenv("CAKE_BEARER_TOKEN", "").strip()
-    if auth:
-        headers["Authorization"] = auth if auth.lower().startswith("bearer ") else f"Bearer {auth}"
-    session_id = os.getenv("CAKE_SEARCH_SESSION_ID", "").strip() or os.getenv("CAKE_X_SEARCH_SESSION_ID", "").strip()
-    if session_id:
-        headers["X-Search-Session-Id"] = session_id
-    return headers
+    return _cake.headers(accept=accept, referer=referer)
 
 
 def _effective_cake_sort_by(sort_by: str | None, cutoff: "datetime | None") -> str:
@@ -2592,10 +2236,7 @@ def _effective_cake_sort_by(sort_by: str | None, cutoff: "datetime | None") -> s
     Repair11 invariant: any crawl that uses a time cutoff MUST be newest-to-oldest.
     A stale/debug CAKE_SORT_BY value may still be used only when there is no cutoff.
     """
-    requested = (sort_by or CAKE_SORT_BY or "latest").strip().lower()
-    if cutoff is not None:
-        return "latest"
-    return requested or "latest"
+    return _cake.effective_order(sort_by, cutoff, default=CAKE_SORT_BY)
 
 
 def build_cake_search_payload(
@@ -2608,81 +2249,35 @@ def build_cake_search_payload(
     seniority_levels: list[str] | None = None,
     job_source: list[str] | None = None,
 ) -> dict:
-    """組 Cake search API POST payload。
-
-    注意:
-      - 這是 POST JSON，不是 query string
-      - page 是 1-indexed
-      - 現階段沒看到穩定的 date filter，所以 range 只拿來決定 max_pages
-    """
-    return {
-        "query": keyword,
-        "filters": {
-            "job_source": job_source or CAKE_JOB_SOURCE,
-            "job_types": job_types or CAKE_JOB_TYPES,
-            "locations": locations or CAKE_LOCATIONS,
-            "seniority_levels": seniority_levels or CAKE_SENIORITY_LEVELS,
-        },
-        "sort_by": sort_by,
-        "page": page,
-        "per_page": per_page,
-    }
+    """組 Cake search API POST payload。"""
+    return _cake.build_search_payload(
+        keyword,
+        page,
+        per_page=per_page,
+        sort_by=sort_by,
+        locations=locations,
+        job_types=job_types,
+        seniority_levels=seniority_levels,
+        job_source=job_source,
+    )
 
 
 def build_cake_detail_url(page_path: str, job_path: str) -> str:
     """組 Cake public detail URL。"""
-    return CAKE_DETAIL_PAGE_URL.format(page_path=page_path, job_path=job_path)
+    return _cake.build_detail_url(page_path, job_path)
 
 
 def _cake_text_from_html(html: str) -> str:
     """盡量從 Cake detail HTML 抽純文字。"""
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-    text = soup.get_text(separator=" ", strip=True)
-    return re.sub(r"\s+", " ", text).strip()
+    return _cake.text_from_html(html)
 
 
 def parse_cake_search_page(data: dict, keyword: str) -> list[dict]:
-    """從 Cake search API JSON 轉成內部 job dict。"""
-    jobs_raw = data.get("data") or []
-    out = []
-    for j in jobs_raw:
-        job_path = j.get("path") or ""
-        page = j.get("page") or {}
-        page_path = page.get("path") or ""
-        if not job_path or not page_path:
-            continue
-        description = j.get("description") or ""
-        locs = j.get("locations") or []
-        if isinstance(locs, list) and locs:
-            loc = locs[0]
-        else:
-            loc = (page.get("geo") or {}).get("state_name", "") or ""
-        out.append(
-            {
-                "job_id": job_path,  # Cake 的穩定 identifier: public detail URL path
-                "path": job_path,
-                "title": (j.get("title") or "").strip(),
-                "company": page.get("name", "") or "",
-                "location": loc,
-                "posted_at": j.get("content_updated_at", ""),
-                "url": build_cake_detail_url(page_path, job_path),
-                "work_mode": extract_work_mode(description, j.get("title", "")),
-                "source": "cake",
-                "keyword_used": keyword,
-                "page_path": page_path,
-                "page_name": page.get("name", ""),
-                "job_source": j.get("job_source", ""),
-                "job_type": j.get("job_type", ""),
-                "seniority_level": j.get("seniority_level", ""),
-                "content_updated_at": j.get("content_updated_at", ""),
-                "description": description,  # 先保留原文，fetch_cake_jd 會優先用它做 fallback
-                "highlighted_title": j.get("highlighted_title", ""),
-                "highlighted_description": j.get("highlighted_description", ""),
-            }
-        )
-    return out
+    """從 Cake search API JSON 轉成內部 job dict。
+
+    work-mode 的判定規則是 engine-wide 的, 所以 `extract_work_mode` 由這裡注入。
+    """
+    return _cake.parse_search_page(data, keyword, extract_work_mode=extract_work_mode)
 
 
 def fetch_cake_jd(job: dict | str, page_path: str | None = None) -> dict:
@@ -2692,162 +2287,35 @@ def fetch_cake_jd(job: dict | str, page_path: str | None = None) -> dict:
       1) 先試 public detail HTML
       2) 失敗就 fallback 到 search list 的 description
 
-    Returns:
-      {jd_text, jd_lines, jd_html, company, location, title, error, jd_source}
+    `session` 在呼叫時才讀取, 所以測試可以繼續 patch `sg_product_jobs._cc_session`。
     """
-    if isinstance(job, dict):
-        job_path = job.get("path") or job.get("job_id") or ""
-        page_path = page_path or job.get("page_path") or (job.get("page") or {}).get("path") or ""
-        title = job.get("title", "")
-        company = job.get("company", "") or (job.get("page") or {}).get("name", "")
-        location = job.get("location", "")
-        description = job.get("description") or job.get("highlighted_description") or ""
-    else:
-        job_path = str(job)
-        title = ""
-        company = ""
-        location = ""
-        description = ""
-    detail_url = build_cake_detail_url(page_path, job_path) if page_path and job_path else ""
-
-    # 1) 先試 public HTML
-    if detail_url:
-        try:
-            r = _cc_session.get(
-                detail_url,
-                headers=_cake_headers(
-                    accept="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    referer=f"{CAKE_WEB_BASE}/",
-                ),
-                proxies=_cake_proxies(),
-                timeout=30,
-                impersonate="chrome",
-            )
-            if r.status_code == 200:
-                html_text = _cake_text_from_html(r.text)
-                if html_text and "Just a moment..." not in html_text and len(html_text) >= 60:
-                    jd_lines = [t.strip() for t in html_text.split("\n") if t.strip()]
-                    return {
-                        "jd_text": html_text,
-                        "jd_lines": jd_lines,
-                        "jd_html": r.text,
-                        "company": company,
-                        "location": location,
-                        "title": title,
-                        "error": None,
-                        "jd_source": "detail_html",
-                    }
-        except Exception as e:
-            detail_err = f"{type(e).__name__}: {e}"
-        else:
-            detail_err = f"HTTP {r.status_code}" if detail_url else "no detail url"
-    else:
-        detail_err = "no detail url"
-
-    # 2) fallback: list description already 很長，通常就是完整 JD
-    if description:
-        jd_text = re.sub(r"\s+", " ", description).strip()
-        jd_lines = [t.strip() for t in description.splitlines() if t.strip()]
-        return {
-            "jd_text": jd_text,
-            "jd_lines": jd_lines,
-            "jd_html": None,
-            "company": company,
-            "location": location,
-            "title": title,
-            "error": None,
-            "jd_source": f"list_description ({detail_err})",
-        }
-    return {
-        "jd_text": None,
-        "jd_lines": None,
-        "jd_html": None,
-        "company": company,
-        "location": location,
-        "title": title,
-        "error": detail_err,
-        "jd_source": "none",
-    }
+    return _cake.fetch_jd(job, page_path, session=_cc_session)
 
 
 def _cake_list_with_retry(kw: str, page: int, payload: dict, max_retries: int = 3) -> dict:
     """Cake list API 帶 30/60/90s retry (對齊 104 / Jora §15.13 #11)。
 
-    429 / 5xx / connection error → sleep 30/60/90s → retry。
-    4xx (非 429) 直接 raise, 視為 caller bug (例如 400 bad request)。
-    Returns: response.json() dict
-    Raises: RuntimeError if all retries fail
+    session / sleep 在呼叫時才讀取, 所以測試可以繼續 patch
+    `sg_product_jobs._cc_session` 與 `sg_product_jobs.time`。
     """
-    backoff = [30, 60, 90]
-    last_err = None
-    for attempt in range(max_retries + 1):
-        try:
-            r = _cc_session.post(
-                CAKE_LIST_API,
-                headers=_cake_headers(),
-                json=payload,
-                proxies=_cake_proxies(),
-                timeout=30,
-                impersonate="chrome",
-            )
-            if r.status_code == 200:
-                return r.json()
-            if r.status_code == 429 or r.status_code >= 500:
-                last_err = f"http {r.status_code}"
-            else:
-                raise RuntimeError(f"  [cake {kw!r} p{page}] non-retryable HTTP {r.status_code}: {r.text[:200]}")
-        except RuntimeError:
-            raise
-        except Exception as e:
-            last_err = f"{type(e).__name__}: {str(e)[:50]}"
-        if attempt < max_retries:
-            print(
-                f"  [cake {kw!r} p{page} RETRY {attempt + 1}/{max_retries}] {last_err}, sleep {backoff[attempt]}s",
-                flush=True,
-            )
-            time.sleep(backoff[attempt])
-    raise RuntimeError(f"cake list API fail after {max_retries + 1} attempts: {last_err}")
+    return _cake.list_with_retry(
+        kw,
+        page,
+        payload,
+        max_retries=max_retries,
+        session=_cc_session,
+        sleep=time.sleep,
+    )
 
 
 def _cake_parse_job_timestamp(job: dict) -> tuple["datetime | None", bool]:
-    """Parse Cake ``content_updated_at``.
-
-    Returns ``(parsed_datetime, unknown)``. Missing or malformed timestamps are
-    retained as jobs, counted in diagnostics, and never prove that a time
-    boundary was reached. This is deliberately conservative: unknown time
-    cannot turn an incomplete crawl into COMPLETE.
-    """
-    ts = job.get("content_updated_at", "")
-    if not ts:
-        return None, True
-    try:
-        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc), False
-    except Exception:
-        return None, True
+    """Parse Cake ``content_updated_at``。"""
+    return _cake.parse_job_timestamp(job)
 
 
 def _aggregate_cake_coverage(keyword_results: list[dict], cutoff: "datetime | None", total_jobs: int) -> str:
-    """Aggregate Cake coverage across *every* keyword worker.
-
-    Precedence intentionally keeps failures visible. COMPLETE requires every
-    worker to have independently reached the cutoff boundary or server end.
-    """
-    states = [r.get("coverage_state", "ERROR") for r in keyword_results]
-    if any(state == "ERROR" for state in states):
-        return "PARTIAL_ERROR"
-    if cutoff is None:
-        return "UNKNOWN_NO_CUTOFF"
-    if any(state == "TRUNCATED" for state in states):
-        return "TRUNCATED"
-    if keyword_results and all(state == "COMPLETE" for state in states):
-        return "EMPTY" if total_jobs == 0 else "COMPLETE"
-    if not keyword_results:
-        return "EMPTY"
-    # Fail closed if a future keyword state is introduced without aggregation.
-    return "PARTIAL_ERROR"
+    """Aggregate Cake coverage across *every* keyword worker."""
+    return _cake.aggregate_coverage(keyword_results, cutoff, total_jobs)
 
 
 def crawl_cake_list(
@@ -2863,106 +2331,21 @@ def crawl_cake_list(
 ) -> dict:
     """Run independent Cake keyword searches and aggregate auditable coverage.
 
-    Repair10 coverage contract:
-    - worker owns cutoff/boundary proof; old boundary jobs are never returned;
-    - each keyword reports COMPLETE / TRUNCATED / ERROR plus diagnostics;
-    - global COMPLETE requires every keyword COMPLETE and no worker error;
-    - server exhaustion is complete even when all observed jobs are fresh;
-    - max-pages with no boundary/end is TRUNCATED;
-    - missing/malformed timestamps are retained, counted, and never prove end;
-    - no requested time cutoff yields UNKNOWN_NO_CUTOFF (unless a worker failed).
-
-    The crawler stays bounded at ThreadPoolExecutor(max_workers=3) and dedups
-    cross-keyword results by Cake path/job_id.
+    `crawl_one_kw` 傳的是本模組的 wrapper 而不是 adapter 內部的函式, 所以測試 patch
+    `sg_product_jobs._crawl_cake_single_kw` 仍然有效。
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    if keywords is None:
-        keywords = CAKE_KEYWORDS
-    if max_pages is None:
-        if daterange is not None:
-            max_pages = CAKE_MAX_PAGES.get(daterange, 15)
-        else:
-            max_pages = 15
-
-    cutoff = None
-    if daterange is not None and daterange in CAKE_TIME_FILTER:
-        unit, n = CAKE_TIME_FILTER[daterange]
-        if unit == "hours":
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=n)
-        else:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=n)
-
-    requested_sort_by = (sort_by or CAKE_SORT_BY or "latest").strip().lower()
-    effective_sort_by = _effective_cake_sort_by(requested_sort_by, cutoff)
-    if cutoff is not None and effective_sort_by != requested_sort_by:
-        print(
-            f"  [cake coverage invariant] ranged crawl forces sort_by=latest (requested={requested_sort_by!r})",
-            flush=True,
-        )
-
-    seen: set[str] = set()
-    all_jobs: list[dict] = []
-    keyword_results_by_kw: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {
-            pool.submit(
-                _crawl_cake_single_kw,
-                kw,
-                max_pages,
-                cutoff,
-                effective_sort_by,
-                per_page,
-                locations,
-                job_types,
-                seniority_levels,
-                job_source,
-            ): kw
-            for kw in keywords
-        }
-        for future in as_completed(futures):
-            kw = futures[future]
-            try:
-                result = future.result()
-                if not isinstance(result, dict):
-                    raise TypeError(f"worker returned {type(result).__name__}, expected dict")
-            except Exception as e:
-                result = {
-                    "keyword": kw,
-                    "jobs": [],
-                    "coverage_state": "ERROR",
-                    "boundary_reached": False,
-                    "server_exhausted": False,
-                    "pages_scanned": 0,
-                    "max_pages": max_pages,
-                    "unknown_timestamp_count": 0,
-                    "error": f"{type(e).__name__}: {e}",
-                }
-            keyword_results_by_kw[kw] = result
-            jobs = result.get("jobs", [])
-            new_jobs = [j for j in jobs if j["job_id"] not in seen]
-            for j in new_jobs:
-                seen.add(j["job_id"])
-                all_jobs.append(j)
-            print(
-                f"  [cake {kw}] state={result.get('coverage_state')} pages={result.get('pages_scanned')} "
-                f"boundary={result.get('boundary_reached')} exhausted={result.get('server_exhausted')} "
-                f"unknown_ts={result.get('unknown_timestamp_count')} | 收 {len(jobs):3} | "
-                f"新增 {len(new_jobs):3} | 跨 kw 累計 {len(all_jobs):3}"
-            )
-
-    # Preserve caller keyword order so raw diagnostics are deterministic.
-    keyword_results = [keyword_results_by_kw[kw] for kw in keywords if kw in keyword_results_by_kw]
-    coverage_state = _aggregate_cake_coverage(keyword_results, cutoff, len(all_jobs))
-    return {
-        "jobs": all_jobs,
-        "coverage_state": coverage_state,
-        "max_pages_used": max_pages,
-        "cutoff": cutoff.isoformat() if cutoff else None,
-        "requested_sort_by": requested_sort_by,
-        "effective_sort_by": effective_sort_by,
-        "keyword_results": keyword_results,
-    }
+    return _cake.crawl_list(
+        daterange,
+        max_pages,
+        CAKE_KEYWORDS if keywords is None else keywords,
+        sort_by=sort_by,
+        per_page=per_page,
+        locations=locations,
+        job_types=job_types,
+        seniority_levels=seniority_levels,
+        job_source=job_source,
+        crawl_one_kw=_crawl_cake_single_kw,
+    )
 
 
 def _crawl_cake_single_kw(
@@ -2978,105 +2361,23 @@ def _crawl_cake_single_kw(
 ) -> dict:
     """Run one ordered Cake keyword crawl and return jobs plus coverage proof.
 
-    With ``sort_by=latest`` and a cutoff, the first parseable job older than the
-    cutoff proves the keyword boundary. The old job is filtered, the rest of
-    that already-fetched page is still examined, and no later page is requested.
-    Missing/malformed timestamps are retained and counted but cannot prove a
-    boundary. Server exhaustion is also COMPLETE. Reaching max_pages while the
-    server still advertises more pages is TRUNCATED. Request failure is ERROR.
+    `hit` / `sleep` 傳的是本模組的 wrapper 而不是 adapter 內部的函式, 所以測試 patch
+    `sg_product_jobs._cake_list_with_retry` 與 `sg_product_jobs.cake_human_sleep` 仍然有效。
     """
-    requested_sort_by = (sort_by or CAKE_SORT_BY or "latest").strip().lower()
-    effective_sort_by = _effective_cake_sort_by(requested_sort_by, cutoff)
-    if cutoff is not None and effective_sort_by != requested_sort_by:
-        print(
-            f"  [cake {kw!r}] ranged cutoff forces sort_by=latest (requested={requested_sort_by!r})",
-            flush=True,
-        )
-
-    seen: set[str] = set()
-    out: list[dict] = []
-    page = 1
-    total_pages = None
-    boundary_reached = False
-    server_exhausted = False
-    unknown_timestamp_count = 0
-    pages_scanned = 0
-    error = None
-
-    while page <= max_pages:
-        payload = build_cake_search_payload(
-            kw,
-            page,
-            per_page=per_page,
-            sort_by=effective_sort_by,
-            locations=locations,
-            job_types=job_types,
-            seniority_levels=seniority_levels,
-            job_source=job_source,
-        )
-        try:
-            data = _cake_list_with_retry(kw, page, payload)
-        except Exception as e:
-            error = f"{type(e).__name__}: {e}"
-            print(f"  [cake {kw!r} p{page}] ERROR: {error}")
-            break
-
-        pages_scanned += 1
-        jobs = parse_cake_search_page(data, kw)
-        for j in jobs:
-            jid = j["job_id"]
-            if jid in seen:
-                continue
-            if cutoff is not None:
-                job_dt, unknown = _cake_parse_job_timestamp(j)
-                if unknown:
-                    unknown_timestamp_count += 1
-                elif job_dt < cutoff:
-                    boundary_reached = True
-                    # Boundary proof is metadata only. Never return the old job.
-                    continue
-            seen.add(jid)
-            out.append(j)
-
-        total_pages = data.get("total_pages") or total_pages
-        total_entries = data.get("total_entries", "?")
-        if not jobs or (total_pages is not None and page >= int(total_pages)):
-            server_exhausted = True
-        print(
-            f"  [cake {kw!r} p{page}] 收 {len(jobs):3} | kw 累計 {len(out):3} | "
-            f"total_entries={total_entries} total_pages={total_pages} "
-            f"boundary={boundary_reached} unknown_ts={unknown_timestamp_count}"
-        )
-
-        if boundary_reached or server_exhausted:
-            break
-        if page < max_pages:
-            cake_human_sleep("list")
-        page += 1
-
-    if error is not None:
-        state = "ERROR"
-    elif cutoff is None:
-        # Keyword-level diagnostic; global result uses UNKNOWN_NO_CUTOFF too.
-        state = "TRUNCATED" if not server_exhausted else "COMPLETE"
-    elif boundary_reached or server_exhausted:
-        state = "COMPLETE"
-    else:
-        state = "TRUNCATED"
-
-    return {
-        "keyword": kw,
-        "jobs": out,
-        "coverage_state": state,
-        "boundary_reached": boundary_reached,
-        "server_exhausted": server_exhausted,
-        "pages_scanned": pages_scanned,
-        "max_pages": max_pages,
-        "unknown_timestamp_count": unknown_timestamp_count,
-        "requested_sort_by": requested_sort_by,
-        "effective_sort_by": effective_sort_by,
-        "error": error,
-    }
+    return _cake.crawl_single_kw(
+        kw,
+        max_pages,
+        cutoff,
+        sort_by,
+        per_page,
+        locations,
+        job_types,
+        seniority_levels,
+        job_source,
+        hit=_cake_list_with_retry,
+        sleep=cake_human_sleep,
+        extract_work_mode=extract_work_mode,
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -3085,230 +2386,67 @@ def _crawl_cake_single_kw(
 # RULES §15 完整設計文檔
 # ─────────────────────────────────────────────────────────────
 def _onezerofour_headers(referer: str = "https://www.104.com.tw/jobs/search/") -> dict:
-    """104 共用 header, referer 預設 list page (detail API 要換成 /job/{slug})。"""
-    return {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
-        "Referer": referer,
-    }
+    """104 共用 header。
+
+    抓取層已搬到 jobs_scraper/sources/onezerofour.py; 這個 wrapper 保留原名與
+    原簽名, 讓既有的呼叫端與測試不需要改動。
+    """
+    return _onezerofour.headers(referer)
 
 
 def build_onezerofour_list_url(keyword: str, page: int, isnew: int, areas: str = ONEZEROFOUR_AREAS) -> str:
-    """組 104 list API URL。RULES §15.2 完整 query spec。
-
-    Args:
-        keyword: 搜尋字串 (傳原字中文, Python 自動 URL encode)
-        page: 1-indexed (page=1 開始, server 給 22 個, page 6+ 給 20 個)
-        isnew: 0/3/7/14/30 (其他 400, 含 21)
-        areas: 地區代碼, 預設台北+新北
-    """
-    import urllib.parse
-
-    params = {
-        "area": areas,
-        "keyword": keyword,
-        "isnew": str(isnew),
-        "page": str(page),
-        "pagesize": "20",
-        "order": "15",
-        "mode": "s",  # s = 搜尋模式 (不是 l=列表模式)
-        "jobsource": "m_joblist_search",
-        "searchJobs": "1",
-    }
-    return f"{ONEZEROFOUR_LIST_API}?{urllib.parse.urlencode(params)}"
+    """組 104 list API URL。RULES §15.2 完整 query spec。"""
+    return _onezerofour.build_list_url(keyword, page, isnew, areas)
 
 
 def hit_onezerofour_list(keyword: str, page: int, isnew: int, max_retries: int = 3) -> list[dict]:
-    """List API 帶 30/60/90s retry (跟 Jora 403 retry pattern 同, RULES §15.13 #11)。
+    """List API 帶 30/60/90s retry (RULES §15.13 #11)。
 
-    Returns: list of raw job dicts (從 response.data 解出)
-    Raises: RuntimeError if all retries fail
+    session / sleep 在呼叫時才讀取, 所以測試可以繼續 patch
+    `sg_product_jobs._cc_session` 與 `sg_product_jobs.time`。
     """
-    backoff = [30, 60, 90]
-    url = build_onezerofour_list_url(keyword, page, isnew)
-    last_err = None
-    for attempt in range(max_retries + 1):
-        try:
-            r = _cc_session.get(url, headers=_onezerofour_headers(), timeout=30, impersonate="chrome")
-            if r.status_code == 200:
-                return r.json().get("data", [])
-            last_err = f"http {r.status_code}"
-        except Exception as e:
-            last_err = f"{type(e).__name__}: {str(e)[:50]}"
-        if attempt < max_retries:
-            print(
-                f"    [104 LIST RETRY {attempt + 1}/{max_retries}] kw={keyword!r} p{page} 失敗 ({last_err}), sleep {backoff[attempt]}s",
-                flush=True,
-            )
-            time.sleep(backoff[attempt])
-    raise RuntimeError(f"104 list API fail after {max_retries + 1} attempts: {last_err}")
+    return _onezerofour.hit_list(
+        keyword,
+        page,
+        isnew,
+        max_retries=max_retries,
+        session=_cc_session,
+        sleep=time.sleep,
+    )
 
 
 def hit_onezerofour_detail(slug: str, max_retries: int = 3) -> str:
-    """Detail API (5-char slug)。Fail-closed: 404 直接 raise (RULES §15.13 #5)。
-
-    Returns: jobDescription 文字 (str), 空字串 if API 沒給
-    Raises: RuntimeError on 404 (job 已下架) or retry exhausted
-    """
-    backoff = [30, 60, 90]
-    url = ONEZEROFOUR_DETAIL_API.format(slug=slug)
-    headers = _onezerofour_headers(referer=f"https://www.104.com.tw/job/{slug}")
-    last_err = None
-    for attempt in range(max_retries + 1):
-        try:
-            r = _cc_session.get(url, headers=headers, timeout=30, impersonate="chrome")
-            if r.status_code == 200:
-                d = r.json().get("data", {}).get("jobDetail", {})
-                return d.get("jobDescription", "") or ""
-            if r.status_code == 404:
-                # 404 fail-closed: job 已下架, 直接 raise, 不要 silent skip
-                raise RuntimeError(f"104 detail 404 for slug={slug} (job 已下架)")
-            last_err = f"http {r.status_code}"
-        except RuntimeError:
-            raise  # 404 propagate
-        except Exception as e:
-            last_err = f"{type(e).__name__}: {str(e)[:50]}"
-        if attempt < max_retries:
-            print(
-                f"    [104 DETAIL RETRY {attempt + 1}/{max_retries}] slug={slug} 失敗 ({last_err}), sleep {backoff[attempt]}s",
-                flush=True,
-            )
-            time.sleep(backoff[attempt])
-    raise RuntimeError(f"104 detail API fail after {max_retries + 1} attempts: {last_err}")
+    """Detail API (5-char slug)。Fail-closed: 404 直接 raise (RULES §15.13 #5)。"""
+    return _onezerofour.hit_detail(
+        slug,
+        max_retries=max_retries,
+        session=_cc_session,
+        sleep=time.sleep,
+    )
 
 
 def parse_onezerofour_list_page(raw_jobs: list[dict], keyword: str = "") -> list[dict]:
-    """從 104 list API 的 data 陣列解 jobs。RULES §15.3 完整欄位對照。
-
-    回傳 dict 格式跟其他 source 對齊 (統一 job_id / source / title / company / location / url 等 key)。
-    job_id 用 slug (5-char) 不是 jobNo (8 digit), 因為 sheet E 欄跟 parse_sheet_row_to_key 都用 slug 推斷 source。
-    """
-    out = []
-    for j in raw_jobs:
-        job_no = j.get("jobNo")
-        slug = (j.get("link") or {}).get("job", "")
-        # 拿最後一段 (URL 格式: https://www.104.com.tw/job/xxx → xxx, 注意 trailing slash)
-        if "/" in slug:
-            slug = slug.rstrip("/").rsplit("/", 1)[-1]
-        if not (job_no and slug):
-            continue
-        # remoteWorkType 對應 work_mode: 0=Onsite / 1=Remote / 2=Hybrid (RULES §15.3)
-        rw = j.get("remoteWorkType", 0)
-        if rw == 1:
-            wm = "Remote"
-        elif rw == 2:
-            wm = "Hybrid"
-        else:
-            wm = "Onsite"
-        out.append(
-            {
-                "job_id": slug,  # 用 slug 當 job_id (跟 E 欄 URL 一致, 跟 parse_sheet_row_to_key 對齊)
-                "job_no": job_no,  # 8 digit, 留著 debug/audit 用
-                "title": j.get("jobName", ""),
-                "company": j.get("custName", ""),
-                "location": j.get("jobAddrNoDesc", ""),
-                "posted_at": j.get("appearDate", ""),
-                "url": f"{ONEZEROFOUR_BASE_URL}/job/{slug}",
-                "work_mode": wm,
-                "source": "onezerofour",
-                "keyword_used": keyword,  # debug 用
-            }
-        )
-    return out
+    """從 104 list API 的 data 陣列解 jobs。RULES §15.3 完整欄位對照。"""
+    return _onezerofour.parse_list_page(raw_jobs, keyword)
 
 
 def fetch_onezerofour_jd(slug: str) -> dict:
-    """抓單一 job 的完整 JD。回傳跟其他 source 對齊的 dict。
-
-    Returns: {jd_text, jd_lines, jd_html, company, location, title, error}
-    """
-    try:
-        jd_text = hit_onezerofour_detail(slug)
-    except RuntimeError as e:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": str(e),
-        }
-    if not jd_text:
-        return {
-            "jd_text": None,
-            "jd_lines": None,
-            "jd_html": None,
-            "company": "",
-            "location": "",
-            "title": "",
-            "error": "empty JD",
-        }
-    # 跟其他 source 一樣: jd_lines 給 optional 用, 主要還是 jd_text
-    jd_lines = [t.strip() for t in jd_text.split("\n") if t.strip()]
-    return {
-        "jd_text": jd_text,
-        "jd_lines": jd_lines,
-        "jd_html": None,
-        "company": "",  # 104 list 階段已有, 不再覆寫
-        "location": "",
-        "title": "",
-        "error": None,
-    }
+    """抓單一 job 的完整 JD。回傳跟其他 source 對齊的 dict。"""
+    return _onezerofour.fetch_jd(slug, hit=hit_onezerofour_detail)
 
 
 def crawl_onezerofour_list(daterange: str, max_pages: int, keywords: list[str] | None = None) -> list[dict]:
     """8 keyword × max_pages list API, ThreadPoolExecutor 8 workers 平行抓 (RULES §15.8, §15.11)。
 
-    跨 kw dedup by slug (slug 跨 kw 不會撞, 但保險起見去重)。
+    `hit` 傳的是本模組的 wrapper 而不是 adapter 內部的函式, 所以測試 patch
+    `sg_product_jobs.hit_onezerofour_list` 仍然有效。
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    if keywords is None:
-        keywords = ONEZEROFOUR_KEYWORDS
-    isnew = ONEZEROFOUR_TPR[daterange]
-    seen: set[str] = set()
-    collected: list[tuple[str, dict]] = []  # (keyword, raw_job)
-
-    def _fetch_one_kw(kw: str) -> list[tuple[str, str, dict]]:
-        """單 keyword × max_pages (sequential, 一個 worker 跑固定一個 kw)。
-        Returns: list of (kw, slug, raw_job) for dedup tracking。
-        """
-        results = []
-        for p in range(1, max_pages + 1):
-            try:
-                raw = hit_onezerofour_list(kw, p, isnew)
-            except RuntimeError as e:
-                print(f"  [104 KW FAIL] {kw!r} p{p}: {e}", flush=True)
-                continue
-            for j in raw:
-                slug = (j.get("link") or {}).get("job", "")
-                if "/" in slug:
-                    slug = slug.rstrip("/").rsplit("/", 1)[-1]
-                if slug:
-                    results.append((kw, slug, j))
-        return results
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futs = {pool.submit(_fetch_one_kw, kw): kw for kw in keywords}
-        for fut in as_completed(futs):
-            kw = futs[fut]
-            try:
-                kw_results = fut.result()
-            except Exception as e:
-                print(f"  [104 KW EXCEPTION] {kw!r}: {type(e).__name__}: {e}", flush=True)
-                continue
-            for _kw, slug, raw in kw_results:
-                if slug in seen:
-                    continue
-                seen.add(slug)
-                collected.append((_kw, raw))
-    # parse 階段 (拿到原始 jobs 統一轉 dict, keyword 跟著帶進去)
-    out = []
-    for kw, raw in collected:
-        out.extend(parse_onezerofour_list_page([raw], keyword=kw))
-    return out
+    return _onezerofour.crawl_list(
+        daterange,
+        max_pages,
+        keywords,
+        hit=hit_onezerofour_list,
+    )
 
 
 def enrich_with_jd(

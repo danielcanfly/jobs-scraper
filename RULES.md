@@ -8,7 +8,8 @@
 
 The executable implementation remains authoritative:
 
-- `sg_product_jobs.py`: scraper engine and direct CLI; owns source crawling, the title skip filter, JD extraction, dedup, and Sheet row writes;
+- `sg_product_jobs.py`: scraper engine and direct CLI; owns the crawl orchestration, the title skip filter, JD enrichment, dedup, and Sheet row writes;
+- `jobs_scraper/sources/<source>.py`: one adapter per active source, owning that source's URL building, list parsing, and JD fetching. The adapters hold no global state — the HTTP session and the sleep function are injected by the caller;
 - `server.py`: legacy four-tool local STDIO MCP compatibility entrypoint;
 - `server_v1_1.py`: current region-aware local STDIO MCP entrypoint;
 - `job_tracker.py`: portable Job Tracker Sheet schema/bootstrap implementation;
@@ -362,7 +363,9 @@ This release is a **single version line**. There is exactly one build of the scr
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
-The engine keeps all five sources in one file. `jobs_scraper/sources/` was removed in v1.4.0 because it held an unused duplicate of the LinkedIn adapter with no importer; every source's URL building, list parsing, and JD fetch live in `sg_product_jobs.py`.
+Since v1.5.0 the engine keeps the orchestration and the business rules, and each source's fetching layer lives in its own adapter under `jobs_scraper/sources/`. The engine keeps the public function names as thin wrappers that read the session, the sleep function, and any injected hit function at call time, so there is exactly one implementation of each behaviour.
+
+The `jobs_scraper/sources/` package that v1.4.0 removed has returned with the opposite meaning: in v1.4.0 it held an unused duplicate of the LinkedIn adapter with no importer; in v1.5.0 it holds one adapter per active source. An AST check in the equivalence suite asserts the engine keeps only wrappers, so the duplication v1.4.0 removed cannot come back.
 
 ## 16. Installation and governance
 

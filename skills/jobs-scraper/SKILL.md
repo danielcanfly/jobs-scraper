@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.4.0"
+  version: "1.5.0"
 ---
 
 # Jobs Scraper
@@ -14,16 +14,17 @@ Use the bundled MCP tools when they are available. Do not reimplement scraping l
 
 ## Build map — which code actually runs
 
-There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.4.0` engine:
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.5.0` engine:
 
 | Artifact | Path | Version |
 |---|---|---|
-| Scraping engine + CLI | `sg_product_jobs.py` | `1.4.0` |
-| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.4.0` |
-| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.4.0` |
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.5.0` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.5.0` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.5.0` |
 | Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
+| Per-source fetching | `jobs_scraper/sources/<source>.py` | one adapter per source |
 
-`sg_product_jobs.py` owns URL building, list parsing, JD fetch, the title skip filter, dedup, and Sheet row writes for **all five sources**: `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour`. `jora` is retired from active sources (the site closed in 2026) and is kept only for back-compat dedup of historical rows.
+`sg_product_jobs.py` owns the crawl orchestration, the title skip filter, JD enrichment, dedup, and Sheet row writes. Each source's URL building, list parsing, and JD fetching lives in its own adapter under `jobs_scraper/sources/` — `linkedin.py`, `jobstreet.py`, `cake.py`, `onezerofour.py` — and the engine keeps the public names as thin wrappers over them. `jora` is retired from active sources (the site closed in 2026) and is kept only for back-compat dedup of historical rows.
 
 Single CLI entry point; MCP and shell both funnel through it:
 

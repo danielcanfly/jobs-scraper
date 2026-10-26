@@ -12,3 +12,4 @@ sg_product_jobs*.json
 cake_global_product_jobs*.json
 jobs_scraper.egg-info/
 *.bak
+local_tools/

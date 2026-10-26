@@ -1,14 +1,14 @@
 {
-  "freeze_version": 3,
+  "freeze_version": 4,
   "baseline": {
-    "release": "v1.4.0",
-    "authorized_delta": "restore-five-active-sources-keep-jora-retired",
-    "parent_main": "2a240be6ae94b2d8de03bf7ddc7415f1ccb5d688"
+    "release": "v1.5.0",
+    "authorized_delta": "split-source-fetching-into-jobs-scraper-sources-adapters",
+    "parent_main": "11041502afa31e970ccbc2bb878e6b96ec63d4b4"
   },
   "frozen_blobs": {
     "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "37b938947fb7b22d7693e5303725e2dc7b0d80af",
     "tests/equivalence/v130_golden.json": "70e1248ab3ea980fe6804384a42331fce931e984",
-    "tests/equivalence/test_v130_equivalence.py": "7c18e9fcc207784b049ecfd63ce0b74b6e45528c"
+    "tests/equivalence/test_v130_equivalence.py": "dd8bde003105c2a2fd035de58b6d1fa0c60d84b7"
   },
-  "policy": "The v1.4.0 five-source contract is frozen: linkedin, jobstreet, cake and 104/onezerofour are active CLI sources owned by sg_product_jobs.py; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. The removed jobs_scraper/sources/ adapter layer must not be reintroduced by refactor; future source expansion or retirement requires an explicit authorized contract change."
+  "policy": "The v1.5.0 contract is frozen: each active source's URL building, list parsing and JD fetch live in jobs_scraper/sources/<source>.py, and sg_product_jobs.py keeps only thin wrappers over them — one implementation per behaviour, verified by AST. The active CLI sources are linkedin, jobstreet, cake and 104/onezerofour; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. The engine's title filter, Sheet write order, cross-source identity, work-mode values, retry ladders and single-source-of-truth crawl state are unchanged by the split; future source expansion or retirement requires an explicit authorized contract change."
 }

@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.5.0 — 2026-10-26
+
+Stage 2 of the unification: the fetching layer moves out of the engine into per-source adapters.
+
+Structure
+
+- Each active source's URL building, list parsing, and JD fetching now lives in `jobs_scraper/sources/<source>.py` — `linkedin.py`, `jobstreet.py`, `cake.py`, `onezerofour.py`.
+- The adapters hold no global state. The HTTP session, the sleep function, and any function one adapter calls from another are injected by the caller, so the retry ladders stay observable and every adapter is exercisable without touching the network.
+- `sg_product_jobs.py` keeps the public names as thin wrappers. The wrappers read the session, sleep, and hit function at call time, so patching `sg_product_jobs._cc_session`, `sg_product_jobs.time`, or a source-level function keeps working exactly as before. The engine shrinks from ~3400 to ~2870 lines and keeps what belongs to it: the title skip filter, dedup, Sheet writes, the crawl orchestration, and the CLI.
+- The engine's constants alias the adapter's, so `sg_product_jobs.LINKEDIN_*`, `CAKE_*`, `JOBSTREET_*`, and `ONEZEROFOUR_*` keep working.
+
+Contract
+
+- Nothing observable changed. Every source's existing contract tests pass unchanged, and each move was additionally checked by diffing the old implementation against the new one across its whole branch surface — the retry ladder and its trigger conditions, the request payloads and headers, every response and error branch, the per-keyword crawl and cross-keyword de-duplication, the Cake coverage state machine, the 104 slug and work-mode mapping, and the LinkedIn JD fallback.
+- The frozen behaviours are untouched: title filter v8.5, the three-phase Sheet write order, cross-source identity, the work-mode values, the retry ladders, and `seen_jds.jsonl` as the single source of truth.
+- The equivalence contract moves with the code. `tests/equivalence/test_v130_equivalence.py` now expects the sources package to exist, and an AST check asserts the engine keeps only wrappers — so no behaviour ends up implemented twice.
+
+Also in this release
+
+- The four one-off 104 migration helpers move out of the published tree into `local_tools/`, which the gitignore and the sync preservation list both keep.
+
 ## v1.4.0 — 2026-10-26
 
 Single version line. The plugin runtime, working copies, and this repository now carry one identical build.
