@@ -20,19 +20,40 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-AUTHOR_SHEET_ID = "".join(("1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-", "Fc42jAZ8"))
-AUTHOR_GID = "111" + "9491672"
+# Reuse the repository hygiene guard's forbidden-value table instead of keeping a
+# second copy of the package author's Sheet ID in this file. The guard is the
+# single place that knows which production values must never reappear; duplicating
+# them here would scatter a secret across the tree and defeat the point.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from check_repo_hygiene import FORBIDDEN_EXACT  # noqa: E402
+from conftest import clean_env_module  # noqa: E402
+
+AUTHOR_SHEET_ID = FORBIDDEN_EXACT["author_production_sheet_id"]
+AUTHOR_GID = FORBIDDEN_EXACT["author_production_tab_gid"]
 
 
 @contextmanager
 def _fresh_server(env: dict[str, str] | None = None):
-    """Import server.py with a clean env; yield the module; restore env at exit."""
+    """Import server.py with a clean env; yield the module; restore env at exit.
+
+    `PYTHON_DOTENV_DISABLED=1` is essential here: the import chain reaches
+    `sg_product_jobs`, which calls `load_dotenv()` at import time. Without the
+    switch, re-importing `server` repopulates the just-cleared environment from
+    the on-disk `.env` and the fail-closed contract silently stops holding.
+    """
     saved = {
         k: os.environ.get(k)
-        for k in ("SHEET_ID", "SHEET_GID", "GSPREAD_SA_KEY_PATH", "JOBS_SCRAPER_SUBPROCESS_TIMEOUT")
+        for k in (
+            "SHEET_ID",
+            "SHEET_GID",
+            "GSPREAD_SA_KEY_PATH",
+            "JOBS_SCRAPER_SUBPROCESS_TIMEOUT",
+            "PYTHON_DOTENV_DISABLED",
+        )
     }
     for k in saved:
         os.environ.pop(k, None)
+    os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     if env:
         for k, v in env.items():
             os.environ[k] = v
@@ -63,17 +84,18 @@ def test_no_author_sheet_id_in_executable_code():
 
 # ── Q33b: SG_RAW_SHEET_ID empty when env not set ────────────────────
 def test_sheet_id_default_is_empty():
-    import sg_product_jobs as M
-
-    assert M.SHEET_ID_OVERRIDE == "", f"got {M.SHEET_ID_OVERRIDE!r}"
-    assert M.SG_RAW_SHEET_ID == "", f"got {M.SG_RAW_SHEET_ID!r}"
+    # Re-import with a scrubbed environment: the module reads Sheet config at
+    # import time and calls load_dotenv(), so an ambient .env (the installed
+    # plugin runtime has one) would otherwise make this a false failure.
+    with clean_env_module("sg_product_jobs") as M:
+        assert M.SHEET_ID_OVERRIDE == "", f"got {M.SHEET_ID_OVERRIDE!r}"
+        assert M.SG_RAW_SHEET_ID == "", f"got {M.SG_RAW_SHEET_ID!r}"
 
 
 def test_sgid_default_is_zero():
-    import sg_product_jobs as M
-
-    assert M.SHEET_GID_OVERRIDE == "", f"got {M.SHEET_GID_OVERRIDE!r}"
-    assert M.SG_RAW_GID == 0, f"got {M.SG_RAW_GID}"
+    with clean_env_module("sg_product_jobs") as M:
+        assert M.SHEET_GID_OVERRIDE == "", f"got {M.SHEET_GID_OVERRIDE!r}"
+        assert M.SG_RAW_GID == 0, f"got {M.SG_RAW_GID}"
 
 
 # ── Q34: Sheet tools fail closed when SHEET_ID or SHEET_GID missing ─

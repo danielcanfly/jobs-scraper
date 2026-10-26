@@ -1,8 +1,21 @@
 {
   "baseline": {
-    "release": "v1.3.0",
-    "authorized_delta": "retire-jora-jobstreet-active-sources",
-    "parent_main": "2bd40f0f169cc17b0cf57b166b11759e69790278"
+    "release": "v1.4.0",
+    "authorized_delta": "restore-five-active-sources-keep-jora-retired",
+    "parent_main": "2a240be6ae94b2d8de03bf7ddc7415f1ccb5d688"
+  },
+  "cli": {
+    "source_choices": [
+      "linkedin",
+      "jobstreet",
+      "cake",
+      "104",
+      "onezerofour"
+    ],
+    "invalid_source_messages": {
+      "jora": "argument --source: invalid choice: 'jora' (choose from 'linkedin', 'jobstreet', 'cake', '104', 'onezerofour')",
+      "unknown": "argument --source: invalid choice: 'unknown' (choose from 'linkedin', 'jobstreet', 'cake', '104', 'onezerofour')"
+    }
   },
   "urls": {
     "linkedin_list_base": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
@@ -14,7 +27,30 @@
       "sortBy": "DD",
       "start": "20"
     },
-    "linkedin_jd": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342"
+    "linkedin_jd": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4430572342",
+    "jobstreet_list_base": "https://sg.jobstreet.com/api/jobsearch/v5/search",
+    "jobstreet_list_query": {
+      "siteKey": "SG-Main",
+      "keywords": "product manager",
+      "where": "Singapore",
+      "worktype": "242",
+      "daterange": "7d",
+      "page": "1",
+      "pageSize": "20"
+    },
+    "cake_detail": "https://www.cake.me/companies/acme/jobs/product-manager-123",
+    "onezerofour_list_base": "https://www.104.com.tw/jobs/search/api/jobs",
+    "onezerofour_list_query": {
+      "area": "6001001000,6001002000",
+      "keyword": "產品經理",
+      "isnew": "7",
+      "page": "1",
+      "pagesize": "20",
+      "order": "15",
+      "mode": "s",
+      "jobsource": "m_joblist_search",
+      "searchJobs": "1"
+    }
   },
   "legacy_rows": {
     "jora": [
@@ -25,6 +61,9 @@
       "jobstreet",
       "94145676"
     ]
+  },
+  "legacy_formulas": {
+    "jora": "=HYPERLINK(\"https://sg.jora.com/job/Product-Manager-3edbbb646574ed2a0a926fee537b0e7c\",\"https://sg.jora.com/job/Product-Manager-3edbbb646574ed2a0a926fee537b0e7c\")"
   },
   "mcp": {
     "source_enum": [

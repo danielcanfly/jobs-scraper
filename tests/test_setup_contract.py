@@ -23,8 +23,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETUP_SH = REPO_ROOT / "setup.sh"
 
-# Assemble the audited historical Sheet ID without re-committing the full literal.
-AUTHOR_SHEET_ID = "".join(("1e-YlVFo0pn2QOXP4xsKJDZdnlJQR1eREwy-", "Fc42jAZ8"))
+# Reuse the repository hygiene guard's forbidden-value table rather than keeping
+# a second copy of the package author's Sheet ID in this file.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from check_repo_hygiene import FORBIDDEN_EXACT  # noqa: E402
+
+AUTHOR_SHEET_ID = FORBIDDEN_EXACT["author_production_sheet_id"]
 
 
 def test_setup_uses_strict_mode():
