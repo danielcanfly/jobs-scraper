@@ -74,8 +74,14 @@ def _repo_python_files() -> list[Path]:
     return sorted(found)
 
 
-def _imports_removed_adapter_layer(path: Path) -> bool:
-    """True when the file imports the removed `jobs_scraper/sources/` package."""
+def _imports_retired_adapter_layer(path: Path) -> bool:
+    """True when the file imports a retired source adapter.
+
+    `jobs_scraper/sources/` is a legitimate package since v1.5 — it holds one
+    adapter per active source. Jora is the exception: it was retired when its
+    site closed and only back-compat helpers remain, so no adapter may exist
+    for it and nothing may import one.
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except SyntaxError:
@@ -84,15 +90,34 @@ def _imports_removed_adapter_layer(path: Path) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "jobs_scraper.sources" or alias.name.startswith("jobs_scraper.sources."):
-                    return True
+                if alias.name.startswith("jobs_scraper.sources."):
+                    if alias.name.rsplit(".", 1)[-1] == "jora":
+                        return True
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if module == "jobs_scraper.sources" or module.startswith("jobs_scraper.sources."):
-                return True
-            if module == "jobs_scraper" and any(alias.name == "sources" for alias in node.names):
+            if module.startswith("jobs_scraper.sources."):
+                if module.rsplit(".", 1)[-1] == "jora":
+                    return True
+            if module == "jobs_scraper" and any(alias.name in ("sources", "jora") for alias in node.names):
                 return True
     return False
+
+
+def _engine_adapter_aliases() -> dict[str, str]:
+    """alias -> adapter module stem, read from the engine's own imports."""
+    tree = ast.parse((ROOT / "sg_product_jobs.py").read_text(encoding="utf-8"))
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("jobs_scraper.sources"):
+            for alias in node.names:
+                if alias.asname:
+                    aliases[alias.asname] = alias.name
+    return aliases
+
+
+def _module_functions(path: Path) -> dict[str, ast.FunctionDef]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
 
 
 def test_authorized_baseline_identity():
@@ -176,11 +201,45 @@ def test_cli_rejects_non_active_sources(capsys, source):
     assert GOLDEN["cli"]["invalid_source_messages"][source] in err
 
 
-def test_source_layer_duplication_is_gone():
-    """The unused `jobs_scraper/sources/` adapter package was removed in v1.4.0."""
-    assert not (ROOT / "jobs_scraper" / "sources").exists()
+def test_source_adapters_live_in_the_sources_package():
+    """v1.5: each active source's fetching layer lives in its own adapter.
+
+    v1.4.0 deleted `jobs_scraper/sources/` because it held a duplicate LinkedIn
+    adapter with no importer. v1.5 brings the package back with the opposite
+    meaning: one adapter per source, owning the URL building, list parsing and
+    JD fetch for that source."""
+    sources_dir = ROOT / "jobs_scraper" / "sources"
+    assert sources_dir.is_dir()
+    adapters = {p.stem for p in sources_dir.glob("*.py") if p.stem != "__init__"}
+    assert "onezerofour" in adapters
     for path in _repo_python_files():
-        assert not _imports_removed_adapter_layer(path), path
+        assert not _imports_retired_adapter_layer(path), path
+
+
+def test_engine_keeps_only_thin_wrappers_over_the_adapters():
+    """v1.5: the engine must not keep a second copy of the fetching logic.
+
+    Every source function the engine still exposes has to delegate to its
+    adapter, so each behaviour has exactly one implementation. A wrapper that
+    grew its own body would reintroduce exactly the duplication v1.4.0
+    removed."""
+    aliases = _engine_adapter_aliases()
+    assert aliases, "the engine imports no source adapter"
+    engine = _module_functions(ROOT / "sg_product_jobs.py")
+    checked = 0
+    for alias, stem in aliases.items():
+        for name, node in engine.items():
+            if stem not in name:
+                continue
+            delegates = any(
+                isinstance(child, ast.Attribute)
+                and isinstance(child.value, ast.Name)
+                and child.value.id == alias
+                for child in ast.walk(node)
+            )
+            assert delegates, f"{name} does not delegate to jobs_scraper.sources.{stem}"
+            checked += 1
+    assert checked, "no engine wrapper found for any adapter"
 
 
 @pytest.mark.parametrize(

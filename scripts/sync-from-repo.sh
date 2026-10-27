@@ -63,6 +63,7 @@ PRESERVED=(
   .env
   .secrets
   seen_jds.jsonl
+  local_tools
   skills/sg-jobs-run
   skills/sg-jobs-audit
   skills/sg-jobs-stats
