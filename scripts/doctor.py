@@ -29,6 +29,7 @@ def _version() -> str:
     match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
     return match.group(1) if match else "unknown"
 
+
 VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
 ENV_FILE = REPO_ROOT / ".env"
 
