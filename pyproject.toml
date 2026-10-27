@@ -61,6 +61,7 @@ packages = ["jobs_scraper", "jobs_scraper.sources", "jobs_scraper.tracker", "job
 [tool.pytest.ini_options]
 testpaths = ["."]
 addopts = "-q"
+norecursedirs = ["_archive", ".venv", "local_tools", ".*", "build", "dist"]
 
 [tool.ruff]
 target-version = "py311"
