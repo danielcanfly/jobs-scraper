@@ -8,7 +8,7 @@
 
 A local-first multi-source job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.4.0 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
+jobs-scraper v1.5.0 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
@@ -318,7 +318,7 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 
 ## Versioning and Release Notes
 
-`v1.4.0` is the current release. It restores all five sources, ships the frozen title skip filter v8.5, adds the LinkedIn list-page 429 retry, and corrects the three-phase Sheet write order.
+`v1.5.0` is the current release. It splits every source's fetching layer into `jobs_scraper/sources/`, on top of v1.4.0's unified single-version line: five active sources, the frozen title skip filter v8.5, the LinkedIn list-page 429 retry, and the corrected three-phase Sheet write order.
 
 Earlier releases:
 
@@ -328,7 +328,7 @@ Earlier releases:
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The active frozen equivalence baseline is `v1.4.0` and explicitly protects the five-source contract.
+- The active frozen equivalence baseline is `v1.5.0` and explicitly protects the five-source contract and the one-adapter-per-source split.
 
 ## License
 

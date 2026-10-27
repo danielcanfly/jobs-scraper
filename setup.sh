@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
-# jobs-scraper v1.3.0 one-shot local setup (fail-fast, idempotent, preserves .env/.secrets)
+# jobs-scraper one-shot local setup (fail-fast, idempotent, preserves .env/.secrets)
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
 VENV_PY="$VENV_DIR/bin/python"
 
-echo "🚀 jobs-scraper v1.3.0 setup"
+# 單一版本來源: 版本號只認 pyproject.toml, 不在這裡硬寫一份。
+JOBS_SCRAPER_VERSION="$(python3 - <<'PY'
+import re, sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    text = open("pyproject.toml", encoding="utf-8").read()
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    print(match.group(1) if match else "unknown")
+else:
+    print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])
+PY
+)"
+
+echo "🚀 jobs-scraper v$JOBS_SCRAPER_VERSION setup"
 echo "=================================="
 echo "  repo:  $REPO_ROOT"
 echo "  venv:  $VENV_DIR"
@@ -74,7 +88,7 @@ fi
 printf '\n==================================\n'
 echo "🎉 Setup complete"
 echo ""
-echo "MCP v1.3.0 STDIO command:"
+echo "MCP v$JOBS_SCRAPER_VERSION STDIO command:"
 echo "  $VENV_PY $REPO_ROOT/server_v1_1.py"
 echo ""
 echo "First crawl (no Google config required):"

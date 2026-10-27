@@ -16,10 +16,19 @@ v1.1 Sheet contract:
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _version() -> str:
+    """The single version source: pyproject.toml. Never hard-code it here."""
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    return match.group(1) if match else "unknown"
+
 VENV_PY = REPO_ROOT / ".venv" / "bin" / "python"
 ENV_FILE = REPO_ROOT / ".env"
 
@@ -108,7 +117,7 @@ def check_sheet_config() -> tuple[str, str]:
     missing = [k for k in REQUIRED_SHEET_KEYS_V11 if not proc_env.get(k, "")]
     if missing:
         return (
-            f"v1.3 未設定: {', '.join(missing)} — crawl_jobs 仍可用；Sheet tools 會 fail closed。SHEET_GID 不需設定",
+            f"未設定: {', '.join(missing)} — crawl_jobs 仍可用；Sheet tools 會 fail closed。SHEET_GID 不需設定",
             "WARN",
         )
 
@@ -139,7 +148,7 @@ def check_no_secrets_in_git() -> tuple[str, str]:
 
 
 def main() -> int:
-    print("🩺 jobs-scraper v1.3 doctor")
+    print(f"🩺 jobs-scraper v{_version()} doctor")
     print("=" * 60)
     order = {"PASS": 0, "WARN": 1, "FAIL": 2}
     worst = "PASS"
