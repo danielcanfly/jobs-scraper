@@ -8,7 +8,7 @@
 
 這是一套給 LinkedIn 職缺使用的本機爬蟲與追蹤工具，主要面向產品管理相關職位，並提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
 
-`jobs-scraper` v1.5.0 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
+`jobs-scraper` v1.6.0 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
 
 ## 概覽
 
@@ -317,7 +317,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.5.0` 為目前版本：把每個來源的抓取層拆進 `jobs_scraper/sources/`，並建立在 v1.4.0 的單一版本線之上 —— 五個主動來源、凍結的 title skip filter v8.5、LinkedIn list page 429 retry，以及修正後的 Sheet 三段式寫入順序。
+`v1.6.0` 為目前版本：在 v1.5.0 的 per-source adapter 之上，把 LinkedIn 自 v1.3.1 就有的 retry ladder 補給了 JobStreet list page —— 瞬時的 429 / 5xx / connection error / JSON decode error 會 sleep 30/60/90s 後重試，不再直接中止整輪 keyword crawl。修之前只要有一頁網路抖動，整輪就可能抓到 0 筆：process 印「無資料，結束」卻仍然 exit 0，呼叫端會把「什麼都沒抓到」當成成功。
 
 較早版本：
 
@@ -327,7 +327,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.5.0`，明確保護五來源 contract 與「每個來源一個 adapter」的拆分。
+- 目前 frozen equivalence baseline 為 `v1.6.0`，明確保護五來源 contract、「每個來源一個 adapter」的拆分，以及 JobStreet list page 的 retry ladder。
 
 ## 授權
 

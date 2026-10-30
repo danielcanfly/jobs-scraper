@@ -2,10 +2,10 @@
 name: jobs-scraper
 description: Search and track product-management job postings across LinkedIn, JobStreet, 104, and Cake; initialize a portable Region-Raw/Region-Selected Google Sheet Job Tracker; sync jobs by region; audit duplicates/visa/work-mode fields; and inspect scraper statistics.
 license: MIT
-compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. v1.1.0 resolves worksheet IDs by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
+compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. Worksheet IDs are resolved by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # Jobs Scraper
@@ -14,13 +14,13 @@ Use the bundled MCP tools when they are available. Do not reimplement scraping l
 
 ## Build map — which code actually runs
 
-There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.5.0` engine:
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.6.0` engine:
 
 | Artifact | Path | Version |
 |---|---|---|
-| Scraping engine + CLI | `sg_product_jobs.py` | `1.5.0` |
-| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.5.0` |
-| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.5.0` |
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.6.0` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.6.0` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.6.0` |
 | Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
 | Per-source fetching | `jobs_scraper/sources/<source>.py` | one adapter per source |
 
@@ -72,7 +72,7 @@ Do not convert a read request into a write request. Use `sync_jobs_to_sheet` onl
 
 Never invent or substitute a Sheet ID, worksheet name, tab GID, credential path, or service-account credential.
 
-v1.1.0 requires `SHEET_ID` and `GSPREAD_SA_KEY_PATH` for Sheet tools. `SHEET_GID` is legacy-only and must not be required by the v1.1.0 MCP interface.
+The MCP interface requires `SHEET_ID` and `GSPREAD_SA_KEY_PATH` for Sheet tools. `SHEET_GID` is legacy-only and must not be required by the MCP interface.
 
 If a Sheet tool reports missing configuration, tell the user which configuration field is missing. Do not ask the user to paste a service-account private key into chat.
 
@@ -80,7 +80,7 @@ The server must never fall back to the package author's Sheet.
 
 ## Region routing
 
-For v1.1.0, MCP region input is `SG | TW | China`.
+For the MCP interface, region input is `SG | TW | China`.
 
 - LinkedIn uses LinkedIn `geoId` for location targeting.
 - The scraper is built for LinkedIn job discovery and tracking using LinkedIn `geoId` location targeting. Historical Jora/JobStreet tracker rows remain readable for audit/dedup compatibility.

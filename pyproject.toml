@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobs-scraper"
-version = "1.5.0"
+version = "1.6.0"
 description = "Multi-source product-management job scraper (LinkedIn, JobStreet, 104, Cake) with a local MCP server + Agent Skill and portable Region-Raw/Region-Selected Google Sheet Job Tracker onboarding."
 readme = "README.md"
 license = { text = "MIT" }

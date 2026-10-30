@@ -1,6 +1,6 @@
 # jobs-scraper — Public Technical Rules
 
-> Public-safe technical reference for jobs-scraper v1.4.0.
+> Public-safe technical reference for jobs-scraper v1.6.0.
 >
 > This file documents scraper/runtime behaviour without embedding any package-author production Sheet IDs, worksheet IDs, service-account identities, private credential paths, or local-machine paths. User-owned Google configuration belongs in `.env`, never in this repository.
 
@@ -88,6 +88,8 @@ Without this retry, a 429 on any list page propagates as an HTTPError and the ca
 JobStreet exposes a public GraphQL endpoint. The list API accepts a single keyword per request, so the integration issues one request per keyword and de-duplicates by `job_id` across keywords. JD text is retrieved from the GraphQL `jobDetails.job.content` field and converted to plain text.
 
 HTML job pages are not a supported path.
+
+Every JobStreet list page goes through the same 30/60/90s retry ladder as LinkedIn (four attempts in total). A 429, a 5xx, a connection error or a JSON decode error sleeps and retries instead of aborting the keyword crawl; any other 4xx is raised immediately because it is a caller bug, not transient network trouble. Without this ladder a single transient failure ended the crawl, and a failure on the very first page produced zero jobs — the run then printed "無資料，結束" and exited 0, so the caller saw a successful run that had collected nothing. Acceptance for a JobStreet run therefore has to check that the list crawl actually produced pages, not only that the process exited 0.
 
 ### 104 (onezerofour)
 
@@ -354,18 +356,21 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.4.0` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.4.0` | package metadata |
-| `.minimax-plugin/plugin.json` | `1.4.0` | Mavis plugin manifest |
-| `.codex-plugin/plugin.json` | `1.4.0` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.4.0` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.4.0` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.6.0` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.6.0` | package metadata |
+| `uv.lock` | `1.6.0` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.6.0` | Mavis plugin manifest |
+| `.codex-plugin/plugin.json` | `1.6.0` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.6.0` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.6.0` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
 Since v1.5.0 the engine keeps the orchestration and the business rules, and each source's fetching layer lives in its own adapter under `jobs_scraper/sources/`. The engine keeps the public function names as thin wrappers that read the session, the sleep function, and any injected hit function at call time, so there is exactly one implementation of each behaviour.
 
 The `jobs_scraper/sources/` package that v1.4.0 removed has returned with the opposite meaning: in v1.4.0 it held an unused duplicate of the LinkedIn adapter with no importer; in v1.5.0 it holds one adapter per active source. An AST check in the equivalence suite asserts the engine keeps only wrappers, so the duplication v1.4.0 removed cannot come back.
+
+Since v1.6.0 every source adapter's list fetch has the same retry contract: a transient 429, 5xx, connection error or JSON decode error sleeps 30/60/90s and retries (four attempts), while any other 4xx is raised without retry. A caller must therefore treat a run as successful only when the list crawl actually produced pages — the process exit code alone is not evidence that any job was collected.
 
 ## 16. Installation and governance
 

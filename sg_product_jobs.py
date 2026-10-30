@@ -14,7 +14,7 @@ back-compat 保留: JORA_BASE 常數、`build_e_formula("jora", ...)` 分支、
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
 
-__version__ = "1.5.0"  # 2026-10-26: stage-2 modular split (5 sources behind jobs_scraper/sources/)
+__version__ = "1.6.0"  # 2026-10-31: JobStreet list-page retry ladder (30/60/90s)
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺
@@ -2185,12 +2185,33 @@ def fetch_jobstreet_jd(job_id: str) -> dict:
     return _jobstreet.fetch_jd(job_id, session=_cc_session)
 
 
+def fetch_jobstreet_list_page(
+    keyword: str, page: int, daterange: str, worktype: str = JOBSTREET_WORKTYPE_FT
+) -> dict:
+    """JobStreet list fetch + 30/60/90s retry (跟 fetch_list_page 等義)。
+
+    2026-10-31 fix: list page 原本沒有 retry, 任何例外都直接中止整個 keyword crawl,
+    第一頁失敗時整輪會以「無資料，結束」+ exit 0 收尾 → 呼叫端誤判成功。
+    """
+    return _jobstreet.fetch_list_page(
+        keyword,
+        page,
+        daterange,
+        worktype=worktype,
+        session=_cc_session,
+        sleep_seconds=time.sleep,
+        build_url=build_jobstreet_list_url,
+    )
+
+
 def crawl_jobstreet_list(
     daterange: str, max_pages: int, keywords: list[str] | None = None, worktype: str = JOBSTREET_WORKTYPE_FT
 ) -> list[dict]:
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
     50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
+
+    每個 list page 走 30/60/90s retry ladder (見 `fetch_jobstreet_list_page`)。
 
     session / sleep / list helper 在呼叫時才讀取, 所以測試可以繼續 patch
     `sg_product_jobs._cc_session`、`sg_product_jobs.human_sleep` (內含 `sg_product_jobs.time`)
@@ -2205,6 +2226,7 @@ def crawl_jobstreet_list(
         worktype=worktype,
         session=_cc_session,
         sleep=human_sleep,
+        sleep_seconds=time.sleep,
         build_url=build_jobstreet_list_url,
         parse_page=parse_jobstreet_list_page,
     )

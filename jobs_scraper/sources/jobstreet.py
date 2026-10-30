@@ -7,7 +7,8 @@ de-duplicates by `job_id` across keywords).
 
 The module holds no global state. The HTTP session and the sleep function are
 injected by the caller, so every function here can be exercised without
-touching the network — and the crawl pacing stays observable.
+touching the network — and the 30/60/90s list-page retry ladder stays
+observable.
 
 `sg_product_jobs.py` keeps the public `*_jobstreet_*` names as thin wrappers
 that pass its own session, sleep and helpers down, so callers and tests that
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 import urllib.parse
 from typing import Callable
 
@@ -38,6 +40,10 @@ PAGE_SIZE = 20
 
 #: A page that adds fewer new jobs than this counts as the end of the results.
 SOFT_STOP_MIN_NEW = 10
+
+#: Retry backoff (seconds) for a list page. Mirrors LinkedIn's ladder, which
+#: was added on 2026-10-07 after a 429 hard abort truncated long-range coverage.
+BACKOFF = [30, 60, 90]
 
 #: range → API `daterange` query value.
 TPR = {
@@ -274,6 +280,71 @@ def _no_sleep(label: str = "") -> None:
     return None
 
 
+class FatalListPageError(RuntimeError):
+    """A list page failure that must not be retried.
+
+    Raised for 4xx responses other than 429: those are caller bugs (a wrong
+    query or a blocked request), not transient network trouble, so spending
+    three minutes of backoff on them would only delay the failure.
+    """
+
+
+def fetch_list_page(
+    keyword: str,
+    page: int,
+    daterange: str,
+    worktype: str = WORKTYPE_FT,
+    *,
+    session,
+    sleep_seconds: Callable[[float], None] = time.sleep,
+    build_url: Callable[..., str] = build_list_url,
+) -> dict:
+    """JobStreet list page with a 30/60/90s retry ladder (mirrors LinkedIn).
+
+    2026-10-31 fix: the list page had no retry at all. Any failure — a
+    connection error, a non-200 status or a JSON decode error — returned from
+    ``crawl_list`` immediately, which aborted the whole keyword crawl. When the
+    very first page failed the crawl produced zero jobs, ``main()`` printed
+    "無資料，結束" and exited 0, so the caller saw a *successful* run that had
+    silently collected nothing (real instance: 2026-10-30, the 7d run's first
+    page hit curl error 56 and wrote no rows while still exiting 0).
+
+    429 / 5xx / connection error / JSON decode error → sleep 30/60/90s → retry
+    (4 attempts in total). Other 4xx → `FatalListPageError`, no retry.
+
+    Raises:
+        FatalListPageError: non-retryable 4xx response.
+        RuntimeError: every retry was exhausted.
+    """
+    backoff = BACKOFF
+    last_err = None
+    url = build_url(keyword, page, daterange, worktype=worktype)
+    for attempt in range(4):
+        try:
+            r = session.get(url, timeout=20, impersonate="chrome")
+            if r.status_code == 200:
+                try:
+                    return r.json()
+                except Exception as e:
+                    last_err = f"JSON {type(e).__name__}: {str(e)[:50]}"
+            elif r.status_code == 429 or r.status_code >= 500:
+                last_err = f"http {r.status_code}"
+            else:
+                raise FatalListPageError(f"jobstreet list fetch failed: http {r.status_code}")
+        except FatalListPageError:
+            raise
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {str(e)[:50]}"
+        if attempt < 3:
+            print(
+                f"  [JOBSTREET LIST RETRY {attempt + 1}/3] {keyword} p{page} 失敗 ({last_err}), "
+                f"sleep {backoff[attempt]}s",
+                flush=True,
+            )
+            sleep_seconds(backoff[attempt])
+    raise RuntimeError(f"jobstreet list fetch failed after 4 attempts: {last_err}")
+
+
 def crawl_list(
     daterange: str,
     max_pages: int,
@@ -282,6 +353,7 @@ def crawl_list(
     *,
     session,
     sleep: Callable[[str], None] = _no_sleep,
+    sleep_seconds: Callable[[float], None] = time.sleep,
     build_url: Callable[..., str] = build_list_url,
     parse_page: Callable[[dict, str], list[dict]] = parse_list_page,
 ) -> list[dict]:
@@ -289,8 +361,13 @@ def crawl_list(
 
     50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
 
-    `session`, `sleep`, `build_url` and `parse_page` are injected so the caller
-    decides which implementation runs (and so tests can substitute their own).
+    每個 list page 走 `fetch_list_page`, 內含 30/60/90s retry ladder:
+    瞬時的 429 / 5xx / connection error 不會再讓整個 keyword crawl 直接中止,
+    coverage 不會被靜默砍掉 (2026-10-31 fix)。
+
+    `session`, `sleep`, `sleep_seconds`, `build_url` and `parse_page` are injected
+    so the caller decides which implementation runs (and so tests can substitute
+    their own).
     """
     if keywords is None:
         keywords = _keywords_from_env()
@@ -299,19 +376,18 @@ def crawl_list(
     for kw in keywords:
         kw_seen: set[str] = set()
         for p in range(1, max_pages + 1):
-            url = build_url(kw, p, daterange, worktype=worktype)
             try:
-                r = session.get(url, timeout=20, impersonate="chrome")
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL: {type(e).__name__}: {e}")
-                return all_jobs
-            if r.status_code != 200:
-                print(f"  [jobstreet {kw} p{p}] FAIL: HTTP {r.status_code}")
-                return all_jobs
-            try:
-                data = r.json()
-            except Exception as e:
-                print(f"  [jobstreet {kw} p{p}] FAIL JSON: {e}")
+                data = fetch_list_page(
+                    kw,
+                    p,
+                    daterange,
+                    worktype=worktype,
+                    session=session,
+                    sleep_seconds=sleep_seconds,
+                    build_url=build_url,
+                )
+            except RuntimeError as e:
+                print(f"  [jobstreet {kw} p{p}] FAIL: {e}")
                 return all_jobs
             jobs = parse_page(data, kw)
             new_jobs = [j for j in jobs if j["job_id"] not in seen and j["job_id"] not in kw_seen]

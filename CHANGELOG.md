@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.6.0 — 2026-10-31
+
+The JobStreet list page gets the retry ladder LinkedIn has had since v1.3.1.
+
+Fixed
+
+- A JobStreet list page had no retry at all. Any failure — a connection error, a non-200 status, or a JSON decode error — ended the keyword crawl immediately.
+- When the very first page failed, the crawl produced zero jobs, `main()` printed "無資料，結束" and exited 0. The caller therefore saw a **successful** run that had silently collected nothing. The real instance: on 2026-10-30 the 7d run's first JobStreet page hit curl error 56 ("Connection closed abruptly"), wrote zero rows, and still exited 0 — a false success that a supervising runner nearly accepted as a finished chunk.
+- Now a 429, a 5xx, a connection error or a JSON decode error sleeps 30/60/90s and retries (four attempts in total), and any other 4xx is raised immediately instead of burning three minutes of backoff on a caller bug. The JobStreet adapter mirrors LinkedIn's ladder exactly.
+
+Acceptance
+
+- A run counts as successful only when the list crawl actually produced pages. The process exit code alone is not evidence that any job was collected — `RULES.md` §3 now states this for JobStreet, and the same rule applies to every source.
+- `tests/test_jobstreet_list_retry.py` pins the behaviour: connection error, 429, 5xx and JSON decode error each retry and recover; the ladder stops after four attempts; a non-429 4xx is never retried; a legitimate empty page is an answer, not a failure; and a crawl whose first page recovers keeps its jobs.
+
+Also in this release
+
+- The version line moves to 1.6.0 across the engine, both MCP entrypoints, both plugin manifests, the Agent Skill, `pyproject.toml`, `uv.lock` and the three READMEs.
+- The behaviour-equivalence freeze moves to `freeze_version 5`: the v1.5.0 five-source / one-adapter-per-source contract stays frozen, and the JobStreet retry ladder is added to the frozen blobs so it cannot drift either.
+
 ## v1.5.0 — 2026-10-26
 
 Stage 2 of the unification: the fetching layer moves out of the engine into per-source adapters.
