@@ -6,8 +6,45 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
 VENV_PY="$VENV_DIR/bin/python"
 
+# 1. Python 3.11+
+# 不要假設 `python3` 就是夠新的版本 — 很多機器上 python3 是系統預設的 3.9,
+# 而 3.11+ 另外裝在 /opt/homebrew/bin、/usr/local/bin 或 pyenv 之類的地方,
+# 而且那些目錄不一定在 PATH 上。所以名稱跟常見路徑都找一遍。
+PY_CANDIDATES="python3.13 python3.12 python3.11 python3 python"
+for extra in \
+    /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 \
+    /usr/local/bin/python3.13 /usr/local/bin/python3.12 /usr/local/bin/python3.11 /usr/local/bin/python3; do
+    [ -x "$extra" ] && PY_CANDIDATES="$PY_CANDIDATES $extra"
+done
+for pyenv_py in "$HOME"/.pyenv/versions/*/bin/python; do
+    [ -x "$pyenv_py" ] && PY_CANDIDATES="$PY_CANDIDATES $pyenv_py"
+done
+
+PY_BIN=""
+PY_VERSION=""
+for cand in $PY_CANDIDATES; do
+    case "$cand" in
+        */*) [ -x "$cand" ] || continue ;;
+        *) command -v "$cand" > /dev/null 2>&1 || continue ;;
+    esac
+    cand_version="$("$cand" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2> /dev/null)" || continue
+    cand_major="${cand_version%%.*}"
+    cand_minor="${cand_version##*.}"
+    if [ "$cand_major" -gt 3 ] || { [ "$cand_major" -eq 3 ] && [ "$cand_minor" -ge 11 ]; }; then
+        PY_BIN="$cand"
+        PY_VERSION="$cand_version"
+        break
+    fi
+done
+if [ -z "$PY_BIN" ]; then
+    echo "❌ Python 3.11+ required; none of the candidates is 3.11+:"
+    echo "   $PY_CANDIDATES"
+    exit 1
+fi
+echo "✅ Python $PY_VERSION ($PY_BIN)"
+
 # 單一版本來源: 版本號只認 pyproject.toml, 不在這裡硬寫一份。
-JOBS_SCRAPER_VERSION="$(python3 - <<'PY'
+JOBS_SCRAPER_VERSION="$("$PY_BIN" - <<'PY'
 import re, sys
 try:
     import tomllib
@@ -26,24 +63,10 @@ echo "  repo:  $REPO_ROOT"
 echo "  venv:  $VENV_DIR"
 echo "=================================="
 
-# 1. Python 3.11+
-if ! command -v python3 > /dev/null 2>&1; then
-    echo "❌ python3 not found; install Python 3.11+"
-    exit 1
-fi
-PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-PY_MAJOR="${PY_VERSION%%.*}"
-PY_MINOR="${PY_VERSION##*.}"
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]; }; then
-    echo "❌ Python 3.11+ required; found $PY_VERSION"
-    exit 1
-fi
-echo "✅ Python $PY_VERSION"
-
 # 2. Create/reuse venv
 if [ ! -d "$VENV_DIR" ]; then
     echo "📦 creating .venv..."
-    python3 -m venv "$VENV_DIR"
+    "$PY_BIN" -m venv "$VENV_DIR"
 fi
 if [ ! -x "$VENV_PY" ]; then
     echo "❌ venv python not executable: $VENV_PY"
