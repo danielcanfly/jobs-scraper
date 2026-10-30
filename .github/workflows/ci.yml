@@ -61,7 +61,7 @@ jobs:
       - name: Verify behaviour equivalence harness freeze
         run: .venv/bin/python scripts/check_equivalence_freeze.py
 
-      - name: Run v1.5.0 behaviour equivalence gate
+      - name: Run behaviour equivalence gate
         run: .venv/bin/python -m pytest -q tests/equivalence/test_v130_equivalence.py
 
       - name: Run full pytest suite
@@ -78,7 +78,15 @@ jobs:
       - name: Validate .codex-plugin manifest
         run: |
           test -f .codex-plugin/plugin.json
-          .venv/bin/python -c "import json; m=json.load(open('.codex-plugin/plugin.json')); assert m['name']=='jobs-scraper'; assert m['version']=='1.5.0'; assert m['skills']=='./skills/'"
+          .venv/bin/python -c "
+          import json, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version']
+          m = json.load(open('.codex-plugin/plugin.json'))
+          assert m['name'] == 'jobs-scraper', m['name']
+          assert m['version'] == version, (m['version'], version)
+          assert m['skills'] == './skills/'
+          print(f'.codex-plugin manifest OK (version {version})')
+          "
 
       - name: Verify legacy v1.0 MCP stdio transport
         run: .venv/bin/python scripts/verify_mcp_stdio.py
