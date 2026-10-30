@@ -32,10 +32,15 @@ SYNC_FILES=(
   setup.sh
   requirements.txt
   pyproject.toml
+  uv.lock
+  SHA256SUMS.txt
+  .gitignore
   test_helpers.py
   .env.example
   LICENSE
   README.md
+  README.zh-CN.md
+  README.zh-TW.md
   RULES.md
   SKIP.md
   CHANGELOG.md
@@ -50,13 +55,16 @@ SYNC_DIRS=(
   .github
   scripts
   tests
+  .codex-plugin
 )
 
 # ── 永遠保留 (Mavis 專屬 / 本機狀態) ──────────────────────────────
 # 上游沒有這些檔, 同步時不動。
+# 注意: `.codex-plugin/` **不在**這個清單裡 — 它是上游有追蹤的檔案
+# (CI 會驗證 .codex-plugin/plugin.json 的版本), 必須跟著 upstream 更新。
+# 之前把它列在這裡, 導致 plugin 的 plugin.json 永遠停在舊版本號。
 PRESERVED=(
   .minimax-plugin
-  .codex-plugin
   servers.mcp.json
   run-server.sh
   icon.png

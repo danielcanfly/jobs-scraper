@@ -14,3 +14,4 @@ jobs_scraper.egg-info/
 *.bak
 local_tools/
 _archive/
+.coverage
