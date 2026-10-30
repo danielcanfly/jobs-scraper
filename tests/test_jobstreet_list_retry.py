@@ -139,9 +139,7 @@ def test_backoff_sequence_is_30_60_90_and_attempts_stop_at_four():
     slept: list[float] = []
 
     with pytest.raises(RuntimeError, match="after 4 attempts"):
-        JS.fetch_list_page(
-            "product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url
-        )
+        JS.fetch_list_page("product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url)
 
     assert len(session.calls) == 4
     assert slept == [30, 60, 90]
@@ -152,9 +150,7 @@ def test_non_429_4xx_is_not_retried():
     slept: list[float] = []
 
     with pytest.raises(JS.FatalListPageError):
-        JS.fetch_list_page(
-            "product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url
-        )
+        JS.fetch_list_page("product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url)
 
     assert len(session.calls) == 1
     assert slept == []
@@ -165,9 +161,7 @@ def test_legitimate_empty_page_does_not_retry():
     session = _FakeSession([_FakeResponse(200, _page())])
     slept: list[float] = []
 
-    data = JS.fetch_list_page(
-        "product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url
-    )
+    data = JS.fetch_list_page("product manager", 1, "7d", session=session, sleep_seconds=slept.append, build_url=_url)
 
     assert data["totalCount"] == 0
     assert len(session.calls) == 1

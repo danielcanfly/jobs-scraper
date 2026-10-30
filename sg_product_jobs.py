@@ -2185,9 +2185,7 @@ def fetch_jobstreet_jd(job_id: str) -> dict:
     return _jobstreet.fetch_jd(job_id, session=_cc_session)
 
 
-def fetch_jobstreet_list_page(
-    keyword: str, page: int, daterange: str, worktype: str = JOBSTREET_WORKTYPE_FT
-) -> dict:
+def fetch_jobstreet_list_page(keyword: str, page: int, daterange: str, worktype: str = JOBSTREET_WORKTYPE_FT) -> dict:
     """JobStreet list fetch + 30/60/90s retry (跟 fetch_list_page 等義)。
 
     2026-10-31 fix: list page 原本沒有 retry, 任何例外都直接中止整個 keyword crawl,
