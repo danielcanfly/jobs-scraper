@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.6.3 — 2026-11-19
+
+The crawl path can be told which way out to take.
+
+Fixed
+
+- The LinkedIn Guest API started answering a direct request with **HTTP 451** ("Unavailable For Legal Reasons") from this machine, so every LinkedIn chunk ended with `無資料，結束` and the run collected nothing. The Google Sheets API times out on a direct connection here for the same reason: the egress IP is filtered.
+- Both work through the local proxy. The resolution now lives in one shared helper, `jobs_scraper.sources.resolve_proxies()`, and every adapter that talks to a third party uses it. `JOBS_SCRAPER_PROXY` wins when set, then the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`. Nothing is set → direct.
+- `CAKE_HTTP_PROXY` keeps its own priority for the Cake source and now falls back to the shared resolution instead of duplicating it.
+- The LinkedIn adapter passes the resolved proxy on both its list fetch and its JD fetch, so the crawl does not depend on libcurl picking the variable up implicitly.
+
+Acceptance
+
+- `tests/test_source_proxy.py` pins the priority order, the `host:port` normalisation, the empty-variable fall-through, Cake's own override, that the LinkedIn list and JD fetches pass the resolved proxy, and that the doctor's proxy check reports a direct connection, a reachable proxy and a dead proxy differently.
+- `doctor` now reports which proxy is in effect and probes whether it is still reachable — a dead proxy fails every source at once, which is much harder to diagnose than a direct connection.
+
+Also in this release
+
+- `.env.example` documents the proxy variables and why they exist.
+- The version line moves to 1.6.3 across the engine, both MCP entrypoints, both plugin manifests, the Agent Skill, `pyproject.toml`, `uv.lock` and the three READMEs.
+- The behaviour-equivalence freeze moves to `freeze_version 8`.
+
 ## v1.6.2 — 2026-11-19
 
 The Sheet-write worker stops being a multi-megabyte Python file.

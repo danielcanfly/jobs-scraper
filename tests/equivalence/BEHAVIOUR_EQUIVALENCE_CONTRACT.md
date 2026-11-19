@@ -1,4 +1,4 @@
-# v1.6.2 Behaviour Equivalence Contract
+# v1.6.3 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -58,6 +58,17 @@ which is the behaviour the split had to preserve.
     separate JSON file the worker reads; a source that embeds it grows to megabytes and makes
     CPython pull the whole literal through its tokenizer before the write can start, which is a
     memory spike on a machine whose free-page count is already in the tens of megabytes.
+
+## Egress invariants
+
+18. Outbound proxy resolution lives in one place, `jobs_scraper.sources.resolve_proxies()`, and
+    every adapter that talks to a third party uses it: `JOBS_SCRAPER_PROXY` first, then the
+    standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`, and nothing set means a direct
+    connection. A source must not reach for a proxy variable of its own — one resolver, one
+    priority order, and the doctor reports exactly what the crawlers will use.
+19. A proxy that is configured but dead fails every source at once. The doctor therefore probes
+    the configured proxy and reports it, rather than letting the failure surface as an empty
+    crawl much later.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.

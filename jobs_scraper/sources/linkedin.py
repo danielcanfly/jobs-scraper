@@ -21,6 +21,8 @@ from urllib.parse import urlencode
 
 from scrapling.parser import Adaptor
 
+from jobs_scraper.sources import resolve_proxies
+
 SOURCE = "linkedin"
 SHEET_SOURCE_LABEL = "LinkedIn / Minimax"
 
@@ -182,6 +184,7 @@ def fetch_list_page(
                 impersonate="chrome",
                 timeout=20,
                 headers={"Accept-Language": "en-US,en;q=0.9"},
+                proxies=resolve_proxies(),
             )
             if r.status_code == 200:
                 return r.text
@@ -221,6 +224,7 @@ def fetch_jd(
             impersonate="chrome",
             timeout=20,
             headers={"Accept-Language": "en-US,en;q=0.9"},
+            proxies=resolve_proxies(),
         )
     except Exception as e:
         return {"jd_text": None, "jd_html": None, "error": f"{type(e).__name__}: {e}"}

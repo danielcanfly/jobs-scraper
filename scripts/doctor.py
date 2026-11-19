@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import sys
 from pathlib import Path
 
@@ -129,6 +130,38 @@ def check_sheet_config() -> tuple[str, str]:
     return "OK (v1.1 uses SHEET_ID; worksheet GID resolved by region)", "PASS"
 
 
+def check_proxy() -> tuple[str, str]:
+    """v1.6.3: 爬蟲走不走 proxy, 以及那個 proxy 還活著嗎。
+
+    2026-11-19 實測: LinkedIn Guest API 對直連回 451, 走本地 proxy 就正常;
+    Google Sheets API 在某些網路區段直連會 timeout, 同樣要靠 proxy。
+    一個掛掉的 proxy 比直連更難診斷, 所以 doctor 直接探一次 port。
+    """
+    env = _effective_env(("JOBS_SCRAPER_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"))
+    proxy = ""
+    source_key = ""
+    for key in ("JOBS_SCRAPER_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"):
+        if env.get(key):
+            proxy = env[key]
+            source_key = key
+            break
+    if not proxy:
+        return "直連 (no proxy configured) — 若來源回 451/timeout, 設 JOBS_SCRAPER_PROXY 或 HTTPS_PROXY", "WARN"
+
+    url = proxy if "://" in proxy else f"http://{proxy}"
+    host, _, port = url.split("://", 1)[1].partition(":")
+    host = host.split("/")[0]
+    try:
+        port_num = int(port) if port else (443 if url.startswith("https") else 80)
+    except ValueError:
+        port_num = 80
+    try:
+        with socket.create_connection((host, port_num), timeout=2):
+            return f"{source_key}={proxy} (可連線)", "PASS"
+    except OSError as e:
+        return f"{source_key}={proxy} (連不上: {type(e).__name__}) — 來源會直接失敗, 不是直連能救", "FAIL"
+
+
 def check_no_secrets_in_git() -> tuple[str, str]:
     """檢查 .env / service-account secret 沒被 git 追蹤。"""
     try:
@@ -176,6 +209,10 @@ def main() -> int:
 
     msg, tag = check_no_secrets_in_git()
     line(tag, f"git hygiene: {msg}")
+    worst = max(worst, tag, key=order.get)
+
+    msg, tag = check_proxy()
+    line(tag, f"proxy: {msg}")
     worst = max(worst, tag, key=order.get)
 
     print("=" * 60)

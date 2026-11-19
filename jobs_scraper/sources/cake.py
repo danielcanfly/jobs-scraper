@@ -27,6 +27,8 @@ from typing import Callable
 
 from bs4 import BeautifulSoup
 
+from jobs_scraper.sources import resolve_proxies
+
 API_BASE = "https://api.cake.me/api/client/v2"
 WEB_BASE = "https://www.cake.me"
 LIST_API = f"{API_BASE}/jobs/search"
@@ -116,22 +118,17 @@ def proxies() -> dict[str, str] | None:
     """從 env 讀 proxy。
 
     優先順序:
-      1) CAKE_HTTP_PROXY
-      2) HTTPS_PROXY / HTTP_PROXY / ALL_PROXY
+      1) CAKE_HTTP_PROXY — Cake 專用, 不影響其他 source
+      2) JOBS_SCRAPER_PROXY / HTTPS_PROXY / HTTP_PROXY / ALL_PROXY — 共用解析
 
-    空字串或都沒設 → None
+    空字串或都沒設 → None(直連)。
     """
-    proxy = (
-        os.getenv("CAKE_HTTP_PROXY", "").strip()
-        or os.getenv("HTTPS_PROXY", "").strip()
-        or os.getenv("HTTP_PROXY", "").strip()
-        or os.getenv("ALL_PROXY", "").strip()
-    )
-    if not proxy:
-        return None
-    if "://" not in proxy:
-        proxy = f"http://{proxy}"
-    return {"http": proxy, "https": proxy}
+    proxy = os.getenv("CAKE_HTTP_PROXY", "").strip()
+    if proxy:
+        if "://" not in proxy:
+            proxy = f"http://{proxy}"
+        return {"http": proxy, "https": proxy}
+    return resolve_proxies()
 
 
 def headers(*, accept: str = "application/json", referer: str = f"{WEB_BASE}/") -> dict:

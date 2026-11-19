@@ -1,16 +1,17 @@
 {
-  "freeze_version": 7,
+  "freeze_version": 8,
   "baseline": {
-    "release": "v1.6.2",
-    "authorized_delta": "move-the-jobs-payload-out-of-the-generated-worker-source",
-    "parent_main": "f52af60"
+    "release": "v1.6.3",
+    "authorized_delta": "resolve-outbound-proxy-in-one-shared-helper",
+    "parent_main": "7b0de80"
   },
   "frozen_blobs": {
-    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "70ef4b3bc70e490edfcacc692ed42eecfe072114",
+    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "dbaa000a6319f4c6b24d6cacc36f30a82abd00d2",
     "tests/equivalence/v130_golden.json": "70e1248ab3ea980fe6804384a42331fce931e984",
     "tests/equivalence/test_v130_equivalence.py": "dd8bde003105c2a2fd035de58b6d1fa0c60d84b7",
     "tests/test_jobstreet_list_retry.py": "00135971f7227ea14eb0926d6bce8e02e43e46c2",
-    "tests/test_push_worker_code_gen.py": "504e6fab5f4e840ff2503282ce48b8163211fb21"
+    "tests/test_push_worker_code_gen.py": "504e6fab5f4e840ff2503282ce48b8163211fb21",
+    "tests/test_source_proxy.py": "a1d2a9267c71f73cc2139001244036d16c0f5d79"
   },
-  "policy": "The v1.6.2 contract is frozen: each active source's URL building, list parsing and JD fetch live in jobs_scraper/sources/<source>.py, and sg_product_jobs.py keeps only thin wrappers over them — one implementation per behaviour, verified by AST. The active CLI sources are linkedin, jobstreet, cake and 104/onezerofour; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. Every source adapter's list fetch retries a transient 429/5xx/connection/JSON failure with a 30/60/90s ladder (four attempts), raises any other 4xx without retrying, and never retries a legitimately empty page; a run counts as successful only when the list crawl actually produced pages, because an empty crawl exits 0 by design. Code that generates a Python worker embeds its arguments as Python literals, never as JSON: json.dumps(None) is the bare token null, an undefined name in Python, and such a worker dies before it reaches Google and silently costs the run the subprocess timeout guard that protects the Sheet write. A generated worker never carries the jobs payload in its source: the payload travels in a separate JSON file the worker reads, because a source that embeds it grows to megabytes and makes CPython pull the whole literal through its tokenizer before the write can start, which is a memory spike on a machine whose free-page count is already in the tens of megabytes. The engine's title filter, Sheet write order, cross-source identity, work-mode values and single-source-of-truth crawl state are unchanged by this release; future source expansion or retirement requires an explicit authorized contract change."
+  "policy": "The v1.6.3 contract is frozen: each active source's URL building, list parsing and JD fetch live in jobs_scraper/sources/<source>.py, and sg_product_jobs.py keeps only thin wrappers over them — one implementation per behaviour, verified by AST. The active CLI sources are linkedin, jobstreet, cake and 104/onezerofour; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. Every source adapter's list fetch retries a transient 429/5xx/connection/JSON failure with a 30/60/90s ladder (four attempts), raises any other 4xx without retrying, and never retries a legitimately empty page; a run counts as successful only when the list crawl actually produced pages, because an empty crawl exits 0 by design. Code that generates a Python worker embeds its arguments as Python literals, never as JSON: json.dumps(None) is the bare token null, an undefined name in Python, and such a worker dies before it reaches Google and silently costs the run the subprocess timeout guard that protects the Sheet write. A generated worker never carries the jobs payload in its source: the payload travels in a separate JSON file the worker reads, because a source that embeds it grows to megabytes and makes CPython pull the whole literal through its tokenizer before the write can start, which is a memory spike on a machine whose free-page count is already in the tens of megabytes. The engine's title filter, Sheet write order, cross-source identity, work-mode values and single-source-of-truth crawl state are unchanged by this release; future source expansion or retirement requires an explicit authorized contract change. Outbound proxy resolution lives in one place, jobs_scraper.sources.resolve_proxies(), and every adapter that talks to a third party uses it: JOBS_SCRAPER_PROXY first, then the standard HTTPS_PROXY / HTTP_PROXY / ALL_PROXY, and nothing set means a direct connection; no source may reach for a proxy variable of its own. The doctor reports which proxy is in effect and probes whether it is still reachable, because a configured-but-dead proxy fails every source at once."
 }
