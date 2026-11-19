@@ -1,4 +1,4 @@
-# v1.6.0 Behaviour Equivalence Contract
+# v1.6.1 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -47,6 +47,13 @@ which is the behaviour the split had to preserve.
 14. The MCP / tracker layer stays LinkedIn-only: its source enum, source labels, and region
     policies are unchanged, and it fails closed for every non-LinkedIn source.
 15. Tracker schema and write-safety contracts are unchanged.
+
+## Generated-worker invariants
+
+16. Code that generates a Python worker must embed its arguments as Python literals, never as
+    JSON. `json.dumps(None)` is the bare token `null`, an undefined name in Python: a worker
+    built that way dies with `NameError` before it reaches Google, and silently costs the run
+    the subprocess timeout guard that protects the Sheet write.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.

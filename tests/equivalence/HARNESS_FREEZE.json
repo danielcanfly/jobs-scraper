@@ -1,15 +1,16 @@
 {
-  "freeze_version": 5,
+  "freeze_version": 6,
   "baseline": {
-    "release": "v1.6.0",
-    "authorized_delta": "add-jobstreet-list-page-retry-ladder",
-    "parent_main": "91382f6af3d642b1633fba3545a6c5ebeb360969"
+    "release": "v1.6.1",
+    "authorized_delta": "embed-generated-worker-arguments-as-python-literals",
+    "parent_main": "f53538202058d9497173b27dd71a743a204dfaa0"
   },
   "frozen_blobs": {
-    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "a1ba8e92cfb0e7cbfeb2b9ce54f575f27d143bd4",
+    "tests/equivalence/BEHAVIOUR_EQUIVALENCE_CONTRACT.md": "243ba2f8d0f372b162a7e1859ce4a01e28c84186",
     "tests/equivalence/v130_golden.json": "70e1248ab3ea980fe6804384a42331fce931e984",
     "tests/equivalence/test_v130_equivalence.py": "dd8bde003105c2a2fd035de58b6d1fa0c60d84b7",
-    "tests/test_jobstreet_list_retry.py": "00135971f7227ea14eb0926d6bce8e02e43e46c2"
+    "tests/test_jobstreet_list_retry.py": "00135971f7227ea14eb0926d6bce8e02e43e46c2",
+    "tests/test_push_worker_code_gen.py": "4c5b766244106f954e6058e97ba8924764021da3"
   },
-  "policy": "The v1.6.0 contract is frozen: each active source's URL building, list parsing and JD fetch live in jobs_scraper/sources/<source>.py, and sg_product_jobs.py keeps only thin wrappers over them — one implementation per behaviour, verified by AST. The active CLI sources are linkedin, jobstreet, cake and 104/onezerofour; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. Every source adapter's list fetch retries a transient 429/5xx/connection/JSON failure with a 30/60/90s ladder (four attempts), raises any other 4xx without retrying, and never retries a legitimately empty page; a run counts as successful only when the list crawl actually produced pages, because an empty crawl exits 0 by design. The engine's title filter, Sheet write order, cross-source identity, work-mode values and single-source-of-truth crawl state are unchanged by this release; future source expansion or retirement requires an explicit authorized contract change."
+  "policy": "The v1.6.1 contract is frozen: each active source's URL building, list parsing and JD fetch live in jobs_scraper/sources/<source>.py, and sg_product_jobs.py keeps only thin wrappers over them — one implementation per behaviour, verified by AST. The active CLI sources are linkedin, jobstreet, cake and 104/onezerofour; jora stays retired from active crawling and is kept only for back-compat dedup of historical rows. Every source adapter's list fetch retries a transient 429/5xx/connection/JSON failure with a 30/60/90s ladder (four attempts), raises any other 4xx without retrying, and never retries a legitimately empty page; a run counts as successful only when the list crawl actually produced pages, because an empty crawl exits 0 by design. Code that generates a Python worker embeds its arguments as Python literals, never as JSON: json.dumps(None) is the bare token null, an undefined name in Python, and such a worker dies before it reaches Google and silently costs the run the subprocess timeout guard that protects the Sheet write. The engine's title filter, Sheet write order, cross-source identity, work-mode values and single-source-of-truth crawl state are unchanged by this release; future source expansion or retirement requires an explicit authorized contract change."
 }

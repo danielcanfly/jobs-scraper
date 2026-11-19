@@ -8,7 +8,7 @@
 
 这是一个面向 LinkedIn 职位的本地爬虫与追踪工具，主要用于产品管理相关岗位，并提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
 
-`jobs-scraper` v1.6.0 在五个来源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）抓取产品管理职位，并提供完整 JD enrichment 与追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
+`jobs-scraper` v1.6.1 在五个来源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）抓取产品管理职位，并提供完整 JD enrichment 与追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
 
 ## 概览
 
@@ -317,17 +317,18 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本与发布说明
 
-`v1.6.0` 为当前版本：在 v1.5.0 的 per-source adapter 之上，把 LinkedIn 自 v1.3.1 就有的 retry ladder 补给了 JobStreet list page —— 瞬时的 429 / 5xx / connection error / JSON decode error 会 sleep 30/60/90s 后重试，不再直接终止整轮 keyword crawl。修之前只要有一页网络抖动，整轮就可能抓到 0 笔：进程印「无数据，结束」却仍然 exit 0，调用端会把「什么都没抓到」当成成功。
+`v1.6.1` 为当前版本：修掉了 Sheet 写入 subprocess 的一个 bug。生成的 worker 用 JSON 编码器把参数嵌进「生成的 Python 源码」里，默认的 `gid=None` 于是变成裸的 `null` token，worker 还没连上 Google 就先 `NameError: name 'null' is not defined` 死掉。因为写入流程只有在 subprocess 失败时才会退回 in-process，每一次 run 其实都悄悄失去了那层 subprocess 的 timeout 保护，改成无保护地直接写 Sheet。现在参数改用 Python 字面值嵌入。
 
 较早版本：
 
+- `v1.6.0` 把 LinkedIn 自 v1.3.1 就有的 30/60/90s retry ladder 补给 JobStreet list page。
 - `v1.3.1` 在 source layer 新增 LinkedIn list page 429 retry。
 - `v1.3.0` 移除 Jora 与 JobStreet 网络集成，主动来源 contract 收敛为 LinkedIn，同时保留历史 Tracker row 的解析能力。
 
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 对外提供 MCP server 版本。
-- 当前 frozen equivalence baseline 为 `v1.6.0`，明确保护五来源 contract、「每个来源一个 adapter」的拆分，以及 JobStreet list page 的 retry ladder。
+- 当前 frozen equivalence baseline 为 `v1.6.1`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder，以及「生成 worker 必须用 Python 字面值」这条规则。
 
 ## 许可
 

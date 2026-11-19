@@ -1749,6 +1749,49 @@ def pre_dedup_jobs_against_sheet(
     return filtered
 
 
+def _py_literal(value) -> str:
+    """把值轉成合法的 **Python** 字面值。
+
+    2026-11-19 fix: 這裡原本用 json.dumps。json.dumps(None) 是裸的 `null`、
+    json.dumps(True) 是 `true` —— 那是 JSON 語法，放進「產生的 Python code」
+    就是未定義名稱 → worker 開跑立刻 `NameError: name 'null' is not defined`。
+    `--gid` 預設是 None（SG 跑法靠 URL 的 `#gid=`），所以每次 Sheet 寫入的
+    subprocess 都死掉、fallback 到沒有 timeout 保護的 in-process 路徑。
+
+    repr() 對任何值都給出合法 Python 字面值（None → None、True → True、
+    str 自動正確跳脫）。這裡需要的是 Python 語法，不是 JSON。
+    """
+    return repr(value)
+
+
+def _build_pre_dedup_worker_code(sheet_source_label: str, sa_key_path: str, out_path: str) -> str:
+    """產生 pre-dedup worker 的 Python source。
+
+    獨立成函式是為了能直接測「產生的 code 是合法 Python」—— 2026-11-19 的
+    gid=None bug 就是活在這種 code template 裡，沒有 builder 就只能靠真的
+    跑一次 Sheet 寫入才看得到。
+    """
+    import os as _os
+
+    worker_code = f"""
+import sys, json
+sys.path.insert(0, {_py_literal(_os.getcwd())})
+import sg_product_jobs as M
+out_path = __OUT_PATH__
+try:
+    existing, next_row = M._load_sheet_keys_for_source(
+        {_py_literal(sheet_source_label)},
+        sa_key_path={_py_literal(str(sa_key_path))},
+    )
+    with open(out_path, "w") as f:
+        json.dump({{"ok": True, "keys": [list(k) for k in existing]}}, f, ensure_ascii=False)
+except Exception as e:
+    with open(out_path, "w") as f:
+        json.dump({{"ok": False, "error": f"{{type(e).__name__}}: {{e}}"}}, f, ensure_ascii=False)
+"""
+    return worker_code.replace("__OUT_PATH__", _py_literal(out_path))
+
+
 def _pre_dedup_load_with_subprocess(sheet_source_label: str, sa_key_path: str, timeout_s: int) -> tuple[set, bool]:
     """2026-08-29 加: 跑 _load_sheet_keys_for_source 在獨立 subprocess, timeout 真的能 kill。
     返回 (existing_keys, success_flag)。失敗時 success_flag=False, existing_keys 為空 set。
@@ -1760,27 +1803,10 @@ def _pre_dedup_load_with_subprocess(sheet_source_label: str, sa_key_path: str, t
     import tempfile as _tf
 
     # 寫 worker script (獨立 process, 不繼承 main process 的 mock)
-    worker_code = f"""
-import sys, json
-sys.path.insert(0, {_json.dumps(_os.getcwd())})
-import sg_product_jobs as M
-out_path = {_json.dumps("{TMP_OUT_PATH_PLACEHOLDER}")}
-try:
-    existing, next_row = M._load_sheet_keys_for_source(
-        {_json.dumps(sheet_source_label)},
-        sa_key_path={_json.dumps(str(sa_key_path))},
-    )
-    with open(out_path, "w") as f:
-        json.dump({{"ok": True, "keys": [list(k) for k in existing]}}, f, ensure_ascii=False)
-except Exception as e:
-    with open(out_path, "w") as f:
-        json.dump({{"ok": False, "error": f"{{type(e).__name__}}: {{e}}"}}, f, ensure_ascii=False)
-"""
     with _tf.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         worker_path = f.name
     out_path = worker_path + ".out"
-    # 替換 placeholder
-    final_code = worker_code.replace("{TMP_OUT_PATH_PLACEHOLDER}", out_path)
+    final_code = _build_pre_dedup_worker_code(sheet_source_label, sa_key_path, out_path)
     with open(worker_path, "w") as f:
         f.write(final_code)
 
@@ -1817,6 +1843,44 @@ except Exception as e:
                 pass
 
 
+def _build_push_worker_code(jobs, sheet_url, sa_key_path, source, gid, location, out_path: str) -> str:
+    """產生 Sheet 寫入 worker 的 Python source。
+
+    2026-11-19 fix: 參數原本用 json.dumps 嵌進 code → `gid=None` 變成裸的
+    `null` → worker 一開跑就 NameError，subprocess 這層的 timeout 保護因此
+    從 2026-08-29 起一直是失效的。現在改用 _py_literal()（Python 字面值）。
+    """
+    import json as _json
+    import os as _os
+
+    # 序列化 jobs (要傳給 subprocess)
+    jobs_json = _json.dumps(jobs, ensure_ascii=False, default=str)
+    worker_code = f"""
+import sys, json
+sys.path.insert(0, {_py_literal(_os.getcwd())})
+import sg_product_jobs as M
+out_path = __OUT_PATH__
+try:
+    jobs = json.loads({_py_literal(jobs_json)})
+    result = M.push_to_sheet(
+        jobs,
+        {_py_literal(sheet_url)},
+        sa_key_path={_py_literal(str(sa_key_path))},
+        source={_py_literal(source)},
+        gid={_py_literal(gid)},
+        location={_py_literal(location)},
+        timeout_s=0,  # 內層走 in-process 避免 recursive subprocess
+    )
+    with open(out_path, "w") as f:
+        json.dump({{"ok": True, "result": result}}, f, ensure_ascii=False, default=str)
+except Exception as e:
+    import traceback
+    with open(out_path, "w") as f:
+        json.dump({{"ok": False, "error": f"{{type(e).__name__}}: {{e}}", "tb": traceback.format_exc()}}, f, ensure_ascii=False)
+"""
+    return worker_code.replace("__OUT_PATH__", _py_literal(out_path))
+
+
 def _push_to_sheet_with_subprocess(jobs, sheet_url, sa_key_path, source, gid, location, timeout_s):
     """2026-08-29 加: 跑 push_to_sheet 在獨立 subprocess, timeout 真的能 kill。
     跟 _pre_dedup_load_with_subprocess 一樣的 pattern。
@@ -1828,35 +1892,10 @@ def _push_to_sheet_with_subprocess(jobs, sheet_url, sa_key_path, source, gid, lo
     import sys as _sys
     import tempfile as _tf
 
-    # 序列化 jobs (要傳給 subprocess)
-    jobs_json = _json.dumps(jobs, ensure_ascii=False, default=str)
-    worker_code = f"""
-import sys, json
-sys.path.insert(0, {_json.dumps(_os.getcwd())})
-import sg_product_jobs as M
-out_path = {_json.dumps("{PUSH_OUT_PATH_PLACEHOLDER}")}
-try:
-    jobs = json.loads({_json.dumps(jobs_json)})
-    result = M.push_to_sheet(
-        jobs,
-        {_json.dumps(sheet_url)},
-        sa_key_path={_json.dumps(str(sa_key_path))},
-        source={_json.dumps(source)},
-        gid={_json.dumps(gid)},
-        location={_json.dumps(location)},
-        timeout_s=0,  # 內層走 in-process 避免 recursive subprocess
-    )
-    with open(out_path, "w") as f:
-        json.dump({{"ok": True, "result": result}}, f, ensure_ascii=False, default=str)
-except Exception as e:
-    import traceback
-    with open(out_path, "w") as f:
-        json.dump({{"ok": False, "error": f"{{type(e).__name__}}: {{e}}", "tb": traceback.format_exc()}}, f, ensure_ascii=False)
-"""
     with _tf.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         worker_path = f.name
     out_path = worker_path + ".out"
-    final_code = worker_code.replace("{PUSH_OUT_PATH_PLACEHOLDER}", out_path)
+    final_code = _build_push_worker_code(jobs, sheet_url, sa_key_path, source, gid, location, out_path)
     with open(worker_path, "w") as f:
         f.write(final_code)
 

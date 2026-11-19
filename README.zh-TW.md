@@ -8,7 +8,7 @@
 
 這是一套給 LinkedIn 職缺使用的本機爬蟲與追蹤工具，主要面向產品管理相關職位，並提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
 
-`jobs-scraper` v1.6.0 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
+`jobs-scraper` v1.6.1 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
 
 ## 概覽
 
@@ -317,17 +317,18 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.6.0` 為目前版本：在 v1.5.0 的 per-source adapter 之上，把 LinkedIn 自 v1.3.1 就有的 retry ladder 補給了 JobStreet list page —— 瞬時的 429 / 5xx / connection error / JSON decode error 會 sleep 30/60/90s 後重試，不再直接中止整輪 keyword crawl。修之前只要有一頁網路抖動，整輪就可能抓到 0 筆：process 印「無資料，結束」卻仍然 exit 0，呼叫端會把「什麼都沒抓到」當成成功。
+`v1.6.1` 為目前版本：修掉 Sheet 寫入 subprocess 的一個 bug。生成的 worker 用 JSON 編碼器把參數嵌進「產生的 Python 原始碼」裡，預設的 `gid=None` 於是變成裸的 `null` token，worker 還沒連上 Google 就先 `NameError: name 'null' is not defined` 死掉。因為寫入流程只有在 subprocess 失敗時才會退回 in-process，每一次 run 其實都悄悄失去了那層 subprocess 的 timeout 保護，改成無保護地直接寫 Sheet。現在參數改用 Python 字面值嵌入。
 
 較早版本：
 
+- `v1.6.0` 把 LinkedIn 自 v1.3.1 就有的 30/60/90s retry ladder 補給了 JobStreet list page。
 - `v1.3.1` 在 source layer 新增 LinkedIn list page 429 retry。
 - `v1.3.0` 移除 Jora 與 JobStreet 網路整合，主動來源 contract 收斂為 LinkedIn，同時保留歷史 Tracker row 的解析能力。
 
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.6.0`，明確保護五來源 contract、「每個來源一個 adapter」的拆分，以及 JobStreet list page 的 retry ladder。
+- 目前 frozen equivalence baseline 為 `v1.6.1`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder，以及「生成 worker 必須用 Python 字面值」這條規則。
 
 ## 授權
 

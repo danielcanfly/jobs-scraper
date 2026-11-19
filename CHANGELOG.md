@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.6.1 — 2026-11-19
+
+The Sheet-write subprocess stops dying before it ever reaches Google.
+
+Fixed
+
+- `sg_product_jobs.py` generated the worker that performs the Sheet write by embedding its arguments with `json.dumps`. That is JSON syntax, but it was being written into generated **Python** source — and `json.dumps(None)` is the bare token `null`, an undefined name in Python.
+- `--gid` defaults to `None` (the SG runs carry the worksheet id in the URL's `#gid=`), so **every** run built a worker that died on startup with `NameError: name 'null' is not defined`. The same applied to any `None` argument, such as a `None` location.
+- The visible symptom was one line per run: `[PUSH SUBPROCESS WARN] worker fail: NameError: name 'null' is not defined`, immediately followed by `fallback 到 in-process (可能 hang)`.
+- The damage was silent. That subprocess exists to put a hard timeout around the gspread write: `timeout_s` cannot interrupt a hung urllib3 socket from inside the process, only `subprocess.terminate()` can. Every run therefore lost the guard and wrote the Sheet in-process, where a hung write blocks the whole run with no bound. The guard had been inert since it was added on 2026-08-29.
+- Arguments are now embedded as Python literals (`_py_literal`), so `None` stays `None`, `True` stays `True`, and strings are escaped by Python rather than by a JSON encoder.
+
+Acceptance
+
+- `tests/test_push_worker_code_gen.py` pins the behaviour: the generated code compiles with the default `gid=None` and with a `None` location, it never contains a bare `gid=null`, and executing it against a stubbed engine forwards `gid=None`, an explicit gid, and a title containing quotes and newlines without breaking out of the generated literal.
+- The two worker templates moved into `_build_pre_dedup_worker_code` / `_build_push_worker_code`, so the generated source can be tested directly instead of only through a live Sheet write.
+
+Also in this release
+
+- The version line moves to 1.6.1 across the engine, both MCP entrypoints, both plugin manifests, the Agent Skill, `pyproject.toml`, `uv.lock` and the three READMEs.
+- The behaviour-equivalence freeze moves to `freeze_version 6`: the five-source contract, the one-adapter-per-source split and the JobStreet retry ladder stay frozen, and the generated-worker literal rule plus its regression test are added to the frozen blobs.
+
 ## v1.6.0 — 2026-10-31
 
 The JobStreet list page gets the retry ladder LinkedIn has had since v1.3.1.
