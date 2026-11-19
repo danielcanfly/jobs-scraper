@@ -33,13 +33,20 @@ def _clean_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-def _load_doctor():
-    """Import scripts/doctor.py by path — it is a script, not a package."""
+def _load_doctor(tmp_path=None):
+    """Import scripts/doctor.py by path — it is a script, not a package.
+
+    `ENV_FILE` is pointed at a file that does not exist so the doctor sees no
+    `.env` of its own. The installed plugin runtime *does* ship a populated
+    `.env`, and without this the doctor tests would read the machine's real
+    proxy configuration instead of the one the test set up.
+    """
     path = Path(__file__).resolve().parent.parent / "scripts" / "doctor.py"
     spec = importlib.util.spec_from_file_location("jobs_scraper_doctor", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+    module.ENV_FILE = Path(str(tmp_path or Path(__file__).resolve())) / "__no_such_env_file__"
     return module
 
 
