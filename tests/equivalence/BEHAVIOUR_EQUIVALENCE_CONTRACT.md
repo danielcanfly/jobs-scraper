@@ -1,4 +1,4 @@
-# v1.6.1 Behaviour Equivalence Contract
+# v1.6.2 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -54,6 +54,10 @@ which is the behaviour the split had to preserve.
     JSON. `json.dumps(None)` is the bare token `null`, an undefined name in Python: a worker
     built that way dies with `NameError` before it reaches Google, and silently costs the run
     the subprocess timeout guard that protects the Sheet write.
+17. A generated worker must not carry the jobs payload in its source. The payload travels in a
+    separate JSON file the worker reads; a source that embeds it grows to megabytes and makes
+    CPython pull the whole literal through its tokenizer before the write can start, which is a
+    memory spike on a machine whose free-page count is already in the tens of megabytes.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.

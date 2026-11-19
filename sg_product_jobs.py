@@ -1843,25 +1843,29 @@ def _pre_dedup_load_with_subprocess(sheet_source_label: str, sa_key_path: str, t
                 pass
 
 
-def _build_push_worker_code(jobs, sheet_url, sa_key_path, source, gid, location, out_path: str) -> str:
+def _build_push_worker_code(jobs_path: str, sheet_url, sa_key_path, source, gid, location, out_path: str) -> str:
     """產生 Sheet 寫入 worker 的 Python source。
 
     2026-11-19 fix: 參數原本用 json.dumps 嵌進 code → `gid=None` 變成裸的
     `null` → worker 一開跑就 NameError，subprocess 這層的 timeout 保護因此
     從 2026-08-29 起一直是失效的。現在改用 _py_literal()（Python 字面值）。
+
+    2026-11-19 fix 2: jobs 原本整包序列化後嵌進產生的 Python source。一輪
+    30 頁的 run 可以到幾 MB，worker 啟動時 CPython 得先把那個「巨大的字串
+    literal」讀進 tokenizer/parser — 這段額外記憶體尖峰發生在 Sheet 寫入的
+    那一刻，正是這台 8GB 機器記憶體最緊的時候。現在 jobs 改放獨立 JSON 檔，
+    worker 用 json.load() 讀，產生的 Python 檔維持幾 KB。
     """
-    import json as _json
     import os as _os
 
-    # 序列化 jobs (要傳給 subprocess)
-    jobs_json = _json.dumps(jobs, ensure_ascii=False, default=str)
     worker_code = f"""
 import sys, json
 sys.path.insert(0, {_py_literal(_os.getcwd())})
 import sg_product_jobs as M
 out_path = __OUT_PATH__
 try:
-    jobs = json.loads({_py_literal(jobs_json)})
+    with open({_py_literal(jobs_path)}, encoding="utf-8") as f:
+        jobs = json.load(f)
     result = M.push_to_sheet(
         jobs,
         {_py_literal(sheet_url)},
@@ -1895,11 +1899,16 @@ def _push_to_sheet_with_subprocess(jobs, sheet_url, sa_key_path, source, gid, lo
     with _tf.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         worker_path = f.name
     out_path = worker_path + ".out"
-    final_code = _build_push_worker_code(jobs, sheet_url, sa_key_path, source, gid, location, out_path)
-    with open(worker_path, "w") as f:
-        f.write(final_code)
+    jobs_path = worker_path + ".jobs.json"
 
     try:
+        # jobs 放獨立 JSON 檔，不要嵌進產生的 Python source（見 _build_push_worker_code）
+        with open(jobs_path, "w", encoding="utf-8") as f:
+            _json.dump(jobs, f, ensure_ascii=False, default=str)
+        final_code = _build_push_worker_code(jobs_path, sheet_url, sa_key_path, source, gid, location, out_path)
+        with open(worker_path, "w") as f:
+            f.write(final_code)
+
         proc = _sp.run(
             [_sys.executable, worker_path],
             capture_output=True,
@@ -1922,7 +1931,7 @@ def _push_to_sheet_with_subprocess(jobs, sheet_url, sa_key_path, source, gid, lo
         print(f"  [PUSH SUBPROCESS WARN] 寫 sheet 失敗 ({type(e).__name__}: {e})", flush=True)
         return None
     finally:
-        for p in [worker_path, out_path]:
+        for p in [worker_path, out_path, jobs_path]:
             try:
                 _os.unlink(p)
             except OSError:

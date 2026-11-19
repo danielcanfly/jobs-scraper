@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.6.2 — 2026-11-19
+
+The Sheet-write worker stops being a multi-megabyte Python file.
+
+Fixed
+
+- `push_to_sheet` builds its worker by generating a Python source file, and the jobs payload used to be serialised into that source as a string literal. A 30-page run serialises to megabytes, and CPython had to pull the whole literal through its tokenizer before the worker could start — a memory spike that lands exactly on the Sheet write.
+- On this 8 GB machine that spike is not academic. The box runs with roughly 60 MB of free pages and about 10 GB of swap in use, and macOS's jetsam is actively killing processes — 2026-11-19 12:45:55 `Process knowledgeconstructiond [65607] killed by jetsam reason per-process-limit`.
+- The payload now lives in its own JSON file that the worker reads with `json.load()`. The generated worker stays a few kilobytes whatever the run size, so the write path no longer adds a memory spike of its own.
+
+Acceptance
+
+- `tests/test_push_worker_code_gen.py` asserts the generated source stays under 4 KB for a 500-job payload, and that the worker still forwards `gid`, `location` and job titles containing quotes and newlines correctly.
+
+Also in this release
+
+- The version line moves to 1.6.2 across the engine, both MCP entrypoints, both plugin manifests, the Agent Skill, `pyproject.toml`, `uv.lock` and the three READMEs.
+- The behaviour-equivalence freeze moves to `freeze_version 7`.
+
 ## v1.6.1 — 2026-11-19
 
 The Sheet-write subprocess stops dying before it ever reaches Google.

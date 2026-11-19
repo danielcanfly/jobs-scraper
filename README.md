@@ -8,7 +8,7 @@
 
 A local-first multi-source job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.6.1 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
+jobs-scraper v1.6.2 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
@@ -318,7 +318,9 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 
 ## Versioning and Release Notes
 
-`v1.6.1` is the current release. It fixes the Sheet-write subprocess: the generated worker embedded its arguments with a JSON encoder, so the default `gid=None` became the bare token `null` inside generated *Python* source and the worker died with `NameError: name 'null' is not defined` before it ever reached Google. Because the write only falls back to the in-process path when the subprocess fails, every run silently lost the subprocess timeout guard and wrote the Sheet unguarded. Arguments are now embedded as Python literals.
+`v1.6.2` is the current release. The jobs payload no longer travels inside the generated Sheet-write worker: it used to be serialised into the worker's *Python* source as a string literal, so a 30-page run produced a multi-megabyte source file that CPython had to pull through its tokenizer before the write could start — a memory spike landing exactly on the Sheet write. The payload now lives in its own JSON file and the generated worker stays a few kilobytes. Earlier releases:
+
+- `v1.6.1` fixed the Sheet-write subprocess: the generated worker embedded its arguments with a JSON encoder, so the default `gid=None` became the bare token `null` inside generated *Python* source and the worker died with `NameError: name 'null' is not defined` before it ever reached Google. Because the write only falls back to the in-process path when the subprocess fails, every run silently lost the subprocess timeout guard and wrote the Sheet unguarded. Arguments are now embedded as Python literals.
 
 Earlier releases:
 
@@ -326,6 +328,7 @@ Earlier releases:
 
 Earlier releases:
 
+- `v1.6.1` embedded the generated worker's arguments as Python literals instead of JSON.
 - `v1.6.0` gave the JobStreet list page the same 30/60/90s retry ladder LinkedIn had.
 - `v1.5.0` split every source's fetching layer into `jobs_scraper/sources/`: five active sources, the frozen title skip filter v8.5, the LinkedIn list-page 429 retry, and the corrected three-phase Sheet write order.
 - `v1.3.1` added the LinkedIn list-page 429 retry at the source layer.
@@ -334,7 +337,7 @@ Earlier releases:
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The active frozen equivalence baseline is `v1.6.1` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, and the generated-worker literal rule.
+- The active frozen equivalence baseline is `v1.6.2` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, and the generated-worker rules.
 
 ## License
 
