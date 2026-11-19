@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.6.4 — 2026-11-19
+
+China is three cities now, and a China posting carries no visa judgement.
+
+Added
+
+- **Hangzhou and Shenzhen are regions of their own.** `China` was Shanghai; it now is one of three. `region="Hangzhou"` and `region="Shenzhen"` crawl their own city and write into the same `China-Raw` tab, resolved through a new tab-base rule in `region_policy.py` (`REGION_TAB_BASE`) instead of the plain `<REGION>-Raw` naming. Aliases work too: `hz` / `杭州`, `sz` / `深圳`.
+- **Both geoIds were verified against the live Guest API**, not copied from a list: `Hangzhou` is `101821877` and `Shenzhen` is `106750182` (LinkedIn GEO typeahead), and a real list fetch for each returns postings located in that city. They sit in the LinkedIn adapter's preset table, so `--location Hangzhou` and `--location Shenzhen` work on the CLI as well.
+- The city regions are **opt-in**: the default region set stays `SG` / `TW` / `China`, and the expected-tab list is de-duplicated so initializing several China regions never creates `China-Raw` twice.
+
+Changed
+
+- **China-specific visa judgement is gone.** `Chinese citizens only`, `PRC nationals only`, `must be a Chinese citizen`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`, `中國人優先` and `大陸人優先` no longer produce any visa signal, because a Taiwan resident can take a permit into mainland China.
+- The generic coverage was deliberately kept and strengthened: a Singapore or Taiwan posting that requires any citizenship is still a HARD signal. A nationality-agnostic `must be a <nationality> citizen/national` pattern replaces the deleted Chinese/PRC-specific one so a Singapore posting that asks for a Chinese citizen is not silently downgraded. The Singapore-only gate on the Sheet's visa column is unchanged, and China rows were never evaluated in the first place.
+
+Acceptance
+
+- `tests/test_china_regions_v164.py` (12 tests) pins the two geoIds and that they stay distinct, the CLI preset resolution, the city aliases, the tab-base rule, the de-duplicated expected-tab list, the initializer plan that creates `China-Raw` once, the seven China phrases that now produce no signal, and the Singapore/Taiwan citizenship phrases that must still be HARD.
+- The MCP contract tests and the frozen golden region enum grow to `SG | TW | China | Hangzhou | Shenzhen`.
+- The behaviour-equivalence freeze moves to `freeze_version 9` with a new China-region invariant section.
+
 ## v1.6.3 — 2026-11-19
 
 The crawl path can be told which way out to take.

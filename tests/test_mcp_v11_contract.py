@@ -23,7 +23,7 @@ def _by_name(name: str):
 def test_v11_server_version_and_tool_set():
     import server_v1_1
 
-    assert server_v1_1.mcp.version == "1.6.3"
+    assert server_v1_1.mcp.version == "1.6.4"
     assert {t.name for t in _tools()} == {
         "crawl_jobs",
         "initialize_job_tracker",
@@ -36,7 +36,7 @@ def test_v11_server_version_and_tool_set():
 def test_sync_is_region_aware_and_does_not_expose_gid():
     tool = _by_name("sync_jobs_to_sheet")
     props = tool.input_schema["properties"]
-    assert props["region"]["enum"] == ["SG", "TW", "China"]
+    assert props["region"]["enum"] == ["SG", "TW", "China", "Hangzhou", "Shenzhen"]
     assert "gid" not in props
     assert "sheet_gid" not in props
     assert "sheet_id" not in props
@@ -55,7 +55,7 @@ def test_initializer_defaults_to_preview_and_is_idempotent_hint():
 def test_read_tools_are_region_aware_and_read_only():
     for name in ("audit_sheet", "get_stats"):
         tool = _by_name(name)
-        assert tool.input_schema["properties"]["region"]["enum"] == ["SG", "TW", "China"]
+        assert tool.input_schema["properties"]["region"]["enum"] == ["SG", "TW", "China", "Hangzhou", "Shenzhen"]
         assert tool.annotations.read_only_hint is True
         assert tool.annotations.open_world_hint is False
 

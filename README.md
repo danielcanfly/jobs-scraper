@@ -8,7 +8,7 @@
 
 A local-first multi-source job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.6.3 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
+jobs-scraper v1.6.4 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
@@ -177,6 +177,32 @@ sync_jobs_to_sheet(
 
 The tool resolves `<REGION>-Raw` by name and writes only through the explicit write boundary.
 
+### China: three cities, one Sheet tab
+
+China is not a single place. `region="China"` crawls **Shanghai**; `region="Hangzhou"` and
+`region="Shenzhen"` are regions of their own. All three write into the same `China-Raw` tab:
+
+| Region | City | LinkedIn geoId | Aliases | Writes to |
+|---|---|---|---|---|
+| `China` | Shanghai | `107388191` | `cn`, `china`, `中國`, `shanghai` | `China-Raw` |
+| `Hangzhou` | Hangzhou | `101821877` | `hz`, `杭州` | `China-Raw` |
+| `Shenzhen` | Shenzhen | `106750182` | `sz`, `深圳` | `China-Raw` |
+
+The city regions are opt-in: the default region set stays `SG` / `TW` / `China`, and
+`initialize_job_tracker` never creates `China-Raw` twice when several of them are listed.
+
+The same cities are available on the CLI, where `--location` resolves the geoId from the same
+preset table:
+
+```text
+sg_product_jobs.py 7d --source linkedin --location Hangzhou --to-sheet "<China-Raw URL>"
+```
+
+A China posting carries **no visa judgement**: a Taiwan resident can take a permit into mainland
+China, so China-specific citizenship wording (`Chinese citizens only`, `僅限中國公民`,
+`必須為中國公民`, `上海戶口優先`, `中國人優先`) produces no signal. A Singapore or Taiwan posting
+that requires any citizenship is still a hard blocker.
+
 ## MCP Tools
 
 | Tool | Sheet write? | Purpose |
@@ -318,7 +344,7 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 
 ## Versioning and Release Notes
 
-`v1.6.3` is the current release. The crawl path can now be told which way out to take: the LinkedIn Guest API answers a direct request with HTTP 451 from some networks, and the Google Sheets API times out on a direct connection there, while both work through a proxy. `JOBS_SCRAPER_PROXY` (or the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`) selects one, `doctor` reports which proxy is in effect and whether it is still reachable, and nothing set means a direct connection as before. Earlier releases:
+`v1.6.4` is the current release. China is three crawlable places instead of one, and a China posting no longer carries a visa judgement. `China` is Shanghai, while `Hangzhou` and `Shenzhen` are regions of their own with verified LinkedIn geoIds (`101821877`, `106750182`); all three write into the same `China-Raw` tab, and the city regions stay opt-in so the default region set is still `SG` / `TW` / `China`. The China-specific citizenship patterns (`Chinese citizens only`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`, `中國人優先`) were removed from the visa signal — a Taiwan resident can take a permit into mainland China — while the generic Singapore/Taiwan coverage is unchanged. The crawl path can also be told which way out to take: the LinkedIn Guest API answers a direct request with HTTP 451 from some networks, and the Google Sheets API times out on a direct connection there, while both work through a proxy. `JOBS_SCRAPER_PROXY` (or the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`) selects one, `doctor` reports which proxy is in effect and whether it is still reachable, and nothing set means a direct connection as before. Earlier releases:
 
 - `v1.6.2` kept the jobs payload out of the generated Sheet-write worker: it used to be serialised into the worker's *Python* source as a string literal, so a 30-page run produced a multi-megabyte source file that CPython had to pull through its tokenizer before the write could start — a memory spike landing exactly on the Sheet write. The payload now lives in its own JSON file and the generated worker stays a few kilobytes.
 
@@ -340,7 +366,7 @@ Earlier releases:
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The active frozen equivalence baseline is `v1.6.3` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, and the generated-worker rules.
+- The active frozen equivalence baseline is `v1.6.4` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, and the generated-worker rules.
 
 ## License
 

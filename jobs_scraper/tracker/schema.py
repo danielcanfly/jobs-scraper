@@ -98,6 +98,7 @@ VALIDATIONS: dict[int, tuple[str, ...]] = {
 
 REGION_ALIASES = RP.REGION_ALIASES
 DEFAULT_REGIONS = RP.DEFAULT_REGIONS
+REGION_TAB_BASE = RP.REGION_TAB_BASE
 DEFAULT_SHEET_TITLES = {"sheet1", "工作表1", "工作表 1"}
 
 COLUMN_WIDTHS = (
@@ -184,16 +185,29 @@ def canonical_regions(regions: Iterable[str] | None) -> list[str]:
     return out
 
 
+def tab_base(region: str) -> str:
+    """回傳該 region 實際使用的 sheet tab 前綴。
+
+    中國城市 (Hangzhou / Shenzhen) 共用 China 的 tab, 所以三個城市寫進同一張 China-Raw。
+    """
+    canon = canonical_region(region)
+    return REGION_TAB_BASE.get(canon, canon)
+
+
 def raw_tab(region: str) -> str:
-    return f"{canonical_region(region)}-Raw"
+    return f"{tab_base(region)}-Raw"
 
 
 def selected_tab(region: str) -> str:
-    return f"{canonical_region(region)}-Selected"
+    return f"{tab_base(region)}-Selected"
 
 
 def expected_tabs(regions: Iterable[str] | None = None) -> list[str]:
     tabs: list[str] = []
     for region in canonical_regions(regions):
-        tabs.extend([raw_tab(region), selected_tab(region)])
+        for title in (raw_tab(region), selected_tab(region)):
+            # 多個 region 共用同一個 tab 時 (China + Hangzhou + Shenzhen) 只算一次,
+            # 否則 initialize 會對同一個 tab 下兩次 addSheet
+            if title not in tabs:
+                tabs.append(title)
     return tabs

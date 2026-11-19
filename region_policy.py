@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 SourceName = Literal["linkedin"]
-PublicRegion = Literal["SG", "TW", "China"]
+PublicRegion = Literal["SG", "TW", "China", "Hangzhou", "Shenzhen"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +36,21 @@ REGION_POLICIES: dict[PublicRegion, RegionPolicy] = {
         location="Shanghai",
         supported_sources=frozenset({"linkedin"}),
     ),
+    # 2026-11-19: 中國城市各自可選, 但共用 China 的 sheet tab (見 REGION_TAB_BASE)
+    "Hangzhou": RegionPolicy(
+        key="Hangzhou",
+        location="Hangzhou",
+        supported_sources=frozenset({"linkedin"}),
+    ),
+    "Shenzhen": RegionPolicy(
+        key="Shenzhen",
+        location="Shenzhen",
+        supported_sources=frozenset({"linkedin"}),
+    ),
 }
 
-DEFAULT_REGIONS: tuple[PublicRegion, ...] = tuple(REGION_POLICIES)
+# 預設 region 不含城市: 中國的城市是 opt-in (要明確指定才爬那個城市)
+DEFAULT_REGIONS: tuple[PublicRegion, ...] = ("SG", "TW", "China")
 
 REGION_ALIASES: dict[str, PublicRegion] = {
     "sg": "SG",
@@ -53,6 +65,19 @@ REGION_ALIASES: dict[str, PublicRegion] = {
     "中國": "China",
     "中国": "China",
     "shanghai": "China",
+    "hangzhou": "Hangzhou",
+    "hz": "Hangzhou",
+    "杭州": "Hangzhou",
+    "shenzhen": "Shenzhen",
+    "sz": "Shenzhen",
+    "深圳": "Shenzhen",
+}
+
+# 城市 region 共用哪個 sheet tab: <TAB_BASE>-Raw / <TAB_BASE>-Selected
+# 中國城市共用 China 的 tab, 所以三個城市寫進同一張 China-Raw
+REGION_TAB_BASE: dict[str, PublicRegion] = {
+    "Hangzhou": "China",
+    "Shenzhen": "China",
 }
 
 REGION_LOCATIONS: dict[PublicRegion, str] = {key: policy.location for key, policy in REGION_POLICIES.items()}

@@ -20,10 +20,15 @@ def test_region_locations_preserve_v111_contract():
         "SG": "Singapore",
         "TW": "Taiwan",
         "China": "Shanghai",
+        # 2026-11-19 新增: 中國城市各自可選, 共用 China 的 sheet tab
+        "Hangzhou": "Hangzhou",
+        "Shenzhen": "Shenzhen",
     }
     assert RP.location_for("SG") == "Singapore"
     assert RP.location_for("TW") == "Taiwan"
     assert RP.location_for("China") == "Shanghai"
+    assert RP.location_for("Hangzhou") == "Hangzhou"
+    assert RP.location_for("Shenzhen") == "Shenzhen"
 
 
 def test_source_region_capability_is_linkedin_only():

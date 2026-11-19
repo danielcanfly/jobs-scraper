@@ -153,6 +153,8 @@ Remote | Hybrid | Onsite | Unknown
 
 Visa/sponsorship detection uses frozen HARD / SOFT / POSITIVE regex groups. In the current frozen scraper behaviour, formal visa detection is applied for Singapore Sheet writes; non-SG writes leave the visa field empty unless the underlying frozen implementation explicitly changes in a separately qualified release.
 
+Since v1.6.4 the China-specific citizenship patterns are gone: `Chinese citizens only`, `PRC nationals only`, `must be a Chinese citizen`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`, `中國人優先` and `大陸人優先` produce no visa signal at all, because a Taiwan resident can take a permit into mainland China. The generic coverage is unchanged — a Singapore or Taiwan posting that requires any citizenship is still a HARD signal.
+
 Do not infer missing visa facts in the Agent layer.
 
 ## 7. Dedup and local state
@@ -270,6 +272,12 @@ Current source location targeting:
 | JobStreet | Singapore scope | `SG-Raw` |
 | 104 / onezerofour | Hard-wired areas, not `--location` | `TW-Raw` |
 | Cake | Search scope only; row location keeps the actual Cake location | `TW-Raw` |
+
+China is three crawlable places, not one. `China` is Shanghai (`107388191`); `Hangzhou`
+(`101821877`) and `Shenzhen` (`106750182`) are regions of their own and share the China tab
+through the tab-base rule, so all three write into `China-Raw`. The expected-tab list is
+de-duplicated so a shared tab is never created twice. The city regions are opt-in: the default
+region set stays `SG` / `TW` / `China`.
 
 Any retired or unknown source request must fail before the scraper subprocess executes.
 

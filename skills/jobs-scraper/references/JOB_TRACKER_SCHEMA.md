@@ -19,6 +19,8 @@ Default initialization creates:
 
 Every Raw/Selected tab uses the same A:AA schema. Row 1 is frozen.
 
+`China` is Shanghai; `Hangzhou` and `Shenzhen` are regions of their own that share the China tab, so all three write into `China-Raw` and no extra tab is created for them.
+
 `sync_jobs_to_sheet` writes only to `<REGION>-Raw`.
 
 ## A:AA headers

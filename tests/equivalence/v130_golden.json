@@ -94,7 +94,9 @@
     "region_enum": [
       "SG",
       "TW",
-      "China"
+      "China",
+      "Hangzhou",
+      "Shenzhen"
     ]
   }
 }

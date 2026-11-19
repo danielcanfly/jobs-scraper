@@ -1,4 +1,4 @@
-# v1.6.3 Behaviour Equivalence Contract
+# v1.6.4 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -43,9 +43,13 @@ which is the behaviour the split had to preserve.
 ## Shared behavior invariants
 
 13. Title filtering stays skip filter v8.5 (`SKIP.md` is the semantics authority); work-mode
-    detection, visa-signal detection, and machine-summary parsing remain stable.
+    detection and machine-summary parsing remain stable. Visa-signal detection keeps its
+    Singapore/Taiwan coverage, but no longer judges China-specific citizenship wording — see
+    the China-region invariants below.
 14. The MCP / tracker layer stays LinkedIn-only: its source enum, source labels, and region
-    policies are unchanged, and it fails closed for every non-LinkedIn source.
+    policies are shared with `region_policy.py`, and it fails closed for every non-LinkedIn
+    source. The region set may grow a city, but only together with a tab-base rule that keeps
+    the Sheet target unambiguous.
 15. Tracker schema and write-safety contracts are unchanged.
 
 ## Generated-worker invariants
@@ -69,6 +73,23 @@ which is the behaviour the split had to preserve.
 19. A proxy that is configured but dead fails every source at once. The doctor therefore probes
     the configured proxy and reports it, rather than letting the failure surface as an empty
     crawl much later.
+
+## China-region invariants
+
+20. China is three crawlable places, not one: `Shanghai` (the `China` region), `Hangzhou` and
+    `Shenzhen` (their own regions). Each city has a verified LinkedIn geoId in the LinkedIn
+    adapter's preset table, and `--location <city>` resolves to exactly that geoId.
+21. The two city regions write into the China sheet: a region resolves its tab through a
+    tab-base rule, so `Hangzhou` and `Shenzhen` both land on `China-Raw` / `China-Selected`.
+    The expected-tab list is de-duplicated, because two regions sharing a tab must not make the
+    initializer create that tab twice.
+22. The city regions are opt-in: the default region set stays `SG` / `TW` / `China`.
+23. A China posting carries no visa judgement. China-specific citizenship wording (`Chinese
+    citizens only`, `PRC nationals only`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`,
+    `中國人優先`) produces no signal at all, because a Taiwan resident can take a permit into
+    mainland China. The generic coverage stays: a Singapore or Taiwan posting that requires any
+    citizenship — including `must be a Chinese citizen` — is still a hard blocker, and the
+    Singapore-only gate on the Sheet's visa column is unchanged.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.

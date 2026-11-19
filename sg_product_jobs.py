@@ -235,13 +235,12 @@ VISA_PATTERNS = {
         r"must\s+be\s+(?:a\s+)?Taiwan(?:ese)?\s+(?:citizen|national)",
         r"僅限\s*(?:台灣|本地)?\s*(?:公民|國民|永久居民)",
         r"(?:必須|需|須)\s*為?\s*(?:台灣)?\s*(?:公民|國民)",
-        # China / Shanghai (硬性)
-        r"Chinese\s+(?:citizens?|nationals?)\s+only",
-        r"PRC\s+(?:citizens?|nationals?)\s+only",
-        r"must\s+be\s+(?:a\s+)?(?:Chinese|PRC)\s+(?:citizen|national)",
-        r"僅限\s*(?:中國|大陆|本地|滬)?\s*(?:公民|國民|戶籍|戶口)",
-        r"(?:必須|需|須)\s*為?\s*(?:中國|大陸|本地)?\s*(?:公民|國民|戶籍|上海)",
-        r"上海(?:戶籍|戶口)\s*(?:優先|優先考慮|居民)",
+        # 2026-11-19 移除中國專屬簽證判斷: 台灣人可拿通行證入職, 中國職缺不做簽證判斷
+        # (原本的 "Chinese/PRC citizens only" / "僅限中國公民" / "上海戶籍優先" 等已刪除)
+        # 留下的是「國籍不限」的通用條件, 讓 SG / TW 的判斷不受影響:
+        r"僅限\s*(?:公民|國民|戶籍|戶口)",
+        r"(?:必須|需|須)\s*為?\s*(?:公民|國民|戶籍)",
+        r"must\s+be\s+(?:a\s+)?(?:\w+[-\s]+)?(?:citizen|national)\b",
     ],
     "SOFT": [
         # English — 優先現有工作權 / 不要求 sponsor / etc.
@@ -256,11 +255,9 @@ VISA_PATTERNS = {
         r"不(?:需|用)要?\s*(?:提供|辦理)?\s*(?:簽證|visa|工作證)",
         r"不(?:能|可以)\s*(?:提供|辦理)\s*(?:簽證|visa|工作證|EP)",
         r"台灣(?:人|公民)?\s*優先",
-        # China / Shanghai
-        r"Chinese\s+(?:citizens?|nationals?)\s+preferred",
-        r"(?:大陸|中国|大陆)\s*(?:人|公民|國民)?\s*(?:優先|优先)",
+        # 2026-11-19 移除中國專屬簽證判斷 (同 HARD 區塊說明);
+        # "本地人優先" 屬通用中文詞 (SG / TW 也常見), 保留
         r"本地人?\s*(?:優先|优先)",
-        r"中國(?:人|公民|國民)\s*(?:優先|优先)",
     ],
     "POSITIVE": [
         # English — 明確說會 sponsor

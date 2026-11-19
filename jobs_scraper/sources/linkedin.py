@@ -42,6 +42,9 @@ KNOWN_GEO_IDS = {
     "Hong Kong": ("105015875", "Hong Kong"),  # 待驗證
     "Japan": ("105080838", "Japan"),  # 待驗證
     "Shanghai": ("107388191", "Shanghai"),  # 中國城市, 30,000+ jobs
+    # 2026-11-19 實抓驗證: geoId 取自 LinkedIn GEO typeahead, 回傳職缺地點為對應城市
+    "Hangzhou": ("101821877", "Hangzhou"),  # 中國城市 (杭州, 浙江)
+    "Shenzhen": ("106750182", "Shenzhen"),  # 中國城市 (深圳, 廣東)
 }
 # 不放 f_WT → onsite/remote/hybrid 全收
 PAGE_SIZE = 10  # Guest API 實際 page size (不是 25)

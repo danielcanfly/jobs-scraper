@@ -112,7 +112,7 @@ class RegionStatsResult(BaseModel):
 
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.6.3",
+    version="1.6.4",
     description=(
         "LinkedIn Guest API PM job scraper with a portable Google Sheet Job Tracker. "
         "initialize_job_tracker creates Region-Raw / Region-Selected pairs using the frozen A:AA schema. "
@@ -123,6 +123,7 @@ mcp = MCPServer(
         "Before first Sheet use, call initialize_job_tracker with dry_run=true, explain the planned tabs, then use "
         "dry_run=false only after the user explicitly asks to initialize. "
         "Sheet targets are region pairs such as SG-Raw/SG-Selected, TW-Raw/TW-Selected, and China-Raw/China-Selected. "
+        "The China cities Hangzhou and Shenzhen are separate regions that share the China-Raw/China-Selected tabs. "
         "sync_jobs_to_sheet writes only the requested <REGION>-Raw tab after validating the A:AA schema. "
         "Never invent a Sheet ID, credential path, worksheet target, or service-account credential. "
         "Never ask users to paste a service-account private key into chat. "
@@ -216,7 +217,7 @@ def initialize_job_tracker(
     structured_output=True,
 )
 def sync_jobs_to_sheet(
-    region: Annotated[Region, "Target tracker region: SG | TW | China"] = "SG",
+    region: Annotated[Region, "Target tracker region: SG | TW | China | Hangzhou | Shenzhen"] = "SG",
     source: Annotated[Source, "Job source: linkedin"] = "linkedin",
     range: Annotated[Range, "Time range: 1h | 24h | 3d | 7d | 14d | 21d | 30d"] = "7d",
     with_jd: Annotated[bool, "Fetch full JD content before sync"] = True,

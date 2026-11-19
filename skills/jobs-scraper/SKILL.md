@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. Worksheet IDs are resolved by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.6.3"
+  version: "1.6.4"
 ---
 
 # Jobs Scraper
@@ -14,13 +14,13 @@ Use the bundled MCP tools when they are available. Do not reimplement scraping l
 
 ## Build map — which code actually runs
 
-There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.6.3` engine:
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.6.4` engine:
 
 | Artifact | Path | Version |
 |---|---|---|
-| Scraping engine + CLI | `sg_product_jobs.py` | `1.6.3` |
-| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.6.3` |
-| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.6.3` |
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.6.4` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.6.4` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.6.4` |
 | Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
 | Per-source fetching | `jobs_scraper/sources/<source>.py` | one adapter per source |
 
@@ -80,9 +80,11 @@ The server must never fall back to the package author's Sheet.
 
 ## Region routing
 
-For the MCP interface, region input is `SG | TW | China`.
+For the MCP interface, region input is `SG | TW | China | Hangzhou | Shenzhen`.
 
 - LinkedIn uses LinkedIn `geoId` for location targeting.
+- `China` is Shanghai; `Hangzhou` and `Shenzhen` are their own regions and share the China tab, so all three write into `China-Raw`. The city regions are opt-in — the default region set stays `SG` / `TW` / `China`.
+- A China posting carries no visa judgement (a Taiwan resident can take a permit into mainland China); Singapore and Taiwan citizenship requirements are still hard blockers.
 - The scraper is built for LinkedIn job discovery and tracking using LinkedIn `geoId` location targeting. Historical Jora/JobStreet tracker rows remain readable for audit/dedup compatibility.
 - A region write targets only `<REGION>-Raw`; `Selected` is not a scraper dump target.
 - Before sync/audit, the runtime safety gate checks the exact A:AA header write-compatibility contract. Full visual formatting/dropdown creation belongs to initialization and is not re-audited on every sync.
