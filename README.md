@@ -8,7 +8,7 @@
 
 A local-first multi-source job scraper and tracking toolkit for product-management roles, with a CLI, local STDIO MCP server, Agent Skill, and portable Google Sheet Job Tracker.
 
-jobs-scraper v1.6.4 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
+jobs-scraper v1.6.5 crawls product-management roles across five sources — `linkedin`, `jobstreet`, `cake`, `104` / `onezerofour` — with JD enrichment and tracking. It keeps the workflow local-first, preserves explicit safety gates, and can optionally sync results into a user-owned Google Sheet.
 
 ## Overview
 
@@ -344,7 +344,9 @@ CI also checks locked dependency resolution, plugin manifest consistency, and th
 
 ## Versioning and Release Notes
 
-`v1.6.4` is the current release. China is three crawlable places instead of one, and a China posting no longer carries a visa judgement. `China` is Shanghai, while `Hangzhou` and `Shenzhen` are regions of their own with verified LinkedIn geoIds (`101821877`, `106750182`); all three write into the same `China-Raw` tab, and the city regions stay opt-in so the default region set is still `SG` / `TW` / `China`. The China-specific citizenship patterns (`Chinese citizens only`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`, `中國人優先`) were removed from the visa signal — a Taiwan resident can take a permit into mainland China — while the generic Singapore/Taiwan coverage is unchanged. The crawl path can also be told which way out to take: the LinkedIn Guest API answers a direct request with HTTP 451 from some networks, and the Google Sheets API times out on a direct connection there, while both work through a proxy. `JOBS_SCRAPER_PROXY` (or the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`) selects one, `doctor` reports which proxy is in effect and whether it is still reachable, and nothing set means a direct connection as before. Earlier releases:
+`v1.6.5` is the current release. Two LinkedIn Guest API failures that could end a run quietly are fixed. A legitimately empty list page is 26 bytes and yields no parseable root; the list parser used to raise on it, which ended the page loop, the chunk and the whole run — on 2026-11-21 all three chunks of one city crawl died that way and wrote zero rows while still exiting 0. It now parses to zero jobs, so the crawl moves on to the next page, and the empty page is still never retried, because it is a real answer rather than a failure. The JD fetch gained the same 30/60/90s ladder the list fetch has: a 429, a 5xx or a connection error is retried instead of giving up, because a job whose JD never arrives is skipped by the Sheet writer and would otherwise vanish from the run without failing it. Neither fix is China-specific — both are properties of the Guest API and hit every region the same way. China is three crawlable places instead of one, and a China posting no longer carries a visa judgement. `China` is Shanghai, while `Hangzhou` and `Shenzhen` are regions of their own with verified LinkedIn geoIds (`101821877`, `106750182`); all three write into the same `China-Raw` tab, and the city regions stay opt-in so the default region set is still `SG` / `TW` / `China`. The China-specific citizenship patterns (`Chinese citizens only`, `僅限中國公民`, `必須為中國公民`, `上海戶口優先`, `中國人優先`) were removed from the visa signal — a Taiwan resident can take a permit into mainland China — while the generic Singapore/Taiwan coverage is unchanged. The crawl path can also be told which way out to take: the LinkedIn Guest API answers a direct request with HTTP 451 from some networks, and the Google Sheets API times out on a direct connection there, while both work through a proxy. `JOBS_SCRAPER_PROXY` (or the standard `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`) selects one, `doctor` reports which proxy is in effect and whether it is still reachable, and nothing set means a direct connection as before. Earlier releases:
+
+- `v1.6.4` made China three crawlable places and dropped the China-specific visa judgement.
 
 - `v1.6.2` kept the jobs payload out of the generated Sheet-write worker: it used to be serialised into the worker's *Python* source as a string literal, so a 30-page run produced a multi-megabyte source file that CPython had to pull through its tokenizer before the write could start — a memory spike landing exactly on the Sheet write. The payload now lives in its own JSON file and the generated worker stays a few kilobytes.
 
@@ -366,7 +368,7 @@ Earlier releases:
 - `pyproject.toml` carries the package version.
 - `.codex-plugin/plugin.json` carries the plugin version.
 - `server_v1_1.py` exposes the MCP server version.
-- The active frozen equivalence baseline is `v1.6.4` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, and the generated-worker rules.
+- The active frozen equivalence baseline is `v1.6.5` and explicitly protects the five-source contract, the one-adapter-per-source split, the JobStreet list-page retry ladder, the LinkedIn empty-page and JD retry rules, and the generated-worker rules.
 
 ## License
 

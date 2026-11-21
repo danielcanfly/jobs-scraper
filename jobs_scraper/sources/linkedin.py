@@ -117,10 +117,26 @@ def build_list_url(tpr: str, start: int, location: str = LOCATION, geo_id: str =
 
 
 def parse_list_page(html: str) -> list[dict]:
-    """從 LinkedIn list HTML 解 jobs (RULES §4 欄位對照)。"""
+    """從 LinkedIn list HTML 解 jobs (RULES §4 欄位對照)。
+
+    2026-11-21 fix: LinkedIn 的「合法空頁」是 26 bytes 的
+    `<!DOCTYPE html>\\n\\n<!---->`; scrapling 對這種 body 建出的 root 是 None,
+    `page.css(...)` 會直接 raise AttributeError → 整個 list crawl 中斷,
+    該 city 的所有 chunk 全死 (2026-11-21 杭州三塊都是這樣死的, 0 列入表)。
+
+    改成: body 解析不出 root → 當 0 筆, 讓 crawl_list 的 empty_streak 接手,
+    後續頁繼續抓。這裡不對空頁做重試 — 空頁是合法的 EOF 訊號, 不是暫時性故障。
+    """
+    if not html or not html.strip():
+        return []
     page = Adaptor(html)
+    try:
+        cards = page.css(JOB_CARD_SEL)
+    except Exception:
+        # 空頁 / 建不出 root → 0 筆, 不要讓整個 crawl 中斷
+        return []
     jobs = []
-    for card in page.css(JOB_CARD_SEL):
+    for card in cards:
         urn = (card.attrib.get("data-entity-urn") or "").strip()
         job_id = urn.rsplit(":", 1)[-1] if urn else ""
 
@@ -216,22 +232,46 @@ def fetch_jd(
     *,
     session,
     build_url: Callable[[str], str] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     """抓單一職缺的 JD 純文字。
 
     `session` 與 `build_url` 由 caller 注入, 所以這個模組不持有任何全域狀態。
-    """
-    try:
-        r = session.get(
-            (build_url or build_jd_url)(job_id),
-            impersonate="chrome",
-            timeout=20,
-            headers={"Accept-Language": "en-US,en;q=0.9"},
-            proxies=resolve_proxies(),
-        )
-    except Exception as e:
-        return {"jd_text": None, "jd_html": None, "error": f"{type(e).__name__}: {e}"}
 
+    2026-11-21 fix: 429 原本一次就放棄 → 那一筆沒有 JD, 寫 Sheet 時會被整列跳過,
+    職缺就這樣静默消失 (2026-11-21 上海 10 筆裡有 4 筆是這樣掉的)。
+    改成跟 list fetch 同一套 30/60/90s 階梯 (共 4 次 attempt):
+    429 / 5xx / 連線錯誤才重試, 其他 4xx 照舊立刻回錯誤。
+    """
+    url = (build_url or build_jd_url)(job_id)
+    last_err = ""
+    for attempt in range(4):
+        try:
+            r = session.get(
+                url,
+                impersonate="chrome",
+                timeout=20,
+                headers={"Accept-Language": "en-US,en;q=0.9"},
+                proxies=resolve_proxies(),
+            )
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
+            r = None
+
+        if r is not None:
+            if r.status_code == 200:
+                break
+            if r.status_code == 429 or r.status_code >= 500:
+                last_err = f"http {r.status_code}"
+            else:
+                # 其他 4xx 是 caller bug, 不重試
+                return {"jd_text": None, "jd_html": None, "error": f"HTTP {r.status_code}"}
+
+        if attempt < 3:
+            sleep(BACKOFF[attempt])
+
+    if r is None:
+        return {"jd_text": None, "jd_html": None, "error": last_err}
     if r.status_code == 429:
         return {"jd_text": None, "jd_html": None, "error": "429 rate limited"}
     if r.status_code != 200:

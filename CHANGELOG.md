@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.6.5 — 2026-11-21
+
+Two LinkedIn Guest API failures that could end a run quietly.
+
+Fixed
+
+- **A legitimately empty list page no longer kills the crawl.** LinkedIn's "no results" page is 26 bytes: `<!DOCTYPE html>\n\n<!---->`. Scrapling builds no root element for that body, so the list parser raised `AttributeError: 'NoneType' object has no attribute 'xpath'` — inside the parser, outside the crawl's own error handling. One empty page ended the page loop, the chunk and the run: on 2026-11-21 all three chunks of the Hangzhou crawl died this way and **zero** rows reached the Sheet, while the run still reported a clean exit. The parser now treats a body it cannot root as **zero jobs**, so the crawl's own empty-streak rule decides the results are exhausted and moves on to the next page. An empty page stays a legitimate answer — it is *not* retried, exactly as before.
+- **A throttled JD fetch no longer makes a posting disappear.** `fetch_jd` gave up on the first HTTP 429. A job whose JD never arrived has no JD text, and the Sheet writer skips such a row entirely — so a rate-limited request did not fail the run, it just dropped a posting (4 of the first 10 Shanghai jobs on 2026-11-21). The JD fetch now uses the same 30/60/90s ladder as the list fetch: 429, 5xx and connection errors are retried (four attempts), any other 4xx is still a caller bug and is not retried.
+
+Neither fix is China-specific — the empty page and the 429 are properties of the Guest API and hit every source and every region the same way.
+
+Acceptance
+
+- `tests/test_linkedin_resilience_v165.py` (12 tests) pins the empty page parsing to zero jobs, that a crawl keeps going past an empty page and still collects the jobs of the next one, that an empty page is not retried, and the JD ladder: a 429, a 5xx and a connection error are retried and then succeed, four 429s report the rate limit, a 200 and a non-429 4xx are not retried, and the engine still injects the sleep hook.
+- The behaviour-equivalence freeze moves to `freeze_version 10` with a new LinkedIn-resilience invariant section; the frozen v1.3.0 golden stays untouched.
+
 ## v1.6.4 — 2026-11-19
 
 China is three cities now, and a China posting carries no visa judgement.

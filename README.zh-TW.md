@@ -8,7 +8,7 @@
 
 這是一套給 LinkedIn 職缺使用的本機爬蟲與追蹤工具，主要面向產品管理相關職位，並提供 CLI、本機 STDIO MCP server、Agent Skill，以及可攜式 Google 試算表職缺追蹤表。
 
-`jobs-scraper` v1.6.4 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
+`jobs-scraper` v1.6.5 在五個來源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）爬取產品管理職缺，並提供完整 JD enrichment 與追蹤流程。整套工具維持本機優先，保留明確的安全 gate，並可選擇把結果同步到使用者自己的 Google 試算表。
 
 ## 概覽
 
@@ -341,7 +341,9 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.6.4` 為目前版本：中國變成三個可爬的城市，而且中國職缺不再帶簽證判斷。`China` 是上海，`Hangzhou` 與 `Shenzhen` 各自是獨立的 region，geoId 已實抓驗證（`101821877`、`106750182`）；三個都寫進同一張 `China-Raw`，城市是 opt-in，預設 region 仍是 `SG` / `TW` / `China`。中國專屬的國籍字眼（`Chinese citizens only`、`僅限中國公民`、`必須為中國公民`、`上海戶口優先`、`中國人優先`）已從簽證判斷移除——台灣人可拿通行證入職——但新加坡／台灣的通用判斷完全不變。爬蟲路徑也可以被指定要走哪一條出口。LinkedIn Guest API 在某些網路區段對直連回 HTTP 451，Google Sheets API 在同一種環境直連會 timeout，但走 proxy 兩邊都正常。用 `JOBS_SCRAPER_PROXY`（或標準的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）指定，`doctor` 會顯示目前生效的 proxy 並探它還活著嗎；都沒設就維持直連。較早版本：
+`v1.6.5` 為目前版本：修掉兩個會讓一輪 run 靜默死掉的 LinkedIn Guest API 問題。合法的空 list page 只有 26 bytes、解析不出 root，原本 list parser 會直接 raise，於是 page loop、chunk、整輪 run 一起死 —— 2026-11-21 有一個城市的 crawl 三個塊全部這樣死掉、一列都沒寫進 Sheet，process 還 exit 0。現在空頁會被解析成 0 筆，crawl 會繼續抓下一頁；而且空頁依然不會被重試，因為它是合法答案而不是故障。JD 抓取也補上跟 list fetch 同一套 30/60/90s retry ladder：429、5xx、連線錯誤會重試而不是放棄 —— 因為沒有 JD 的職缺會被 Sheet 寫入層整列跳過，等於職缺就這樣從 run 裡消失。兩個修正都跟中國無關，是 Guest API 的通性，每個 region 都會踩到。中國變成三個可爬的城市，而且中國職缺不再帶簽證判斷。`China` 是上海，`Hangzhou` 與 `Shenzhen` 各自是獨立的 region，geoId 已實抓驗證（`101821877`、`106750182`）；三個都寫進同一張 `China-Raw`，城市是 opt-in，預設 region 仍是 `SG` / `TW` / `China`。中國專屬的國籍字眼（`Chinese citizens only`、`僅限中國公民`、`必須為中國公民`、`上海戶口優先`、`中國人優先`）已從簽證判斷移除——台灣人可拿通行證入職——但新加坡／台灣的通用判斷完全不變。爬蟲路徑也可以被指定要走哪一條出口。LinkedIn Guest API 在某些網路區段對直連回 HTTP 451，Google Sheets API 在同一種環境直連會 timeout，但走 proxy 兩邊都正常。用 `JOBS_SCRAPER_PROXY`（或標準的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）指定，`doctor` 會顯示目前生效的 proxy 並探它還活著嗎；都沒設就維持直連。較早版本：
+
+- `v1.6.4` 中國變成三個可爬的城市，並移除中國專屬的簽證判斷。
 
 - `v1.6.2` 把 jobs 資料移出「產生的 Sheet 寫入 worker」原始碼：之前它是被序列化成一個字串字面值寫進 worker 的 *Python* 原始碼裡的，一輪 30 頁的 run 會產生好幾 MB 的原始碼，CPython 得先把整個字串拉過 tokenizer 才能開始寫入 —— 那個記憶體尖峰正好落在寫 Sheet 的那一刻。現在 jobs 放獨立 JSON 檔，worker 用 `json.load()` 讀，產生的 worker 維持 KB 級。
 
@@ -358,7 +360,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.6.4`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder，以及「生成 worker」的相關規則。
+- 目前 frozen equivalence baseline 為 `v1.6.5`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則，以及「生成 worker」的相關規則。
 
 ## 授權
 

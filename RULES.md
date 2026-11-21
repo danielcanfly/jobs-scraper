@@ -83,6 +83,12 @@ Useful known direct-CLI examples:
 
 Without this retry, a 429 on any list page propagates as an HTTPError and the caller aborts the entire list crawl, leaving long-range runs at a small fraction of their intended page coverage. The retry is what makes 14d/21d/30d coverage complete.
 
+#### LinkedIn empty list page and JD retry (2026-11-21)
+
+An empty list page is a legitimate answer, not a failure: LinkedIn returns 26 bytes (`<!DOCTYPE html>\n\n<!---->`) for "no results", and the crawl must not spend a retry ladder on it. Scrapling builds no root element for that body, so `page.css(...)` raises `AttributeError` — which used to end the page loop, the chunk and the whole run with zero rows written and a clean exit code. `parse_list_page` therefore treats a body it cannot root as **zero jobs**; the crawl's own empty-streak rule then decides the results are exhausted and moves on.
+
+`fetch_jd` uses the same 30/60/90-second ladder across 4 attempts: a 429, a 5xx or a connection error is retried, any other 4xx is a caller bug and is not retried. A job whose JD never arrives has no JD text, and the Sheet writer skips such a row — so without this retry a throttled request did not fail the run, it made the posting disappear from it.
+
 ### JobStreet
 
 JobStreet exposes a public GraphQL endpoint. The list API accepts a single keyword per request, so the integration issues one request per keyword and de-duplicates by `job_id` across keywords. JD text is retrieved from the GraphQL `jobDetails.job.content` field and converted to plain text.

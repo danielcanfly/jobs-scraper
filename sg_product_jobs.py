@@ -2081,7 +2081,7 @@ def build_jd_url(job_id: str) -> str:
 
 def fetch_jd(job_id: str) -> dict:
     """抓單一職缺的 JD 純文字。"""
-    return _linkedin.fetch_jd(job_id, session=_cc_session, build_url=build_jd_url)
+    return _linkedin.fetch_jd(job_id, session=_cc_session, build_url=build_jd_url, sleep=time.sleep)
 
 
 # ─────────────────────────────────────────────────────────────

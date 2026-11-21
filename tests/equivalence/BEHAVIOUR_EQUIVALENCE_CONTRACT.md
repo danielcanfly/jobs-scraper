@@ -1,4 +1,4 @@
-# v1.6.4 Behaviour Equivalence Contract
+# v1.6.5 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -90,6 +90,17 @@ which is the behaviour the split had to preserve.
     mainland China. The generic coverage stays: a Singapore or Taiwan posting that requires any
     citizenship — including `must be a Chinese citizen` — is still a hard blocker, and the
     Singapore-only gate on the Sheet's visa column is unchanged.
+
+## LinkedIn resilience invariants
+
+24. A legitimately empty list page is zero jobs, never an exception. LinkedIn answers "no results"
+    with a 26-byte body that yields no parseable root; the list parser must return an empty list for
+    it, so the crawl's empty-streak rule decides the results are exhausted and the next page is
+    still crawled. An empty page is never retried — invariant 7 stays in force.
+25. The LinkedIn JD fetch uses the same transient-failure ladder as the list fetch: a 429, a 5xx or
+    a connection error sleeps 30/60/90s and retries, for four attempts in total; any other 4xx is
+    not retried. A JD that never arrives must not make the posting disappear from the Sheet, so the
+    ladder is part of the write contract rather than an optimisation.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.
