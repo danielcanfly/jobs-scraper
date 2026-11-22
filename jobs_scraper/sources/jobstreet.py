@@ -57,17 +57,33 @@ TPR = {
 }
 
 # MAX_PAGES 跟 LinkedIn 一樣 (邏輯都跟 LinkedIn 一樣), 50% 軟停由 crawl_list 跑時判斷
-# 預期覆蓋 (product manager + FT + 5 keyword + dedup):
-# 1d=1 / 3d=7*20=140 raw → ~80 unique / 7d=15*20=300 → ~200 / 14d=30*20=600 → ~400 / 30d=25*20=500 → ~350
-# 7d 的 totalCount 是 953, 5 keyword × 15 page × 20 = 1500 raw, 預期 unique ~600
+#
+# 2026-11-23 v1.6.7 fix: 原本的預設是照「預期覆蓋」推估的, 不是量出來的 ——
+# 舊註解說 7d 預期 unique ~600, 但實際只有 ~250。因為 5 個 keyword 共用同一個
+# seen set + 50% 軟停, 只有第一個 keyword 會被完整爬完, 其餘四個在第 1 頁就軟停。
+#
+# 實測 (2026-11-23, 新加坡, 每個 keyword 的 totalCount 直接由 API 回報):
+#
+#   range | product manager | product director | director of product | head of product | product lead
+#   1h    | 2                | 1                | 3                  | 1              | 8
+#   24h   | 2                | 1                | 3                  | 1              | 8   (1h/24h 的 daterange 都是 1 天)
+#   3d    | 163              | 104              | 107                | 50             | 292
+#   7d    | 494              | 345              | 356                | 170            | 955
+#   14d   | 877              | 630              | 631                | 336            | 1670
+#   21d   | 1269             | 890              | 897                | 466            | 2403
+#   30d   | 1625             | 1173             | 1158               | 627            | 3251
+#
+# 上限要蓋得住「最大的那個 keyword 的池子」/ 20 (每頁 20 筆) + ~30% 餘裕,
+# 這樣不管 soft-stop 最後怎麼跑都不會被上限截斷。舊值 1h=1 / 24h=4 / 3d=7 /
+# 7d=15 / 14d=30 / 21d=30 / 30d=25 → 每個 range 都被截斷 (7d 只拿到 300/494)。
 MAX_PAGES = {
-    "1h": 1,
+    "1h": 2,
     "24h": 4,
-    "3d": 7,
-    "7d": 15,
-    "14d": 30,
-    "21d": 30,
-    "30d": 25,
+    "3d": 20,
+    "7d": 62,
+    "14d": 109,
+    "21d": 155,
+    "30d": 210,
 }
 
 DEFAULT_KEYWORDS = [

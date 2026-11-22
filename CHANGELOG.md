@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.6.7 — 2026-11-23
+
+Two budgets that were guesses, and a 400 that was retried for three minutes.
+
+Fixed
+
+- **The budgets now cover Singapore, not just Shanghai.** v1.6.6 pinned the LinkedIn page budgets to Shanghai's pool depths. Singapore's pools are deeper for every long range — 7d holds about 600 postings against Shanghai's 400 — so v1.6.6's budgets still truncated a Singapore run. The budgets are now pinned to the deepest measured pool per range across both cities: `1h` 8 pages, `24h` 15, `3d` 35, `7d` 80, and 100 for `14d`/`21d`/`30d` — where 100 is the Guest API's own pagination ceiling rather than a guess.
+- **JobStreet's budgets were never measured at all.** The table carried a comment predicting ~600 unique postings for 7d; the actual result was ~250, because the five keywords share one `seen` set and the 50% soft-stop abandons four of them on their first page. The API states its own totals, and they are much larger than the budgets: 7d's largest keyword matches 955 postings, 14d's 1670, 30d's 3251 — against budgets of 15, 30 and 25 pages. The budgets are now sized for the largest keyword's pool plus headroom.
+- **A non-429 4xx on a LinkedIn list page no longer burns the retry ladder.** The adapter's own docstring — and the frozen contract — say a 4xx other than 429 is a caller bug and is raised without retrying. The code did the opposite: `raise_for_status()` raised inside the `try`, the broad `except Exception` caught it, and the page was retried four times (30+60+90s) before the crawl gave up. It now raises `FatalListPageError` immediately, exactly like the JobStreet adapter.
+- **The Guest API's pagination ceiling is an end, not a failure.** `start=1000` answers HTTP 400 rather than an empty page (measured: `start=990` → 200 with an empty body, `start=1000` → 400). A crawl that reached it aborted the whole chunk, and the supervisor read the FAIL as a coverage gap. It is now recognised as "there is nothing more to page", so the crawl ends with what it collected.
+
+Acceptance
+
+- `tests/test_crawl_budget_v167.py` (11 tests) pins every LinkedIn budget to its measured pool, every JobStreet budget to the API's own totals, that no budget shrank, that the time filters are unchanged, that a non-429 4xx is not retried, that a 429 still is, and that a crawl reaching the pagination ceiling ends with what it collected and without a FAIL.
+- The behaviour-equivalence freeze moves to `freeze_version 12` with a new pagination-ceiling invariant section.
+
 ## v1.6.6 — 2026-11-22
 
 A crawl that stops early still reports success, and a dedup pass that reads the wrong tab still looks like it worked. Both happened.

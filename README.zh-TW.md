@@ -341,7 +341,9 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.6.6` 為目前版本：兩個問題長得同一副模樣 —— run 看起來成功，實際上安靜地少做了該做的事。一個 range 的頁數上限必須蓋得住那個 range 真正的池子。LinkedIn 的 range 表原本給 `30d` 25 頁（250 筆），但上海 30 天的池子有約 700 筆，於是 crawl 在上限處停下、run 回報成功、剩下的職缺從來沒被看見。新的上限依 2026-11-22 對 Guest API 實測的池深設定（`1h` 少於 50、`24h` 約 100、`3d` 約 250、`7d` 約 400、`14d` 約 290、`21d` 約 300、`30d` 約 700 筆）。上限是天花板而不是目標：crawl 連續 2 頁沒有新職缺就會自己結束，所以池子小的城市照樣提早停，放寬上限對它們沒有成本。pre-detail dedup 現在讀的是這一輪要寫進去的那個分頁 —— 目標 gid 的解析跟寫入層一致（explicit `--gid` → `--to-sheet` 內的 `#gid=` → label 映射），不再讓 `LinkedIn / Minimax` 一律讀 `SG-Raw`，那會讓中國的 run 去抓 Sheet 根本不會寫進去的職缺 JD。發布流程也恢復綠燈：v1.6.5 有 bump 套件版本卻沒 bump `uv.lock`，CI 在第一道關卡就掛掉，GitHub 上一直是紅的。
+`v1.6.7` 為目前版本：兩個憑空猜的預算上限，加上一個被重試三分鐘的 400。v1.6.6 把 LinkedIn 的頁數上限釘在**上海**的池深上，但新加坡的池每個長 range 都更深 —— 7d 約 600 筆對上海的 400 —— 所以那些上限對新加坡來說仍在截斷；現在改成依兩個城市實測最深的池：1h 8 頁、24h 15、3d 35、7d 80，14d/21d/30d 都是 100 —— 100 是 Guest API 自己的分頁天花板，不是猜的。JobStreet 的上限則從來沒量過 —— 表格註解預期 7d 會有 ~600 筆 unique，實際只有 ~250，因為 5 個 keyword 共用同一個 seen set，50% 軟停讓其中四個在第 1 頁就被放棄 —— 而 API 自己回報的總數遠大於原本的上限（7d 最大的 keyword 匹配 955 筆、14d 1670、30d 3251，原上限卻是 15/30/25 頁）；現在依最大 keyword 的池子加上餘裕來設。LinkedIn list page 上的非 429 4xx 不再走 retry ladder：adapter 的 docstring 與凍結契約都寫明那是 caller bug、應該直接 raise，但 `raise_for_status()` 在 `try` 裡 raise、被寬鬆的 `except Exception` 接走，於是那一頁被重試四次（30+60+90s）才放棄 —— 現在跟 JobStreet adapter 一樣立刻拋 `FatalListPageError`。而 API 的分頁天花板是「結束」不是「失敗」：`start=1000` 回的是 HTTP 400 而不是空頁，原本會讓整塊 abort、supervisor 把那個 FAIL 讀成 coverage 缺口；現在撞到天花板會帶著已收到的職缺正常收尾。
+
+- `v1.6.6` 修掉兩個長得同一副模樣的問題： run 看起來成功，實際上安靜地少做了該做的事。一個 range 的頁數上限必須蓋得住那個 range 真正的池子。LinkedIn 的 range 表原本給 `30d` 25 頁（250 筆），但上海 30 天的池子有約 700 筆，於是 crawl 在上限處停下、run 回報成功、剩下的職缺從來沒被看見。新的上限依 2026-11-22 對 Guest API 實測的池深設定（`1h` 少於 50、`24h` 約 100、`3d` 約 250、`7d` 約 400、`14d` 約 290、`21d` 約 300、`30d` 約 700 筆）。上限是天花板而不是目標：crawl 連續 2 頁沒有新職缺就會自己結束，所以池子小的城市照樣提早停，放寬上限對它們沒有成本。pre-detail dedup 現在讀的是這一輪要寫進去的那個分頁 —— 目標 gid 的解析跟寫入層一致（explicit `--gid` → `--to-sheet` 內的 `#gid=` → label 映射），不再讓 `LinkedIn / Minimax` 一律讀 `SG-Raw`，那會讓中國的 run 去抓 Sheet 根本不會寫進去的職缺 JD。發布流程也恢復綠燈：v1.6.5 有 bump 套件版本卻沒 bump `uv.lock`，CI 在第一道關卡就掛掉，GitHub 上一直是紅的。
 
 - `v1.6.5` 修掉兩個會讓一輪 run 靜默死掉的 LinkedIn Guest API 問題。合法的空 list page 只有 26 bytes、解析不出 root，原本 list parser 會直接 raise，於是 page loop、chunk、整輪 run 一起死 —— 2026-11-21 有一個城市的 crawl 三個塊全部這樣死掉、一列都沒寫進 Sheet，process 還 exit 0。現在空頁會被解析成 0 筆，crawl 會繼續抓下一頁；而且空頁依然不會被重試，因為它是合法答案而不是故障。JD 抓取也補上跟 list fetch 同一套 30/60/90s retry ladder：429、5xx、連線錯誤會重試而不是放棄 —— 因為沒有 JD 的職缺會被 Sheet 寫入層整列跳過，等於職缺就這樣從 run 裡消失。兩個修正都跟中國無關，是 Guest API 的通性，每個 region 都會踩到。中國變成三個可爬的城市，而且中國職缺不再帶簽證判斷。`China` 是上海，`Hangzhou` 與 `Shenzhen` 各自是獨立的 region，geoId 已實抓驗證（`101821877`、`106750182`）；三個都寫進同一張 `China-Raw`，城市是 opt-in，預設 region 仍是 `SG` / `TW` / `China`。中國專屬的國籍字眼（`Chinese citizens only`、`僅限中國公民`、`必須為中國公民`、`上海戶口優先`、`中國人優先`）已從簽證判斷移除——台灣人可拿通行證入職——但新加坡／台灣的通用判斷完全不變。爬蟲路徑也可以被指定要走哪一條出口。LinkedIn Guest API 在某些網路區段對直連回 HTTP 451，Google Sheets API 在同一種環境直連會 timeout，但走 proxy 兩邊都正常。用 `JOBS_SCRAPER_PROXY`（或標準的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）指定，`doctor` 會顯示目前生效的 proxy 並探它還活著嗎；都沒設就維持直連。較早版本：
 
@@ -362,7 +364,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.6.6`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住實測池深」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則，以及「生成 worker」的相關規則。
+- 目前 frozen equivalence baseline 為 `v1.6.7`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住每個已知城市的實測池深」規則、「Guest API 1000 筆分頁視窗是結束而不是失敗」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則，以及「生成 worker」的相關規則。
 
 ## 授權
 

@@ -89,23 +89,32 @@ An empty list page is a legitimate answer, not a failure: LinkedIn returns 26 by
 
 `fetch_jd` uses the same 30/60/90-second ladder across 4 attempts: a 429, a 5xx or a connection error is retried, any other 4xx is a caller bug and is not retried. A job whose JD never arrives has no JD text, and the Sheet writer skips such a row — so without this retry a throttled request did not fail the run, it made the posting disappear from it.
 
-#### LinkedIn range page budgets (2026-11-22)
+#### LinkedIn range page budgets (2026-11-22, re-measured 2026-11-23)
 
 The per-range page budget in the LinkedIn adapter's `TIME_RANGES` is a **ceiling, not a target**. The crawl ends itself after two consecutive pages with no new posting (`empty_streak`), so a city with a small pool stops early and a wider budget costs it nothing.
 
-A budget *below* the pool size truncates the crawl silently: the run reports success, and the postings past the budget are never seen. The budgets are therefore pinned to the pool depths measured against the live Guest API (Shanghai geoId `107388191`, 2026-11-22, walking the list API until it answered with an empty page):
+A budget *below* the pool size truncates the crawl silently: the run reports success, and the postings past the budget are never seen. The budgets are therefore pinned to the **deepest measured pool per range across every known city** — measured against the live Guest API by walking the list API until it answered with an empty page (Shanghai geoId `107388191` on 2026-11-22, Singapore geoId `102454443` on 2026-11-23):
 
-| Range | Time filter | Measured pool | Page budget |
-|---|---|---|---|
-| `1h` | `r3600` | under 50 | 5 |
-| `24h` | `r86400` | ~100 | 15 |
-| `3d` | `r259200` | ~250 | 35 |
-| `7d` | `r604800` | ~400 | 55 |
-| `14d` | `r1209600` | ~290 | 40 |
-| `21d` | `r1814400` | ~300 | 45 |
-| `30d` | `r2592000` | ~700 | 95 |
+| Range | Time filter | Shanghai pool | Singapore pool | Page budget |
+|---|---|---|---|---|
+| `1h` | `r3600` | under 50 | ~10 | 8 |
+| `24h` | `r86400` | ~100 | ~60 | 15 |
+| `3d` | `r259200` | ~250 | ~200 | 35 |
+| `7d` | `r604800` | ~400 | ~600 | 80 |
+| `14d` | `r1209600` | ~290 | >900 | 100 (API ceiling) |
+| `21d` | `r1814400` | ~300 | >900 | 100 (API ceiling) |
+| `30d` | `r2592000` | ~700 | ~900–980 | 100 (API ceiling) |
 
 The measurements are a floor: pools grow as postings are published, so every budget keeps headroom. The time filters themselves are unchanged, and an explicit `--max-pages` still overrides the default.
+
+#### The Guest API pagination ceiling (2026-11-23)
+
+`start=1000` answers **HTTP 400**, not an empty page (measured: `start=990` → 200 with an empty body, `start=1000` → 400). So 100 pages — 1000 postings — is the most a crawl can ever collect, and the budget for the long ranges is capped there rather than at a guess.
+
+Two rules follow:
+
+- **A non-429 4xx is raised immediately.** The adapter's docstring and the frozen contract both say a 4xx other than 429 is a caller bug and is not retried; the code used to call `raise_for_status()` inside the `try`, so the broad `except Exception` caught it and the page was retried four times (30+60+90s) before the crawl gave up. It now raises `FatalListPageError`, exactly like the JobStreet adapter.
+- **Reaching the ceiling is an end, not a failure.** A crawl that asks for an unreachable page ends with what it collected, instead of aborting the chunk and making the supervisor read the FAIL as a coverage gap.
 
 ### JobStreet
 
@@ -114,6 +123,24 @@ JobStreet exposes a public GraphQL endpoint. The list API accepts a single keywo
 HTML job pages are not a supported path.
 
 Every JobStreet list page goes through the same 30/60/90s retry ladder as LinkedIn (four attempts in total). A 429, a 5xx, a connection error or a JSON decode error sleeps and retries instead of aborting the keyword crawl; any other 4xx is raised immediately because it is a caller bug, not transient network trouble. Without this ladder a single transient failure ended the crawl, and a failure on the very first page produced zero jobs — the run then printed "無資料，結束" and exited 0, so the caller saw a successful run that had collected nothing. Acceptance for a JobStreet run therefore has to check that the list crawl actually produced pages, not only that the process exited 0.
+
+#### JobStreet range page budgets (2026-11-23)
+
+The JobStreet adapter's `MAX_PAGES` is a ceiling in the same sense as LinkedIn's. The list API states its own totals, so one request per keyword per range is enough to size the budget. Measured in Singapore on 2026-11-23:
+
+| Range | `daterange` | Largest keyword total | Pages needed | Page budget |
+|---|---|---|---|---|
+| `1h` | 1 day | 8 | 1 | 2 |
+| `24h` | 1 day | 8 | 1 | 4 |
+| `3d` | 3 | 292 | 15 | 20 |
+| `7d` | 7 | 955 | 48 | 62 |
+| `14d` | 14 | 1670 | 84 | 109 |
+| `21d` | 21 | 2403 | 121 | 155 |
+| `30d` | 30 | 3251 | 163 | 210 |
+
+Note the `daterange` parameter takes a **number of days**, not the CLI range name; the engine maps it through `JOBSTREET_TPR`. The budget is sized for the **largest** keyword's pool plus headroom, so the 50% soft-stop decides how much of it is used rather than the ceiling cutting a pool short.
+
+The five keywords share one `seen` set across the whole crawl, so the 50% soft-stop abandons a keyword as soon as a page yields fewer than 10 postings that are new across all keywords. In practice that means the first keyword is crawled to its own pool and the other four stop on their first page — the reason the old table's "expected ~600 unique for 7d" prediction did not hold.
 
 ### 104 (onezerofour)
 

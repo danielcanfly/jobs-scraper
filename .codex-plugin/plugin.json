@@ -1,6 +1,6 @@
 {
   "name": "jobs-scraper",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "Search jobs and initialize, audit, or sync a portable Region-Raw/Region-Selected Job Tracker with a local MCP workflow.",
   "skills": "./skills/"
 }

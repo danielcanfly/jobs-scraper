@@ -52,31 +52,41 @@ PAGE_SIZE = 10  # Guest API 實際 page size (不是 25)
 # time range 預設值 + 各 range 的 MAX_PAGES 建議
 #
 # 2026-11-22 v1.6.6 fix: 原本 30d 只給 25 頁 (250 筆), 但上海 30d 的池子有 700 筆
-# → 引擎預設值會安靜地截掉七成職缺。實測 (Shanghai geoId 107388191, 2026-11-22 走 list API
-# 逐頁探到空頁為止) 的各 range 池深:
+# → 引擎預設值會安靜地截掉七成職缺。
 #
-#   1h   池 < 50 筆      (start=0 → 1 筆, start=50 → 空)
-#   24h  池 ~100 筆     (start=100 → 空)
-#   3d   池 ~250 筆     (start=250 → 空)
-#   7d   池 ~400 筆     (start=400 → 空)
-#   14d  池 ~290 筆     (start=290 → 空)
-#   21d  池 ~300 筆     (start=300 → 空)
-#   30d  池 ~700 筆     (start=700 → 空)
+# 2026-11-23 v1.6.7 fix: 補測新加坡的池深 — 每個 range 的上限都必須蓋得住
+# **該 range 所有已知城市中最大的池子**, 不是只看上海。
+#
+# 實測池深 (走 list API 逐頁探到空頁為止; 2026-11-22 上海 / 2026-11-23 新加坡):
+#
+#   range | 上海池深        | 新加坡池深      | 需要頁數 | 本表上限
+#   1h    | <50 筆 (<5 頁)  | ~10 筆 (1 頁)   | 5        | 8
+#   24h   | ~100 筆 (10 頁) | ~60 筆 (6 頁)   | 10       | 15
+#   3d    | ~250 筆 (25 頁) | ~200 筆 (20 頁)  | 25       | 35
+#   7d    | ~400 筆 (40 頁) | ~600 筆 (60 頁)  | 60       | 80
+#   14d   | ~290 筆 (29 頁) | >900 筆 (90+ 頁) | 98       | 100 ← API 天花板
+#   21d   | ~300 筆 (30 頁) | >900 筆 (90+ 頁) | 98       | 100 ← API 天花板
+#   30d   | ~700 筆 (70 頁) | ~900-980 筆      | 98       | 100 ← API 天花板
+#
+# 14d/21d/30d 的上限不是「池子有多大」而是「API 能翻多深」: Guest API 在
+# start=1000 回 HTTP 400 (不是空頁), 所以 100 頁 = 1000 筆就是天花板。
+# 再往上加只會撞牆 (見 PAGINATION_CEILING 與 crawl_list 的分頁天花板處理)。
 #
 # 新的頁數上限都留 ~40% 餘裕 (池子會隨新職缺公告而變動)。重點不是「上限要剛好等於池深」,
 # 而是 crawl_list 遇到連續 2 頁 0 new 就當作到底 (empty_streak) → 池子小的城市不會多花時間,
 # 上限只當天花板用。所以把上限拉寬不會讓小池子變慢, 卻讓大池子不再被截斷。
 #
 # 舊值 (v1.6.5): 1h=1, 24h=4, 3d=7, 7d=15, 14d=30, 21d=30, 30d=25
-# → 1h/24h/3d/7d/30d 全部低於實測池深, 每一個都會安靜截斷。
+# v1.6.6:       1h=5, 24h=15, 3d=35, 7d=55, 14d=40, 21d=45, 30d=95
+# → v1.6.6 的 7d/14d/21d/30d 對新加坡來說還是太低。
 TIME_RANGES = {
-    "1h": ("r3600", 5),
+    "1h": ("r3600", 8),
     "24h": ("r86400", 15),
     "3d": ("r259200", 35),
-    "7d": ("r604800", 55),
-    "14d": ("r1209600", 40),
-    "21d": ("r1814400", 45),
-    "30d": ("r2592000", 95),
+    "7d": ("r604800", 80),
+    "14d": ("r1209600", 100),
+    "21d": ("r1814400", 100),
+    "30d": ("r2592000", 100),
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -109,6 +119,21 @@ JD_BLOCK_SEL = (
 
 #: Backoff ladder shared with the other sources: 30/60/90s, four attempts.
 BACKOFF = [30, 60, 90]
+
+#: The Guest API refuses to paginate past this `start` offset: it answers HTTP
+#: 400 instead of an empty page (measured 2026-11-23: start=990 → 200 with an
+#: empty body, start=1000 → HTTP 400). So 100 pages — 1000 postings — is the
+#: most a crawl can ever collect, and asking for more hits an API boundary
+#: rather than a bug.
+PAGINATION_CEILING = 1000
+
+
+class FatalListPageError(RuntimeError):
+    """A non-retryable list-page response (any 4xx other than 429).
+
+    Mirrors the JobStreet adapter: a 4xx that is not a rate limit is a caller
+    bug or an API boundary, and retrying it only burns the backoff ladder.
+    """
 
 
 def _clean(text_list) -> str:
@@ -209,8 +234,13 @@ def fetch_list_page(
     coverage 嚴重不完整。Retry 後單頁最多撐 3.5 分鐘 (30+60+90 backoff)。
 
     429 / 5xx / connection error → sleep 30/60/90s → retry (共 4 次 attempt)。
-    4xx (非 429) 直接 raise, 視為 caller bug。
-    Raises: RuntimeError if all retries exhausted.
+    4xx (非 429) 直接 raise (`FatalListPageError`), 視為 caller bug 或 API 分頁天花板。
+
+    2026-11-23 fix: 原本非 429 的 4xx 走 `r.raise_for_status()`, 而那個 HTTPError
+    被 `except Exception` 接走 → 被重試 4 次 (白等 3 分鐘) 才 abort。start=1000 的
+    分頁天花板 (HTTP 400) 就這樣拖慢整塊 crawl。
+
+    Raises: FatalListPageError for a non-429 4xx; RuntimeError if all retries exhausted.
     """
     backoff = BACKOFF
     last_err = None
@@ -229,7 +259,14 @@ def fetch_list_page(
             if r.status_code == 429 or r.status_code >= 500:
                 last_err = f"http {r.status_code}"
             else:
-                r.raise_for_status()
+                # 2026-11-23 fix: 原本在這裡 r.raise_for_status(), 而 HTTPError 會被
+                # 下面的 `except Exception` 接走 → 非 429 的 4xx 被重試 4 次
+                # (白等 30+60+90s) 才 abort, 跟 docstring 與凍結契約寫的
+                # 「4xx (非 429) 直接 raise」都不符。改成跟 JobStreet adapter 一樣,
+                # 用專屬例外立刻往外拋。
+                raise FatalListPageError(f"linkedin list fetch failed: http {r.status_code}")
+        except FatalListPageError:
+            raise
         except Exception as e:
             last_err = f"{type(e).__name__}: {str(e)[:50]}"
         if attempt < 3:

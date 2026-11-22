@@ -1,4 +1,4 @@
-# v1.6.6 Behaviour Equivalence Contract
+# v1.6.7 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -104,26 +104,41 @@ which is the behaviour the split had to preserve.
 
 ## Crawl-budget invariants
 
-26. A range's page budget must cover the pool that range actually has. The budget is a ceiling, not
-    a target: `crawl_list` ends a crawl after two consecutive pages with no new posting, so a city
-    with a small pool stops early and a wider budget costs it nothing. A budget below the pool size
-    truncates the crawl silently — the run reports success and the postings past the budget are never
-    seen. The budgets are pinned to the pool depths measured against the live Guest API
-    (Shanghai, geoId 107388191, 2026-11-22): 1h < 50, 24h ~100, 3d ~250, 7d ~400, 14d ~290,
-    21d ~300, 30d ~700 postings.
-27. The time filter of every range is unchanged (`r3600`, `r86400`, `r259200`, `r604800`, `r1209600`,
+26. A range's page budget must cover the pool that range actually has, in **every** known city, not
+    only the one it was measured in first. The budget is a ceiling, not a target: `crawl_list` ends a
+    crawl after two consecutive pages with no new posting, so a city with a small pool stops early and
+    a wider budget costs it nothing. A budget below the pool size truncates the crawl silently — the
+    run reports success and the postings past the budget are never seen. The LinkedIn budgets are
+    pinned to the deepest measured pool per range (Shanghai geoId 107388191 on 2026-11-22, Singapore
+    geoId 102454443 on 2026-11-23): 1h 8 pages, 24h 15, 3d 35, 7d 80, and 100 for 14d/21d/30d.
+27. The JobStreet budgets are pinned to the totals the JobStreet API states for itself (Singapore,
+    2026-11-23), sized for the largest keyword's pool plus headroom: 1h 2 pages, 24h 4, 3d 20, 7d 62,
+    14d 109, 21d 155, 30d 210. The JobStreet `daterange` parameter takes a number of days, mapped
+    through `JOBSTREET_TPR` — never the CLI range name.
+28. The time filter of every range is unchanged (`r3600`, `r86400`, `r259200`, `r604800`, `r1209600`,
     `r1814400`, `r2592000`); only the budget moves. An explicit `--max-pages` still overrides the
-    default.
+    default, and no budget ever shrinks.
+
+## Pagination-ceiling invariants
+
+29. The Guest API refuses to paginate past `start=1000`: it answers HTTP 400 rather than an empty
+    page. A budget beyond 100 pages buys nothing, and a crawl that asks for an unreachable page ends
+    with what it collected instead of aborting — the ceiling is an end, not a failure, so a supervisor
+    never reads it as a coverage gap.
+30. A non-429 4xx on a LinkedIn list page is raised immediately. The retry ladder is for transient
+    failures (429, 5xx, connection error); a 4xx that is not a rate limit is a caller bug, and
+    retrying it only burns the backoff ladder. The LinkedIn adapter raises `FatalListPageError` for
+    it, exactly as the JobStreet adapter does.
 
 ## Sheet-target invariants
 
-28. The pre-detail dedup reads the tab the run is about to write to. The target gid is resolved with
+31. The pre-detail dedup reads the tab the run is about to write to. The target gid is resolved with
     the same precedence the writer uses — explicit `--gid`, then the `#gid=` inside `--to-sheet`,
     then the source-label mapping — and it is threaded into the loader, into the generated worker and
     into `main()`. A label→gid table alone is not a target: "LinkedIn / Minimax" points at SG-Raw,
     so a China run compared its postings against Singapore's tab and paid for a JD fetch round that
     the writer was going to discard.
-29. With no target given, the label→gid mapping still applies, so the Singapore and Taiwan flows
+32. With no target given, the label→gid mapping still applies, so the Singapore and Taiwan flows
     behave exactly as before. An explicit target is authoritative and does not require a known label.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new

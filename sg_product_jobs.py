@@ -2208,6 +2208,16 @@ def cake_human_sleep(label: str = ""):
     return _cake.human_sleep(label, sleep=time.sleep)
 
 
+def _is_pagination_ceiling(start: int, exc: Exception) -> bool:
+    """這個 list 失敗是不是「撞到 Guest API 的分頁天花板」?
+
+    2026-11-23 實測: `start` 超過 1000 時 API 回 HTTP 400 (不是空頁)。那是
+    「已經拿不到更多了」而不是失敗 —— 當成到底, 不要讓整塊 crawl abort,
+    否則 supervisor 會把這塊判成 coverage 有缺口。
+    """
+    return start >= _linkedin.PAGINATION_CEILING and isinstance(exc, _linkedin.FatalListPageError)
+
+
 def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str = GEO_ID) -> list[dict]:
     seen: set[str] = set()
     all_jobs: list[dict] = []
@@ -2221,6 +2231,9 @@ def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str =
         try:
             html = fetch_list_page(tpr, start, location, geo_id)
         except Exception as e:
+            if _is_pagination_ceiling(start, e):
+                print(f"            到底了 (API 分頁天花板 start={start}, 已無法再往後翻)")
+                break
             print(f"            FAIL: {type(e).__name__}: {e}")
             return all_jobs
         Path(f"raw_list_{p + 1}.html").write_text(html)
