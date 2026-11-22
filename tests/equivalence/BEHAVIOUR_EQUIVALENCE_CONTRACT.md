@@ -1,4 +1,4 @@
-# v1.6.5 Behaviour Equivalence Contract
+# v1.6.6 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -101,6 +101,30 @@ which is the behaviour the split had to preserve.
     a connection error sleeps 30/60/90s and retries, for four attempts in total; any other 4xx is
     not retried. A JD that never arrives must not make the posting disappear from the Sheet, so the
     ladder is part of the write contract rather than an optimisation.
+
+## Crawl-budget invariants
+
+26. A range's page budget must cover the pool that range actually has. The budget is a ceiling, not
+    a target: `crawl_list` ends a crawl after two consecutive pages with no new posting, so a city
+    with a small pool stops early and a wider budget costs it nothing. A budget below the pool size
+    truncates the crawl silently — the run reports success and the postings past the budget are never
+    seen. The budgets are pinned to the pool depths measured against the live Guest API
+    (Shanghai, geoId 107388191, 2026-11-22): 1h < 50, 24h ~100, 3d ~250, 7d ~400, 14d ~290,
+    21d ~300, 30d ~700 postings.
+27. The time filter of every range is unchanged (`r3600`, `r86400`, `r259200`, `r604800`, `r1209600`,
+    `r1814400`, `r2592000`); only the budget moves. An explicit `--max-pages` still overrides the
+    default.
+
+## Sheet-target invariants
+
+28. The pre-detail dedup reads the tab the run is about to write to. The target gid is resolved with
+    the same precedence the writer uses — explicit `--gid`, then the `#gid=` inside `--to-sheet`,
+    then the source-label mapping — and it is threaded into the loader, into the generated worker and
+    into `main()`. A label→gid table alone is not a target: "LinkedIn / Minimax" points at SG-Raw,
+    so a China run compared its postings against Singapore's tab and paid for a JD fetch round that
+    the writer was going to discard.
+29. With no target given, the label→gid mapping still applies, so the Singapore and Taiwan flows
+    behave exactly as before. An explicit target is authoritative and does not require a known label.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.

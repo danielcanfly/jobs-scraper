@@ -89,6 +89,24 @@ An empty list page is a legitimate answer, not a failure: LinkedIn returns 26 by
 
 `fetch_jd` uses the same 30/60/90-second ladder across 4 attempts: a 429, a 5xx or a connection error is retried, any other 4xx is a caller bug and is not retried. A job whose JD never arrives has no JD text, and the Sheet writer skips such a row — so without this retry a throttled request did not fail the run, it made the posting disappear from it.
 
+#### LinkedIn range page budgets (2026-11-22)
+
+The per-range page budget in the LinkedIn adapter's `TIME_RANGES` is a **ceiling, not a target**. The crawl ends itself after two consecutive pages with no new posting (`empty_streak`), so a city with a small pool stops early and a wider budget costs it nothing.
+
+A budget *below* the pool size truncates the crawl silently: the run reports success, and the postings past the budget are never seen. The budgets are therefore pinned to the pool depths measured against the live Guest API (Shanghai geoId `107388191`, 2026-11-22, walking the list API until it answered with an empty page):
+
+| Range | Time filter | Measured pool | Page budget |
+|---|---|---|---|
+| `1h` | `r3600` | under 50 | 5 |
+| `24h` | `r86400` | ~100 | 15 |
+| `3d` | `r259200` | ~250 | 35 |
+| `7d` | `r604800` | ~400 | 55 |
+| `14d` | `r1209600` | ~290 | 40 |
+| `21d` | `r1814400` | ~300 | 45 |
+| `30d` | `r2592000` | ~700 | 95 |
+
+The measurements are a floor: pools grow as postings are published, so every budget keeps headroom. The time filters themselves are unchanged, and an explicit `--max-pages` still overrides the default.
+
 ### JobStreet
 
 JobStreet exposes a public GraphQL endpoint. The list API accepts a single keyword per request, so the integration issues one request per keyword and de-duplicates by `job_id` across keywords. JD text is retrieved from the GraphQL `jobDetails.job.content` field and converted to plain text.
@@ -176,6 +194,18 @@ Do not deduplicate solely by human-visible URL text.
 The scraper may maintain local crawl/cache state such as `seen_jds.jsonl`. Therefore `crawl_jobs` is correctly not advertised as filesystem read-only even though it never writes Google Sheets.
 
 **`seen_jds.jsonl` is a single source of truth.** Every execution context (the plugin runtime and any working copy) must read and append the same file. Two independent copies cause silent duplicates: a job fetched in one context is not recognised as seen in the other, and the same posting is written to the Sheet twice.
+
+### Pre-detail dedup reads the target tab (2026-11-22)
+
+The pre-detail dedup (the pass that skips postings already on the Sheet *before* their JD is fetched) must read **the tab the run is about to write to**. The target gid is resolved with the same precedence the writer uses:
+
+```text
+explicit --gid  >  the #gid= inside --to-sheet  >  the source-label mapping
+```
+
+and it is threaded into the loader, into the generated worker and into `main()`. With no target given, the label→gid mapping still applies, so the Singapore and Taiwan flows behave exactly as before.
+
+A label→gid table alone is not a target: `"LinkedIn / Minimax"` points at `SG-Raw`, so a China run used to compare its postings against Singapore's tab, keep every one of them, and pay for a JD fetch round that the Sheet writer was going to discard anyway. Only the cross-run JSON cache hid the cost; a cache miss meant a whole extra JD crawl for postings that were never new.
 
 ## 8. Portable Google Sheet contract
 

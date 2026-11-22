@@ -8,7 +8,7 @@
 
 这是一个面向 LinkedIn 职位的本地爬虫与追踪工具，主要用于产品管理相关岗位，并提供 CLI、本地 STDIO MCP server、Agent Skill，以及可携带的 Google 表格职位追踪表。
 
-`jobs-scraper` v1.6.5 在五个来源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）抓取产品管理职位，并提供完整 JD enrichment 与追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
+`jobs-scraper` v1.6.6 在五个来源（`linkedin`、`jobstreet`、`cake`、`104` / `onezerofour`）抓取产品管理职位，并提供完整 JD enrichment 与追踪流程。整套工具保持本地优先，保留明确的安全 gate，并可按需将结果同步到用户自己的 Google 表格。
 
 ## 概览
 
@@ -341,7 +341,9 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本与发布说明
 
-`v1.6.5` 为当前版本：修掉两个会让一轮 run 静默死掉的 LinkedIn Guest API 问题。合法的空 list page 只有 26 bytes、解析不出 root，原本 list parser 会直接 raise，于是 page loop、chunk、整轮 run 一起死 —— 2026-11-21 有一个城市的 crawl 三个块全部这样死掉、一列都没写进 Sheet，process 还 exit 0。现在空页会被解析成 0 笔，crawl 会继续抓下一页；而且空页依然不会被重试，因为它是合法答案而不是故障。JD 抓取也补上跟 list fetch 同一套 30/60/90s retry ladder：429、5xx、连接错误会重试而不是放弃 —— 因为没有 JD 的职位会被 Sheet 写入层整列跳过，等于职位就这样从 run 里消失。两个修正都跟中国无关，是 Guest API 的通性，每个 region 都会踩到。中国变成三个可抓的城市，而且中国职位不再带签证判断。`China` 是上海，`Hangzhou` 与 `Shenzhen` 各自是独立的 region，geoId 已实抓验证（`101821877`、`106750182`）；三个都写进同一张 `China-Raw`，城市是 opt-in，预设 region 仍是 `SG` / `TW` / `China`。中国专属的国籍字眼（`Chinese citizens only`、`仅限中国公民`、`必须为中国公民`、`上海户口优先`、`中国人优先`）已从签证判断移除——台湾人可拿通行证入职——但新加坡／台湾的通用判断完全不变。爬虫路径也可以被指定要走哪一条出口。LinkedIn Guest API 在某些网络区段对直连回 HTTP 451，Google Sheets API 在同一种环境直连会 timeout，但走 proxy 两边都正常。用 `JOBS_SCRAPER_PROXY`（或标准的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）指定，`doctor` 会显示目前生效的 proxy 并探它还活着吗；都没设就维持直连。较早版本：
+`v1.6.6` 为当前版本：两个问题长得同一副样子 —— run 看起来成功，实际上安静地少做了该做的事。一个 range 的页数上限必须盖得住那个 range 真正的池子。LinkedIn 的 range 表原本给 `30d` 25 页（250 笔），但上海 30 天的池子有约 700 笔，于是 crawl 在上限处停下、run 回报成功、剩下的职位从来没有被看见。新的上限依 2026-11-22 对 Guest API 实测的池深设定（`1h` 少于 50、`24h` 约 100、`3d` 约 250、`7d` 约 400、`14d` 约 290、`21d` 约 300、`30d` 约 700 笔）。上限是天花板而不是目标：crawl 连续 2 页没有新职位就会自己结束，所以池子小的城市照样提前停，放宽上限对它们没有成本。pre-detail dedup 现在读的是这一轮要写进去的那个分页 —— 目标 gid 的解析跟写入层一致（explicit `--gid` → `--to-sheet` 里的 `#gid=` → label 映射），不再让 `LinkedIn / Minimax` 一律读 `SG-Raw`，那会让中国的 run 去抓 Sheet 根本不会写进去的职位 JD。发布流程也恢复绿灯：v1.6.5 有 bump 包版本却没 bump `uv.lock`，CI 在第一道关卡就挂掉，GitHub 上一直是红的。
+
+- `v1.6.5` 修掉两个会让一轮 run 静默死掉的 LinkedIn Guest API 问题。合法的空 list page 只有 26 bytes、解析不出 root，原本 list parser 会直接 raise，于是 page loop、chunk、整轮 run 一起死 —— 2026-11-21 有一个城市的 crawl 三个块全部这样死掉、一列都没写进 Sheet，process 还 exit 0。现在空页会被解析成 0 笔，crawl 会继续抓下一页；而且空页依然不会被重试，因为它是合法答案而不是故障。JD 抓取也补上跟 list fetch 同一套 30/60/90s retry ladder：429、5xx、连接错误会重试而不是放弃 —— 因为没有 JD 的职位会被 Sheet 写入层整列跳过，等于职位就这样从 run 里消失。两个修正都跟中国无关，是 Guest API 的通性，每个 region 都会踩到。中国变成三个可抓的城市，而且中国职位不再带签证判断。`China` 是上海，`Hangzhou` 与 `Shenzhen` 各自是独立的 region，geoId 已实抓验证（`101821877`、`106750182`）；三个都写进同一张 `China-Raw`，城市是 opt-in，预设 region 仍是 `SG` / `TW` / `China`。中国专属的国籍字眼（`Chinese citizens only`、`仅限中国公民`、`必须为中国公民`、`上海户口优先`、`中国人优先`）已从签证判断移除——台湾人可拿通行证入职——但新加坡／台湾的通用判断完全不变。爬虫路径也可以被指定要走哪一条出口。LinkedIn Guest API 在某些网络区段对直连回 HTTP 451，Google Sheets API 在同一种环境直连会 timeout，但走 proxy 两边都正常。用 `JOBS_SCRAPER_PROXY`（或标准的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`）指定，`doctor` 会显示目前生效的 proxy 并探它还活着吗；都没设就维持直连。较早版本：
 
 - `v1.6.4` 中国变成三个可抓的城市，并移除中国专属的签证判断。
 
@@ -360,7 +362,7 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 对外提供 MCP server 版本。
-- 当前 frozen equivalence baseline 为 `v1.6.5`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则，以及「生成 worker」的相关规则。
+- 当前 frozen equivalence baseline 为 `v1.6.6`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则、「range 的页数上限必须盖得住实测池深」规则、「pre-detail dedup 读的是要写入的那个分页」规则，以及「生成 worker」的相关规则。
 
 ## 许可
 

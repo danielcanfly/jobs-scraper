@@ -1629,7 +1629,10 @@ def _load_sheet_keys(existing: list[list[str]]) -> tuple[set[tuple[str, str]], i
 
 
 def _load_sheet_keys_for_source(
-    sheet_source_label: str, sa_key_path: str = SHEET_SA_KEY, sheet_id: str = ""
+    sheet_source_label: str,
+    sa_key_path: str = SHEET_SA_KEY,
+    sheet_id: str = "",
+    gid: int | str | None = None,
 ) -> tuple[set[tuple[str, str]], int]:
     """讀指定 sheet tab 的 (source, job_id) keys + 下一個空白 row (B 階段 2026-08-29 加,
     A 整合版 2026-08-29 抽出來共用給 pre-dedup 跟 push_to_sheet)。
@@ -1639,9 +1642,16 @@ def _load_sheet_keys_for_source(
                             "JobStreet / Minimax" / "104 / Minimax" / "Cake / Minimax"
         sa_key_path: SA key 路徑 (預設 SHEET_SA_KEY)
         sheet_id: Sheet ID (留空用 SG_RAW_SHEET_ID 預設；104/Cake 與 SG sources 使用同一 Spreadsheet 的 TW/SG 不同 tab)
+        gid: 目標 worksheet gid (2026-11-22 v1.6.6 新增)。不指定時走 label→gid 映射;
+             指定時以 gid 為準 (跟 push_to_sheet 的「explicit arg > URL #gid= > 預設」同一套優先序)。
 
     Returns: (existing_keys, next_row)
     Raises: gspread 任何錯誤往上拋 (caller 決定 fail-safe 或 fail-closed)
+
+    2026-11-22 v1.6.6 fix: 原本 label→gid 映射把 "LinkedIn / Minimax" 固定指向 SG_Raw,
+    所以抓中國職缺時 pre-dedup 讀的是 SG-Raw 而不是目標分頁 (China-Raw) → 中國職缺
+    在抓 JD 前沒被擋掉, 靠跨 run JSON cache 補救, cache 沒命中就白抓一輪 JD。
+    修法: 讓呼叫端把目標 gid 傳進來; 沒傳才 fallback 到原本的映射 (SG/TW 既有流程行為不變)。
     """
     import gspread
     from google.oauth2.service_account import Credentials
@@ -1655,9 +1665,12 @@ def _load_sheet_keys_for_source(
         "Cake / Minimax": CAKE_TW_RAW_GID,
         "104 / Minimax": ONEZEROFOUR_TW_RAW_GID,
     }
-    gid = LABEL_TO_GID.get(sheet_source_label)
     if gid is None:
-        raise ValueError(f"未知 sheet_source_label {sheet_source_label!r}, 預期 {list(LABEL_TO_GID.keys())}")
+        resolved_gid = LABEL_TO_GID.get(sheet_source_label)
+        if resolved_gid is None:
+            raise ValueError(f"未知 sheet_source_label {sheet_source_label!r}, 預期 {list(LABEL_TO_GID.keys())}")
+    else:
+        resolved_gid = gid
 
     if not sheet_id:
         sheet_id = SG_RAW_SHEET_ID
@@ -1672,7 +1685,7 @@ def _load_sheet_keys_for_source(
     gc = gspread.authorize(creds, session=_make_gspread_session())
     _apply_http_timeout(gc, timeout=30)
     sh = gc.open_by_key(sheet_id)
-    ws = sh.get_worksheet_by_id(int(gid))
+    ws = sh.get_worksheet_by_id(int(resolved_gid))
     existing = ws.get_all_values()
     return _load_sheet_keys(existing)
 
@@ -1697,6 +1710,29 @@ def _apply_http_timeout(gc, timeout: int = 30) -> None:
         gc.http_client.set_timeout(timeout)
 
 
+def _resolve_pre_dedup_target(args) -> tuple[int | str | None, str]:
+    """解析 pre-dedup 該讀哪個分頁 / 哪個 spreadsheet。
+
+    2026-11-22 v1.6.6 新增。gid 優先序跟 push_to_sheet 完全一致:
+    explicit `--gid` > `--to-sheet` URL 內的 `#gid=` > 都沒有 (→ 走 label→gid 映射)。
+
+    回傳 (gid, sheet_id); sheet_id 取不到就回 "" (讓 loader 用預設的 SG_RAW_SHEET_ID),
+    不在這裡拋錯 —— 真正寫入時 push_to_sheet 仍會照原來的規則報錯, 這裡不改變錯誤發生的時機。
+    """
+    gid: int | str | None = args.gid
+    sheet_id = ""
+    to_sheet = getattr(args, "to_sheet", None)
+    if to_sheet:
+        url_gid = extract_gid(to_sheet)
+        if gid is None and url_gid is not None:
+            gid = url_gid
+        try:
+            sheet_id = extract_sheet_id(to_sheet)
+        except ValueError:
+            sheet_id = ""
+    return gid, sheet_id
+
+
 def pre_dedup_jobs_against_sheet(
     jobs: list[dict],
     sheet_source_label: str,
@@ -1704,6 +1740,8 @@ def pre_dedup_jobs_against_sheet(
     sa_key_path: str = SHEET_SA_KEY,
     dry_run: bool = False,
     timeout_s: int = 60,
+    gid: int | str | None = None,
+    sheet_id: str = "",
 ) -> list[dict]:
     """Pre-detail sheet dedup (B 階段 2026-08-29 優化, A 整合版 2026-08-29 補上 main() 流程):
 
@@ -1717,6 +1755,10 @@ def pre_dedup_jobs_against_sheet(
     subprocess 裡, timeout 真的能 kill 整個 subprocess (signal.SIGALRM 在 urllib3 C-level
     socket 跟 thread.interrupt_main() 在 gspread 全無效, 只能靠 subprocess.terminate())。
     timeout_s=0 時 in-process 呼叫 (給 test mock 用)。
+
+    gid (2026-11-22 v1.6.6 新增): 目標分頁 gid。不指定 → 走 label→gid 映射 (SG/TW 既有行為);
+    指定 → 直接讀那個分頁。少了這條的話, 抓中國職缺時 pre-dedup 讀的是 SG-Raw 而不是
+    China-Raw → 中國職缺抓 JD 前不會被擋掉 (靠跨 run JSON cache 補救, cache 沒命中就白抓一輪)。
     """
     if dry_run or not jobs:
         return jobs
@@ -1725,13 +1767,21 @@ def pre_dedup_jobs_against_sheet(
     load_ok = True
     if timeout_s > 0:
         # 生產模式: 用 subprocess 包 gspread, 真的能 kill
-        existing_keys, load_ok = _pre_dedup_load_with_subprocess(sheet_source_label, sa_key_path, timeout_s)
+        subprocess_kwargs: dict = {}
+        if gid is not None:
+            subprocess_kwargs["gid"] = gid
+        existing_keys, load_ok = _pre_dedup_load_with_subprocess(
+            sheet_source_label, sa_key_path, timeout_s, **subprocess_kwargs
+        )
         if not load_ok:
             return jobs
     else:
         # 測試模式: in-process 呼叫, 可被 mock
+        loader_kwargs: dict = {"sa_key_path": sa_key_path, "sheet_id": sheet_id}
+        if gid is not None:
+            loader_kwargs["gid"] = gid
         try:
-            existing_keys, _ = _load_sheet_keys_for_source(sheet_source_label, sa_key_path=sa_key_path)
+            existing_keys, _ = _load_sheet_keys_for_source(sheet_source_label, **loader_kwargs)
         except Exception as e:
             print(f"  [PRE-DEDUP WARN] 讀 sheet 失敗 ({type(e).__name__}: {e}), 跳過這層 dedup", flush=True)
             return jobs
@@ -1761,14 +1811,20 @@ def _py_literal(value) -> str:
     return repr(value)
 
 
-def _build_pre_dedup_worker_code(sheet_source_label: str, sa_key_path: str, out_path: str) -> str:
+def _build_pre_dedup_worker_code(
+    sheet_source_label: str, sa_key_path: str, out_path: str, gid: int | str | None = None
+) -> str:
     """產生 pre-dedup worker 的 Python source。
 
     獨立成函式是為了能直接測「產生的 code 是合法 Python」—— 2026-11-19 的
     gid=None bug 就是活在這種 code template 裡，沒有 builder 就只能靠真的
     跑一次 Sheet 寫入才看得到。
+
+    gid (2026-11-22 v1.6.6): 目標分頁 gid，None 時不傳（走 label→gid 映射）。
     """
     import os as _os
+
+    gid_arg = "" if gid is None else f", gid={_py_literal(gid)}"
 
     worker_code = f"""
 import sys, json
@@ -1778,7 +1834,7 @@ out_path = __OUT_PATH__
 try:
     existing, next_row = M._load_sheet_keys_for_source(
         {_py_literal(sheet_source_label)},
-        sa_key_path={_py_literal(str(sa_key_path))},
+        sa_key_path={_py_literal(str(sa_key_path))}{gid_arg},
     )
     with open(out_path, "w") as f:
         json.dump({{"ok": True, "keys": [list(k) for k in existing]}}, f, ensure_ascii=False)
@@ -1789,9 +1845,13 @@ except Exception as e:
     return worker_code.replace("__OUT_PATH__", _py_literal(out_path))
 
 
-def _pre_dedup_load_with_subprocess(sheet_source_label: str, sa_key_path: str, timeout_s: int) -> tuple[set, bool]:
+def _pre_dedup_load_with_subprocess(
+    sheet_source_label: str, sa_key_path: str, timeout_s: int, gid: int | str | None = None
+) -> tuple[set, bool]:
     """2026-08-29 加: 跑 _load_sheet_keys_for_source 在獨立 subprocess, timeout 真的能 kill。
     返回 (existing_keys, success_flag)。失敗時 success_flag=False, existing_keys 為空 set。
+
+    gid (2026-11-22 v1.6.6): 目標分頁 gid，透傳給 worker。
     """
     import json as _json
     import os as _os
@@ -1803,7 +1863,7 @@ def _pre_dedup_load_with_subprocess(sheet_source_label: str, sa_key_path: str, t
     with _tf.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         worker_path = f.name
     out_path = worker_path + ".out"
-    final_code = _build_pre_dedup_worker_code(sheet_source_label, sa_key_path, out_path)
+    final_code = _build_pre_dedup_worker_code(sheet_source_label, sa_key_path, out_path, gid=gid)
     with open(worker_path, "w") as f:
         f.write(final_code)
 
@@ -2884,8 +2944,17 @@ def main():
 
     # 1.7) Pre-detail sheet dedup (B 階段 2026-08-29 優化, A 整合版 2026-08-29 補上):
     #        進 detail 之前先讀 sheet 跳過已存在 jobs, 重跑時可省 70-99% detail calls
+    # 2026-11-22 v1.6.6: 把「目標分頁 gid」傳進去, 讓 pre-dedup 讀的跟最後寫入的是同一頁。
+    #        解析順序跟 push_to_sheet 一致: explicit --gid > --to-sheet URL 內 #gid= > 沒指定 (走 label 映射)。
     if args.with_jd and not args.refetch:
-        jobs = pre_dedup_jobs_against_sheet(jobs, args.sheet_source, dry_run=False)
+        target_gid, target_sheet_id = _resolve_pre_dedup_target(args)
+        jobs = pre_dedup_jobs_against_sheet(
+            jobs,
+            args.sheet_source,
+            dry_run=False,
+            gid=target_gid,
+            sheet_id=target_sheet_id,
+        )
 
     # 2) 抓 JD (可選)
     stats = None

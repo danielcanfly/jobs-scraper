@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.6.6 — 2026-11-22
+
+A crawl that stops early still reports success, and a dedup pass that reads the wrong tab still looks like it worked. Both happened.
+
+Fixed
+
+- **A range's page budget now covers the pool that range actually has.** The LinkedIn range table gave `30d` a 25-page budget — 250 postings — while Shanghai's 30-day pool holds about 700. The crawl stopped at the budget, the run reported success, and the postings past the budget were never seen at all: the 2026-11-22 Shanghai 30d run collected 700 postings where the default would have collected 250. The same held for every other range. Measured against the live Guest API on 2026-11-22 by walking the list API until it answered with an empty page (Shanghai, geoId `107388191`): `1h` under 50, `24h` about 100, `3d` about 250, `7d` about 400, `14d` about 290, `21d` about 300, `30d` about 700 postings. The budgets are now `5 / 15 / 35 / 55 / 40 / 45 / 95` pages. A budget is a ceiling, not a target — the crawl ends itself after two consecutive pages with no new posting — so a city with a small pool still stops early and a wider budget costs it nothing. The time filters themselves are unchanged, and an explicit `--max-pages` still overrides the default.
+- **The pre-detail dedup reads the tab the run is about to write to.** The dedup pass that skips postings already on the Sheet *before* fetching their JD resolved its worksheet from a label→gid table in which `"LinkedIn / Minimax"` always pointed at `SG-Raw`. A China run therefore compared its postings against Singapore's tab, kept every one of them, and paid for a full JD fetch round that the Sheet writer was going to discard anyway. Only the cross-run JSON cache hid the cost; a cache miss meant a whole extra JD crawl for postings that were never new. The target gid is now resolved with the same precedence the writer uses — explicit `--gid`, then the `#gid=` inside `--to-sheet`, then the label mapping — and threaded into the loader, into the generated worker and into `main()`. With no target given, the label mapping still applies, so the Singapore and Taiwan flows behave exactly as before.
+- **The release pipeline is green again.** v1.6.5 bumped `pyproject.toml` but not `uv.lock`, so CI failed at its first gate (`uv lock --check`) and stayed red on GitHub. The lockfile is regenerated and the Agent Skill's version line — which had been left behind at v1.6.4 — moves with the rest of the build.
+
+Acceptance
+
+- `tests/test_linkedin_range_pages_v166.py` (7 tests) pins every range's budget to its measured pool depth, that no budget shrank, that the time filters are unchanged, that the engine uses the adapter's table, and that an explicit `--max-pages` still wins.
+- `tests/test_pre_dedup_target_gid_v166.py` (17 tests) pins that an explicit gid beats the label mapping, that the label mapping still applies without one, that an unknown label is still rejected without one, that the gid reaches the loader and the generated worker (as a Python literal), that a job already on the target tab is dropped before any JD fetch, and that `main()` hands the resolved target to the dedup pass.
+- The behaviour-equivalence freeze moves to `freeze_version 11` with new crawl-budget and Sheet-target invariant sections; the frozen v1.3.0 golden stays untouched.
+
 ## v1.6.5 — 2026-11-21
 
 Two LinkedIn Guest API failures that could end a run quietly.
