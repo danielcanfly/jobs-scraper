@@ -152,6 +152,8 @@ The cost is proportional: JobStreet list requests multiply by about five and the
 
 104 uses its public job API. The sheet identity for a 104 job is the 5-character path slug; the numeric job number is retained separately for audit/debug only. The area list is hard-wired and is not affected by `--location`. 104 always writes TW-Raw.
 
+The 104 adapter must send the request the way a browser's XHR does: the `sec-fetch-dest` / `sec-fetch-mode` / `sec-fetch-site` header group, plus `x-requested-with: XMLHttpRequest` and `Origin`. Without them 104's jobs search API answers 403 while its homepage answers 200, and the source dies quietly as "no jobs" instead of as an error. The 104 list and detail fetches also use the shared proxy resolution — a direct request from some networks is refused as well.
+
 ### Cake
 
 Cake list search uses `https://api.cake.me/api/client/v2/jobs/search`. The integration also documents `api/client/v2/jobs/facet-search` and `api/client/v2/jobs/query-suggestion/search`. Search items include job `path`, company `page.path`, and list `description`; the runtime builds the public detail URL from the path fields and retains list `description` as JD fallback when public detail HTML is unavailable.

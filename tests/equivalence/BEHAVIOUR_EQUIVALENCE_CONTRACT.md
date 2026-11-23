@@ -1,4 +1,4 @@
-# v1.6.8 Behaviour Equivalence Contract
+# v1.6.9 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -73,6 +73,12 @@ which is the behaviour the split had to preserve.
 19. A proxy that is configured but dead fails every source at once. The doctor therefore probes
     the configured proxy and reports it, rather than letting the failure surface as an empty
     crawl much later.
+20. Every adapter that talks to a third party sends the request the way a browser would. The
+    104 adapter is the case in point: without the `sec-fetch-dest` / `sec-fetch-mode` /
+    `sec-fetch-site` group (plus `x-requested-with` and `Origin`) the 104 jobs search API
+    answers 403 while its homepage answers 200 — the source dies quietly as "no jobs", not as
+    an error. A source-specific bot-protection requirement is part of the source's contract and
+    must not be trimmed away; a source that is silently empty is worse than one that fails.
 
 ## China-region invariants
 

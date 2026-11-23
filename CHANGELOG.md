@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6.9 — 2026-11-24
+
+The 104 source talks to 104 the way a browser does — or it talks to nobody.
+
+Fixed
+
+- **104's jobs search API was answering 403 and nobody noticed.** The homepage returned 200, but `/jobs/search/api/jobs` returned a block page for every request. Two things were missing: the `sec-fetch-dest` / `sec-fetch-mode` / `sec-fetch-site` header group (a browser's XHR always sends them and 104's bot protection looks at them), and the shared proxy resolution — a direct request from this machine is refused as well, the proxy is not. The adapter now sends both, together with `x-requested-with: XMLHttpRequest` and `Origin`.
+- The 104 list and detail fetches now pass `proxies=resolve_proxies()`, so the 104 adapter obeys the same single resolver as LinkedIn, JobStreet and Cake. It has no source-specific proxy variable of its own.
+- The symptom was the dangerous kind: an empty crawl, not an error. `無資料，結束` with exit 0 looked like "Taiwan has no product jobs this week". It did not — the request never reached the API.
+
+Acceptance
+
+- `tests/test_onezerofour_headers_proxy.py` (7 tests) pins the three `sec-fetch-*` headers, `x-requested-with` and `Origin`, that the detail request keeps its own referer, that the list and detail fetches pass the resolved proxy, that no proxy configured means a direct connection, and that the adapter reads no proxy variable of its own.
+- Verified against the live API: the list page returns 22 postings and the detail API returns the full job description.
+
 ## v1.6.8 — 2026-11-23
 
 A five-keyword crawl that crawled one keyword.

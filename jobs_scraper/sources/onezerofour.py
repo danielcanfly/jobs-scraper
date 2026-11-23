@@ -19,6 +19,8 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Iterable
 
+from jobs_scraper.sources import resolve_proxies
+
 LIST_API = "https://www.104.com.tw/jobs/search/api/jobs"
 DETAIL_API = "https://www.104.com.tw/job/ajax/content/{slug}"  # {slug} placeholder
 BASE_URL = "https://www.104.com.tw"
@@ -81,12 +83,25 @@ def keywords() -> list[str]:
 
 
 def headers(referer: str = "https://www.104.com.tw/jobs/search/") -> dict[str, str]:
-    """104 共用 header, referer 預設 list page (detail API 要換成 /job/{slug})。"""
+    """104 共用 header, referer 預設 list page (detail API 要換成 /job/{slug})。
+
+    2026-11-24 實測: 少了 `sec-fetch-*` 這組, 104 的 jobs search API 一律回 403
+    (首頁 200, 但 /jobs/search/api/jobs 被擋)。瀏覽器的 XHR 會帶這三個
+    sec-fetch-* header, 104 的 bot 保護會看它們 → 少了就當成非同源請求擋掉。
+    `x-requested-with: XMLHttpRequest` + `origin` 一起補上, 跟真實 XHR 一致。
+
+    另外這台機直連 104 API 也回 403 (經 proxy 才 200) → 走共用 proxy 解析。
+    """
     return {
         "User-Agent": _UA,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
         "Referer": referer,
+        "Origin": BASE_URL,
+        "x-requested-with": "XMLHttpRequest",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
     }
 
 
@@ -131,7 +146,13 @@ def hit_list(
     last_err = None
     for attempt in range(max_retries + 1):
         try:
-            r = session.get(url, headers=headers(), timeout=30, impersonate="chrome")
+            r = session.get(
+                url,
+                headers=headers(),
+                timeout=30,
+                impersonate="chrome",
+                proxies=resolve_proxies(),
+            )
             if r.status_code == 200:
                 return r.json().get("data", [])
             last_err = f"http {r.status_code}"
@@ -163,7 +184,13 @@ def hit_detail(
     last_err = None
     for attempt in range(max_retries + 1):
         try:
-            r = session.get(url, headers=request_headers, timeout=30, impersonate="chrome")
+            r = session.get(
+                url,
+                headers=request_headers,
+                timeout=30,
+                impersonate="chrome",
+                proxies=resolve_proxies(),
+            )
             if r.status_code == 200:
                 d = r.json().get("data", {}).get("jobDetail", {})
                 return d.get("jobDescription", "") or ""
