@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. Worksheet IDs are resolved by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.6.7"
+  version: "1.6.8"
 ---
 
 # Jobs Scraper
@@ -14,13 +14,13 @@ Use the bundled MCP tools when they are available. Do not reimplement scraping l
 
 ## Build map — which code actually runs
 
-There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.6.7` engine:
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.6.8` engine:
 
 | Artifact | Path | Version |
 |---|---|---|
-| Scraping engine + CLI | `sg_product_jobs.py` | `1.6.7` |
-| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.6.7` |
-| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.6.7` |
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.6.8` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.6.8` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.6.8` |
 | Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
 | Per-source fetching | `jobs_scraper/sources/<source>.py` | one adapter per source |
 

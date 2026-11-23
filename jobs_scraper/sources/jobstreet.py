@@ -38,8 +38,15 @@ LOCATION = "Singapore"
 #: list API page size (also the reference size for the 50% soft stop).
 PAGE_SIZE = 20
 
-#: A page that adds fewer new jobs than this counts as the end of the results.
-SOFT_STOP_MIN_NEW = 10
+#: A keyword page that yields fewer *fresh* jobs than this counts as the end of
+#: that keyword's results.
+#:
+#: 2026-11-23 v1.6.8 fix: the soft stop used to measure the jobs that were new to
+#: the whole crawl, not to the keyword. Every keyword after the first therefore
+#: saw almost nothing "new" on its first page and stopped there, so a five-
+#: keyword crawl really crawled one keyword. The signal is now measured per
+#: keyword, against the keyword's own results.
+SOFT_STOP_MIN_FRESH = 10
 
 #: Retry backoff (seconds) for a list page. Mirrors LinkedIn's ladder, which
 #: was added on 2026-10-07 after a 429 hard abort truncated long-range coverage.
@@ -62,28 +69,48 @@ TPR = {
 # 舊註解說 7d 預期 unique ~600, 但實際只有 ~250。因為 5 個 keyword 共用同一個
 # seen set + 50% 軟停, 只有第一個 keyword 會被完整爬完, 其餘四個在第 1 頁就軟停。
 #
-# 實測 (2026-11-23, 新加坡, 每個 keyword 的 totalCount 直接由 API 回報):
+# 2026-11-23 v1.6.8 fix: v1.6.7 的預算只把「第一個 keyword」算進去, 因為那時
+# 只有第一個 keyword 真的會被爬。改成 per-keyword 軟停後, 每個 keyword 都會爬到
+# 自己的池底 → 預算必須以「池子最大的那個 keyword」為準, 否則只是換一種截斷。
+#
+# 實測 (2026-11-23, 新加坡, 每個 keyword 的 totalCount 直接由 API 回報;
+#       池子每天會長: 7d 的 product manager 當天就從 494 漲到 520;
+#       1 天視窗更會隨一天累積 — 早上只回 2 筆, 中午就 181 筆):
 #
 #   range | product manager | product director | director of product | head of product | product lead
-#   1h    | 2                | 1                | 3                  | 1              | 8
-#   24h   | 2                | 1                | 3                  | 1              | 8   (1h/24h 的 daterange 都是 1 天)
-#   3d    | 163              | 104              | 107                | 50             | 292
-#   7d    | 494              | 345              | 356                | 170            | 955
-#   14d   | 877              | 630              | 631                | 336            | 1670
-#   21d   | 1269             | 890              | 897                | 466            | 2403
-#   30d   | 1625             | 1173             | 1158               | 627            | 3251
+#   1h    | 38               | 39               | 50                | 19              | 181
+#   24h   | 38               | 39               | 50                | 19              | 181
+#   3d    | 184              | 140              | 147               | 67              | 448
+#   7d    | 520              | 382              | 394               | 184             | 1109
+#   14d   | 900              | 665              | 666               | 350             | 1837
+#   21d   | 1296             | 924              | 928               | 480             | 2564
+#   30d   | 1645             | 1199             | 1187              | 641             | 3369
 #
-# 上限要蓋得住「最大的那個 keyword 的池子」/ 20 (每頁 20 筆) + ~30% 餘裕,
-# 這樣不管 soft-stop 最後怎麼跑都不會被上限截斷。舊值 1h=1 / 24h=4 / 3d=7 /
-# 7d=15 / 14d=30 / 21d=30 / 30d=25 → 每個 range 都被截斷 (7d 只拿到 300/494)。
+# (1h 與 24h 的 daterange 都是 "1" 天 → 兩個 range 的池子完全相同。)
+#
+# 需要頁數 = ceil(池深 / 20) + 1 (多那一頁是 pool 到底時回 0 筆的 EOF 頁),
+# 預算再留餘裕 (池子每天會長, 短視窗更是整天累積; 上限只是天花板, 軟停會在池底收手,
+# 所以寬一點不會多花時間, 只差在不會截斷):
+#
+#   range | 最大 keyword 池深 | 需要頁數 | 舊預算 (v1.6.7) | 新預算 (v1.6.8)
+#   1h    | 181               | 10       | 2  (不夠)       | 20
+#   24h   | 181               | 10       | 4  (不夠)       | 20
+#   3d    | 448               | 24       | 20 (不夠)       | 40
+#   7d    | 1109              | 57       | 62              | 73
+#   14d   | 1837              | 93       | 109             | 120
+#   21d   | 2564              | 130      | 155             | 168
+#   30d   | 3369              | 170      | 210             | 220
+#
+# v1.6.7 的 1h / 24h / 3d 在 per-keyword 模式下會安靜截斷 (最大的 keyword 只爬到
+# 預算的一半), 所以這三個必須一起拉高, 不然改了軟停等於換一種截斷。
 MAX_PAGES = {
-    "1h": 2,
-    "24h": 4,
-    "3d": 20,
-    "7d": 62,
-    "14d": 109,
-    "21d": 155,
-    "30d": 210,
+    "1h": 20,
+    "24h": 20,
+    "3d": 40,
+    "7d": 73,
+    "14d": 120,
+    "21d": 168,
+    "30d": 220,
 }
 
 DEFAULT_KEYWORDS = [
@@ -375,11 +402,23 @@ def crawl_list(
 ) -> list[dict]:
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
-    50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
+    **每個 keyword 各爬各的池子** (2026-11-23 v1.6.8 fix): 舊版的 50% 軟停量的是
+    「對整輪 crawl 而言是新的」筆數, 所以第一個 keyword 爬完之後, 後面每個 keyword
+    的第一頁幾乎沒有「新的」→ 全部在第 1 頁就軟停。五個 keyword 的 crawl 其實只爬了
+    一個 keyword。現在軟停量的是「這個 keyword 自己還沒回過的筆數」, 每個 keyword 都會
+    爬到自己的池底, 跨 keyword 的重複仍然只回傳一次。
+
+    50% 軟停 (per keyword): 該頁對**這個 keyword**而言的新筆數 < pageSize * 0.5 就視為到尾。
 
     每個 list page 走 `fetch_list_page`, 內含 30/60/90s retry ladder:
     瞬時的 429 / 5xx / connection error 不會再讓整個 keyword crawl 直接中止,
     coverage 不會被靜默砍掉 (2026-10-31 fix)。
+
+    某個 keyword 真的失敗 (重試 4 次都沒成) 時, 只結束那個 keyword, 其他 keyword 繼續爬,
+    最後印出失敗的 keyword 清單 (2026-11-23 v1.6.8 fix)。舊版是一個 keyword 失敗就
+    中止整輪 → per-keyword 模式下請求量變 5 倍, 一個關鍵字失敗會把其他四個的成果
+    一起丟掉, 那是改變本身帶來的 Regression。失敗仍然看得到 (FAIL 行 + 最後的摘要),
+    supervisor 一樣抓得到。
 
     `session`, `sleep`, `sleep_seconds`, `build_url` and `parse_page` are injected
     so the caller decides which implementation runs (and so tests can substitute
@@ -389,6 +428,7 @@ def crawl_list(
         keywords = _keywords_from_env()
     seen: set[str] = set()
     all_jobs: list[dict] = []
+    failed_keywords: list[str] = []
     for kw in keywords:
         kw_seen: set[str] = set()
         for p in range(1, max_pages + 1):
@@ -403,23 +443,32 @@ def crawl_list(
                     build_url=build_url,
                 )
             except RuntimeError as e:
+                # 這個 keyword 結束, 但其他 keyword 繼續 (v1.6.8)
                 print(f"  [jobstreet {kw} p{p}] FAIL: {e}")
-                return all_jobs
+                failed_keywords.append(kw)
+                break
             jobs = parse_page(data, kw)
-            new_jobs = [j for j in jobs if j["job_id"] not in seen and j["job_id"] not in kw_seen]
-            for j in new_jobs:
+            # 這個 keyword 還沒回過的筆數 → 軟停訊號的來源 (per keyword)
+            kw_fresh = [j for j in jobs if j["job_id"] not in kw_seen]
+            for j in kw_fresh:
                 kw_seen.add(j["job_id"])
+            # 跨 keyword dedup: 只有整輪都沒見過的才回傳
+            new_jobs = [j for j in kw_fresh if j["job_id"] not in seen]
+            for j in new_jobs:
                 seen.add(j["job_id"])
                 all_jobs.append(j)
             total_count = data.get("totalCount", "?")
             print(
-                f"  [jobstreet {kw} p{p}] 收 {len(jobs):3} | 新增 {len(new_jobs):3} | "
-                f"kw 累計 {len(kw_seen):3} | 跨 kw 累計 {len(all_jobs):3} | totalCount={total_count}"
+                f"  [jobstreet {kw} p{p}] 收 {len(jobs):3} | kw 新 {len(kw_fresh):3} | "
+                f"跨 kw 新 {len(new_jobs):3} | kw 累計 {len(kw_seen):3} | "
+                f"跨 kw 累計 {len(all_jobs):3} | totalCount={total_count}"
             )
-            # 50% 軟停
-            if not new_jobs or len(new_jobs) < SOFT_STOP_MIN_NEW or len(jobs) == 0:
-                print("            50% 軟停 (新增 < 10 或 jobs 空)")
+            # 50% 軟停 (per keyword: 量的是這個 keyword 自己的新筆數)
+            if len(jobs) == 0 or len(kw_fresh) < SOFT_STOP_MIN_FRESH:
+                print(f"            50% 軟停 (kw 新 < {SOFT_STOP_MIN_FRESH} 或 jobs 空)")
                 break
             if p < max_pages:
                 sleep("list")
+    if failed_keywords:
+        print(f"  [jobstreet] ⚠ {len(failed_keywords)}/{len(keywords)} 個 keyword 失敗: {failed_keywords}")
     return all_jobs

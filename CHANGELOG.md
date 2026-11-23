@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.6.8 — 2026-11-23
+
+A five-keyword crawl that crawled one keyword.
+
+Fixed
+
+- **Every JobStreet keyword now runs to the end of its own pool.** The list API takes one keyword per request, so the crawl runs the keyword set one after another and de-duplicates by `job_id` across them — but the soft stop that ended a keyword counted the postings that were new to the *whole crawl*. After the first keyword had filled the shared `seen` set, every later keyword saw almost nothing "new" on its first page and stopped there: four of the five keywords were abandoned on page 1, and the 7d run produced ~250 postings where the API's own totals promise ~2,600. The signal now measures the postings that are new to *that keyword*, so each keyword pages to the end of its own results, while a posting two keywords both match is still returned once.
+- **The page budget follows the largest keyword.** Once every keyword crawls its own pool, a budget sized for the first keyword truncates the others. The budgets are re-pinned to the largest pool the API reports (Singapore, 2026-11-23: `product manager` 520, `product director` 382, `director of product` 394, `head of product` 184, `product lead` 1109 for 7d): `1h` 20 pages, `24h` 20, `3d` 40, `7d` 73, `14d` 120, `21d` 168, `30d` 220. v1.6.7's `1h` / `24h` / `3d` budgets were below even that, so they are raised together — otherwise the soft-stop fix would only trade one kind of truncation for another.
+- **A failed keyword no longer costs the whole run.** A keyword that exhausted its retries ended the entire crawl, discarding the other keywords' postings. Per-keyword crawling multiplies the request count by five, so a single failure aborting everything is a regression the change itself introduces; the failure now ends that keyword only, and stays visible — the `FAIL` line is still printed, and the crawl ends with a summary of which keywords failed.
+
+Cost
+
+- JobStreet list requests multiply by about five (each keyword now pages to its own pool), and the unique postings multiply by about seven — the 7d run is expected to yield roughly 1,800 postings instead of ~250. The JD fetch is one request per unique posting, so the run gets longer in proportion. The list API tolerates the request rate (measured: 200 requests at 0.5s pacing, zero failures).
+
+Acceptance
+
+- `tests/test_jobstreet_per_keyword_v168.py` (8 tests) pins the per-keyword soft stop (a later keyword is not stopped by an earlier one, a keyword with a nearly empty page stops there, a keyword runs to its own pool end), the unchanged cross-keyword de-duplication, the failure isolation, and the budgets (they cover the largest measured pool, and no budget shrank). The three behavioural tests fail against the v1.6.7 adapter.
+- The behaviour-equivalence freeze moves to `freeze_version 13` with a new keyword-coverage invariant section.
+
 ## v1.6.7 — 2026-11-23
 
 Two budgets that were guesses, and a 400 that was retried for three minutes.

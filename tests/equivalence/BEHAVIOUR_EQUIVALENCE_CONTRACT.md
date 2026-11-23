@@ -1,4 +1,4 @@
-# v1.6.7 Behaviour Equivalence Contract
+# v1.6.8 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -112,8 +112,8 @@ which is the behaviour the split had to preserve.
     pinned to the deepest measured pool per range (Shanghai geoId 107388191 on 2026-11-22, Singapore
     geoId 102454443 on 2026-11-23): 1h 8 pages, 24h 15, 3d 35, 7d 80, and 100 for 14d/21d/30d.
 27. The JobStreet budgets are pinned to the totals the JobStreet API states for itself (Singapore,
-    2026-11-23), sized for the largest keyword's pool plus headroom: 1h 2 pages, 24h 4, 3d 20, 7d 62,
-    14d 109, 21d 155, 30d 210. The JobStreet `daterange` parameter takes a number of days, mapped
+    2026-11-23), sized for the largest keyword's pool plus headroom: 1h 20 pages, 24h 20, 3d 40, 7d 73,
+    14d 120, 21d 168, 30d 220. The JobStreet `daterange` parameter takes a number of days, mapped
     through `JOBSTREET_TPR` — never the CLI range name.
 28. The time filter of every range is unchanged (`r3600`, `r86400`, `r259200`, `r604800`, `r1209600`,
     `r1814400`, `r2592000`); only the budget moves. An explicit `--max-pages` still overrides the
@@ -129,6 +129,21 @@ which is the behaviour the split had to preserve.
     failures (429, 5xx, connection error); a 4xx that is not a rate limit is a caller bug, and
     retrying it only burns the backoff ladder. The LinkedIn adapter raises `FatalListPageError` for
     it, exactly as the JobStreet adapter does.
+
+## Keyword-coverage invariants
+
+33. Every JobStreet keyword is crawled to the end of its own pool. The soft stop that ends a keyword
+    measures the postings that are new to **that keyword**, never the postings that are new to the whole
+    crawl: the five keywords share one `seen` set, and a signal measured against that set stops every
+    keyword after the first one on its first page — a five-keyword crawl that crawls one keyword, and a
+    seven-day run that yields ~250 postings where the API's own totals promise ~2,600. The shared set
+    decides only what is returned: a posting two keywords both match is still returned once.
+34. The JobStreet page budget is sized for the largest keyword's pool plus headroom, because every
+    keyword now pages to its own pool end: 1h 20 pages, 24h 20, 3d 40, 7d 73, 14d 120, 21d 168, 30d 220
+    (Singapore, 2026-11-23). A keyword that exhausts its retries ends that keyword only — the failure
+    stays visible (the `FAIL` line, and a summary of the failed keywords) while the other keywords'
+    postings are not discarded with it. Per-keyword crawling multiplies the request count by about five,
+    so a single failure aborting everything would be a regression the change itself introduces.
 
 ## Sheet-target invariants
 

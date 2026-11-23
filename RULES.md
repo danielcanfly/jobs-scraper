@@ -126,21 +126,27 @@ Every JobStreet list page goes through the same 30/60/90s retry ladder as Linked
 
 #### JobStreet range page budgets (2026-11-23)
 
-The JobStreet adapter's `MAX_PAGES` is a ceiling in the same sense as LinkedIn's. The list API states its own totals, so one request per keyword per range is enough to size the budget. Measured in Singapore on 2026-11-23:
+The JobStreet adapter's `MAX_PAGES` is a ceiling in the same sense as LinkedIn's. The list API states its own totals, so one request per keyword per range is enough to size the budget. Measured in Singapore on 2026-11-23 (the pools grow every day — the seven-day pool for `product manager` went from 494 to 520 within the day, and the one-day window answers 2 postings in the morning and 181 by midday):
 
 | Range | `daterange` | Largest keyword total | Pages needed | Page budget |
 |---|---|---|---|---|
-| `1h` | 1 day | 8 | 1 | 2 |
-| `24h` | 1 day | 8 | 1 | 4 |
-| `3d` | 3 | 292 | 15 | 20 |
-| `7d` | 7 | 955 | 48 | 62 |
-| `14d` | 14 | 1670 | 84 | 109 |
-| `21d` | 21 | 2403 | 121 | 155 |
-| `30d` | 30 | 3251 | 163 | 210 |
+| `1h` | 1 day | 181 | 10 | 20 |
+| `24h` | 1 day | 181 | 10 | 20 |
+| `3d` | 3 | 448 | 24 | 40 |
+| `7d` | 7 | 1109 | 57 | 73 |
+| `14d` | 14 | 1837 | 93 | 120 |
+| `21d` | 21 | 2564 | 130 | 168 |
+| `30d` | 30 | 3369 | 170 | 220 |
 
-Note the `daterange` parameter takes a **number of days**, not the CLI range name; the engine maps it through `JOBSTREET_TPR`. The budget is sized for the **largest** keyword's pool plus headroom, so the 50% soft-stop decides how much of it is used rather than the ceiling cutting a pool short.
+Note the `daterange` parameter takes a **number of days**, not the CLI range name; the engine maps it through `JOBSTREET_TPR`. "Pages needed" is the largest keyword's pool divided by the page size, plus the one empty page that ends the pool. The budget is sized for the **largest** keyword's pool plus headroom, so the soft-stop decides how much of it is used rather than the ceiling cutting a pool short.
 
-The five keywords share one `seen` set across the whole crawl, so the 50% soft-stop abandons a keyword as soon as a page yields fewer than 10 postings that are new across all keywords. In practice that means the first keyword is crawled to its own pool and the other four stop on their first page — the reason the old table's "expected ~600 unique for 7d" prediction did not hold.
+#### JobStreet keyword coverage (2026-11-23)
+
+The five keywords share one `seen` set across the whole crawl, and that set decides only what is **returned** — a posting two keywords both match is still returned once. It must not decide how far a keyword crawls. The soft stop that ends a keyword measures the postings that are new to **that keyword**; measured against the shared set instead, the first keyword filled it and every later keyword saw almost nothing "new" on its first page, so four of the five keywords were abandoned on page 1 and a five-keyword crawl crawled one keyword.
+
+Every keyword therefore pages to the end of its own pool, and the budget above is sized for the largest of them. A keyword that exhausts its retries ends that keyword only: the failure stays visible — the `FAIL` line is printed and the crawl ends with a summary of the failed keywords — but the other keywords' postings are not discarded with it. Per-keyword crawling multiplies the request count by about five, and a single failure aborting everything would be a regression the change itself introduces.
+
+The cost is proportional: JobStreet list requests multiply by about five and the unique postings by about seven (a 7d run is expected to yield roughly 1,800 postings instead of ~250), so the run takes longer in proportion. The list API tolerates the request rate — measured 200 requests at 0.5s pacing with zero failures.
 
 ### 104 (onezerofour)
 

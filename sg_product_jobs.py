@@ -117,6 +117,8 @@ JORA_BASE = "https://sg.jora.com"
 # 讓既有的 `sg_product_jobs.JOBSTREET_*` 引用繼續有效。
 JOBSTREET_TPR = _jobstreet.TPR
 # MAX_PAGES 跟 LinkedIn 一樣 (邏輯都跟 LinkedIn 一樣), 50% 軟停由 crawl_jobstreet_list 跑時判斷
+# 2026-11-23 v1.6.8: 預算改以「池子最大的那個 keyword」為準 (per-keyword 軟停之後,
+# 每個 keyword 都會爬到自己的池底), 數值見 jobs_scraper/sources/jobstreet.py 的註解。
 JOBSTREET_MAX_PAGES = _jobstreet.MAX_PAGES
 # 可被 JOBSTREET_KEYWORDS env var 覆寫 (見上面 env 讀取區塊)
 # 例: JOBSTREET_KEYWORDS="product manager,product director,head of product"
@@ -2325,9 +2327,11 @@ def crawl_jobstreet_list(
 ) -> list[dict]:
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
-    50% 軟停: 某頁 unique new jobs < pageSize * 0.5 就視為到尾。
+    每個 keyword 各爬各的池子 (2026-11-23 v1.6.8 fix): 50% 軟停量的是「這個 keyword
+    自己還沒回過的筆數」, 不是「整輪 crawl 新的筆數」。舊版用後者, 所以第一個 keyword
+    爬完之後, 後面每個 keyword 的第一頁就軟停 → 五個 keyword 的 crawl 只爬到一個。
 
-    每個 list page 走 30/60/90s retry ladder (見 `fetch_jobstreet_list_page`)。
+    跨 keyword dedup 不變: 兩個 keyword 都撈到的職缺只回傳一次。
 
     session / sleep / list helper 在呼叫時才讀取, 所以測試可以繼續 patch
     `sg_product_jobs._cc_session`、`sg_product_jobs.human_sleep` (內含 `sg_product_jobs.time`)

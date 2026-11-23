@@ -341,7 +341,9 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.6.7` 為目前版本：兩個憑空猜的預算上限，加上一個被重試三分鐘的 400。v1.6.6 把 LinkedIn 的頁數上限釘在**上海**的池深上，但新加坡的池每個長 range 都更深 —— 7d 約 600 筆對上海的 400 —— 所以那些上限對新加坡來說仍在截斷；現在改成依兩個城市實測最深的池：1h 8 頁、24h 15、3d 35、7d 80，14d/21d/30d 都是 100 —— 100 是 Guest API 自己的分頁天花板，不是猜的。JobStreet 的上限則從來沒量過 —— 表格註解預期 7d 會有 ~600 筆 unique，實際只有 ~250，因為 5 個 keyword 共用同一個 seen set，50% 軟停讓其中四個在第 1 頁就被放棄 —— 而 API 自己回報的總數遠大於原本的上限（7d 最大的 keyword 匹配 955 筆、14d 1670、30d 3251，原上限卻是 15/30/25 頁）；現在依最大 keyword 的池子加上餘裕來設。LinkedIn list page 上的非 429 4xx 不再走 retry ladder：adapter 的 docstring 與凍結契約都寫明那是 caller bug、應該直接 raise，但 `raise_for_status()` 在 `try` 裡 raise、被寬鬆的 `except Exception` 接走，於是那一頁被重試四次（30+60+90s）才放棄 —— 現在跟 JobStreet adapter 一樣立刻拋 `FatalListPageError`。而 API 的分頁天花板是「結束」不是「失敗」：`start=1000` 回的是 HTTP 400 而不是空頁，原本會讓整塊 abort、supervisor 把那個 FAIL 讀成 coverage 缺口；現在撞到天花板會帶著已收到的職缺正常收尾。
+`v1.6.8` 為目前版本：一個五個 keyword 的 crawl，實際只爬到一個。JobStreet 的 list API 一次只吃一個 keyword，所以 crawl 會把 keyword 依序跑完再跨 keyword 用 `job_id` 去重 —— 但結束一個 keyword 的軟停，量的是「對**整輪** crawl 而言是新的」筆數：第一個 keyword 把共用的 `seen` set 填滿之後，後面每個 keyword 的第一頁幾乎沒有「新的」，於是全部停在那裡，5 個 keyword 有 4 個在第 1 頁就被放棄，7d 那輪只拿到 ~250 筆，而 API 自己回報的總數是 ~2,600。現在這個訊號量的是「對**那個 keyword** 而言是新的」筆數，所以每個 keyword 都會翻到自己的池底，而兩個 keyword 都撈到的職缺仍然只回傳一次。頁數預算也跟著改：每個 keyword 都爬自己的池子之後，只按第一個 keyword 定的預算會截斷其他 keyword，於是重新釘在 API 回報的最大池深上（`1h` 20 頁、`24h` 20、`3d` 40、`7d` 73、`14d` 120、`21d` 168、`30d` 220）—— v1.6.7 的 `1h` / `24h` / `3d` 連這都蓋不住，所以三個一起拉高，免得修好軟停只是換一種截斷。重試用完仍失敗的 keyword 現在只結束自己，不會把整輪的成果一起丟掉，而且失敗仍然看得到（`FAIL` 行照印，最後還會列出失敗的 keyword）。代價是成比例的：JobStreet 的 list 請求大約多 5 倍、unique 職缺大約多 7 倍（7d 預期從 ~250 變成 ~1,800 筆），所以跑起來會比較久。
+
+- `v1.6.7` 為兩個憑空猜的預算上限，加上一個被重試三分鐘的 400。v1.6.6 把 LinkedIn 的頁數上限釘在**上海**的池深上，但新加坡的池每個長 range 都更深 —— 7d 約 600 筆對上海的 400 —— 所以那些上限對新加坡來說仍在截斷；現在改成依兩個城市實測最深的池：1h 8 頁、24h 15、3d 35、7d 80，14d/21d/30d 都是 100 —— 100 是 Guest API 自己的分頁天花板，不是猜的。JobStreet 的上限則從來沒量過 —— 表格註解預期 7d 會有 ~600 筆 unique，實際只有 ~250，因為 5 個 keyword 共用同一個 seen set，50% 軟停讓其中四個在第 1 頁就被放棄 —— 而 API 自己回報的總數遠大於原本的上限（7d 最大的 keyword 匹配 955 筆、14d 1670、30d 3251，原上限卻是 15/30/25 頁）；現在依最大 keyword 的池子加上餘裕來設。LinkedIn list page 上的非 429 4xx 不再走 retry ladder：adapter 的 docstring 與凍結契約都寫明那是 caller bug、應該直接 raise，但 `raise_for_status()` 在 `try` 裡 raise、被寬鬆的 `except Exception` 接走，於是那一頁被重試四次（30+60+90s）才放棄 —— 現在跟 JobStreet adapter 一樣立刻拋 `FatalListPageError`。而 API 的分頁天花板是「結束」不是「失敗」：`start=1000` 回的是 HTTP 400 而不是空頁，原本會讓整塊 abort、supervisor 把那個 FAIL 讀成 coverage 缺口；現在撞到天花板會帶著已收到的職缺正常收尾。
 
 - `v1.6.6` 修掉兩個長得同一副模樣的問題： run 看起來成功，實際上安靜地少做了該做的事。一個 range 的頁數上限必須蓋得住那個 range 真正的池子。LinkedIn 的 range 表原本給 `30d` 25 頁（250 筆），但上海 30 天的池子有約 700 筆，於是 crawl 在上限處停下、run 回報成功、剩下的職缺從來沒被看見。新的上限依 2026-11-22 對 Guest API 實測的池深設定（`1h` 少於 50、`24h` 約 100、`3d` 約 250、`7d` 約 400、`14d` 約 290、`21d` 約 300、`30d` 約 700 筆）。上限是天花板而不是目標：crawl 連續 2 頁沒有新職缺就會自己結束，所以池子小的城市照樣提早停，放寬上限對它們沒有成本。pre-detail dedup 現在讀的是這一輪要寫進去的那個分頁 —— 目標 gid 的解析跟寫入層一致（explicit `--gid` → `--to-sheet` 內的 `#gid=` → label 映射），不再讓 `LinkedIn / Minimax` 一律讀 `SG-Raw`，那會讓中國的 run 去抓 Sheet 根本不會寫進去的職缺 JD。發布流程也恢復綠燈：v1.6.5 有 bump 套件版本卻沒 bump `uv.lock`，CI 在第一道關卡就掛掉，GitHub 上一直是紅的。
 
@@ -364,7 +366,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.6.7`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住每個已知城市的實測池深」規則、「Guest API 1000 筆分頁視窗是結束而不是失敗」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則，以及「生成 worker」的相關規則。
+- 目前 frozen equivalence baseline 為 `v1.6.8`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住每個已知城市的實測池深」規則、「每個 JobStreet keyword 都要爬到自己的池底」規則、「Guest API 1000 筆分頁視窗是結束而不是失敗」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則，以及「生成 worker」的相關規則。
 
 ## 授權
 
