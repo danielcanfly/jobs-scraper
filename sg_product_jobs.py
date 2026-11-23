@@ -1578,7 +1578,7 @@ def push_to_sheet(
     existing = ws.get_all_values()
     existing_keys, next_row = _load_sheet_keys(existing)
     print(f"  既有 (source, job_id) 數: {len(existing_keys)}")
-    print(f"  下一個空白 row: {next_row}")
+    print(f"  第一個空白 row: {next_row}")
 
     # 3) 組 rows (dedup, visa, work mode, formula) — 用 _build_sheet_row helper
     new_rows = []
@@ -1605,11 +1605,28 @@ def push_to_sheet(
             "skipped_no_jd": skipped_no_jd,
             "next_row": next_row,
         }
+    # 2026-11-24 fix: 寫入起點必須在「知道要寫幾列」之後才算。
+    # 原本無條件用第一個空白 row, 這輪要寫 159 列 → 下面 158 列有資料的 row 被蓋掉
+    # (2026-11-24 實測: sg 14d 那輪蓋掉 415 列舊資料)。現在 gap 塞不下就 append 到最後。
+    _, next_row = _load_sheet_keys(existing, n_rows=len(new_rows))
+    print(f"  實際寫入起點 row: {next_row} (寫 {len(new_rows)} 列)")
     return _write_rows_to_sheet(ws, next_row, new_rows, skipped_dup, skipped_no_jd)
 
 
-def _load_sheet_keys(existing: list[list[str]]) -> tuple[set[tuple[str, str]], int]:
+def _load_sheet_keys(existing: list[list[str]], n_rows: int = 1) -> tuple[set[tuple[str, str]], int]:
     """從 sheet 現有 rows 解出 (source, job_id) set + 下一個空白 row 編號。
+
+    Args:
+        existing: sheet 的 rows (index 0 = row 1)
+        n_rows: 這次要寫幾列。預設 1 → 沿用「填第一個 gap」的行為;
+            >1 時只有在 gap 連續 n_rows 列都是空白的情況下才用那個 gap,
+            否則一律 append 到最後 (見 2026-11-24 fix)。
+
+    2026-11-24 fix: 原本 next_row 一律取「第一個空白 row」, 然後從那裡連寫 n_rows 列。
+    如果那個 gap 只有 1 列、但這一輪要寫 159 列 → 下面 158 列**有資料**的 row
+    就被寫爆蓋掉 (2026-11-24 實測: sg 14d 那輪蓋掉 415 列舊資料, 而且被蓋掉的
+    job 因為不在 sheet 裡 → 下次 pre-dedup 不會擋 → 又會重抓一次, 很浪費)。
+    現在改成「只有塞得下才用 gap, 否則 append」。
     Returns: (existing_keys, next_row)
     """
     existing_keys: set[tuple[str, str]] = set()
@@ -1623,11 +1640,27 @@ def _load_sheet_keys(existing: list[list[str]]) -> tuple[set[tuple[str, str]], i
         if i == 1:
             continue
         if not any(c.strip() for c in row):
+            if n_rows > 1 and not _blank_run(existing, i, n_rows):
+                # 這個 gap 塞不下 n_rows 列 → 往下一個 gap 找
+                continue
             next_row = i
             break
     if next_row is None:
         next_row = len(existing) + 1
     return existing_keys, next_row
+
+
+def _blank_run(existing: list[list[str]], start: int, n_rows: int) -> bool:
+    """從 start (1-indexed) 起連續 n_rows 列是不是都空白。
+
+    超過 sheet 現有長度的部分算空白 (那是新列)。
+    """
+    for i in range(start, start + n_rows):
+        if i > len(existing):
+            return True
+        if any(c.strip() for c in existing[i - 1]):
+            return False
+    return True
 
 
 def _load_sheet_keys_for_source(

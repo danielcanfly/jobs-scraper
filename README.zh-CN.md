@@ -341,7 +341,11 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本与发布说明
 
-`v1.6.9` 为当前版本：104 这个 source 根本没跟 104 讲上话。`https://www.104.com.tw/jobs/search/api/jobs` 每一个请求都回 403 block 页，而 104 首页回 200 —— 少了两个东西。第一，浏览器的 XHR 一定会带 `sec-fetch-dest` / `sec-fetch-mode` / `sec-fetch-site` 这组 header，104 的 bot 保护会看它们，所以 adapter 现在补上这三个，再加 `x-requested-with: XMLHttpRequest` 与 `Origin`。第二，这台机直连 104 API 也被拒，所以 104 的 list 与 detail fetch 现在跟其他 adapter 一样走共用的 `resolve_proxies()`。症状是最危险的那种：不是报错，是空爬 —— `無資料，結束` 加上 exit 0 看起来像「台湾这周没有产品职位」，实际上请求根本没到 API。
+`v1.7.0` 为当前版本：写 Sheet 永远不能盖掉有数据的 row。写入起点原本一律取「sheet 里第一个空白 row」，然后从那里连写这一轮的列数。如果 sheet 中间有一个洞（上一轮被杀、batch 只写一半就留下来的），把 159 列写进一个 1 列的洞 → 下面 158 列**有数据**的 row 就被写爆盖掉。2026-11-24 就是这样：sg 14d 那轮毁掉 415 列已收集的职位；而且被毁掉的 job 不在 sheet 里 → pre-detail dedup 不会再挡 → 又重抓一次 JD。
+
+现在写入起点会在「知道要写几列」之后才定：只有当那个洞连续塞得下整批列时才用它，否则一律 append 到最后。塞得下的洞还是会被填，所以正常情况的行为不变。
+
+`v1.6.9` 修好了 104 这个 source —— 它原本根本没跟 104 讲上话。`https://www.104.com.tw/jobs/search/api/jobs` 每一个请求都回 403 block 页，而 104 首页回 200 —— 少了两个东西。第一，浏览器的 XHR 一定会带 `sec-fetch-dest` / `sec-fetch-mode` / `sec-fetch-site` 这组 header，104 的 bot 保护会看它们，所以 adapter 现在补上这三个，再加 `x-requested-with: XMLHttpRequest` 与 `Origin`。第二，这台机直连 104 API 也被拒，所以 104 的 list 与 detail fetch 现在跟其他 adapter 一样走共用的 `resolve_proxies()`。症状是最危险的那种：不是报错，是空爬 —— `無資料，結束` 加上 exit 0 看起来像「台湾这周没有产品职位」，实际上请求根本没到 API。
 
 `v1.6.8` 让每个 JobStreet keyword 都爬到自己的池底。一个五个 keyword 的 crawl，实际只爬到一个。JobStreet 的 list API 一次只吃一个 keyword，所以 crawl 会把 keyword 依次跑完再跨 keyword 用 `job_id` 去重 —— 但结束一个 keyword 的软停，量的是「对**整轮** crawl 而言是新的」笔数：第一个 keyword 把共用的 `seen` set 填满之后，后面每个 keyword 的第一页几乎没有「新的」，于是全部停在那里，5 个 keyword 有 4 个在第 1 页就被放弃，7d 那轮只拿到 ~250 笔，而 API 自己回报的总数是 ~2,600。现在这个信号量的是「对**那个 keyword** 而言是新的」笔数，所以每个 keyword 都会翻到自己的池底，而两个 keyword 都捞到的职位仍然只回传一次。页数预算也跟着改：每个 keyword 都爬自己的池子之后，只按第一个 keyword 定的预算会截断其他 keyword，于是重新钉在 API 回报的最大池深上（`1h` 20 页、`24h` 20、`3d` 40、`7d` 73、`14d` 120、`21d` 168、`30d` 220）—— v1.6.7 的 `1h` / `24h` / `3d` 连这都盖不住，所以三个一起拉高，免得修好软停只是换一种截断。重试用完仍失败的 keyword 现在只结束自己，不会把整轮的成果一起丢掉，而且失败仍然看得到（`FAIL` 行照印，最后还会列出失败的 keyword）。代价是成比例的：JobStreet 的 list 请求大约多 5 倍、unique 职位大约多 7 倍（7d 预期从 ~250 变成 ~1,800 笔），所以跑起来会比较久。
 
@@ -368,7 +372,7 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 对外提供 MCP server 版本。
-- 当前 frozen equivalence baseline 为 `v1.6.9`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则、「range 的页数上限必须盖得住每个已知城市的实测池深」规则、「每个 JobStreet keyword 都要爬到自己的池底」规则、「Guest API 1000 笔分页窗口是结束而不是失败」规则、「pre-detail dedup 读的是要写入的那个分页」规则，以及「生成 worker」的相关规则。
+- 当前 frozen equivalence baseline 为 `v1.7.0`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则、「range 的页数上限必须盖得住每个已知城市的实测池深」规则、「每个 JobStreet keyword 都要爬到自己的池底」规则、「Guest API 1000 笔分页窗口是结束而不是失败」规则、「pre-detail dedup 读的是要写入的那个分页」规则，以及「生成 worker」的相关规则。
 
 ## 许可
 

@@ -305,6 +305,10 @@ The concrete write sequence in `_write_rows_to_sheet` is therefore:
 
 Writing the formula first (or writing A:K in a single `USER_ENTERED` call) both weakens the formula-injection boundary — every scraped cell would be parsed as a formula candidate — and can leave a live hyperlink behind when a data phase fails.
 
+### Write start
+
+The write start is resolved once the number of rows is known. A blank row in the middle of the sheet is reused only when the whole write fits into blank rows; otherwise the run appends at the end. A write must never overwrite a row that holds data: on 2026-11-24 a run that wrote 159 rows into a one-row hole destroyed 415 rows of collected jobs, and those jobs were fetched again afterwards because they were no longer in the sheet to be de-duplicated against.
+
 ### Source routing and fail-closed config
 
 The runtime's canonical TW default is gid `764063873`; when the plugin invokes the runtime it injects the configured `TW_RAW_GID`, so pre-detail dedup and final Cake/104 write resolve to the same TW target. The runtime's Cake pre-detail mapping is `Cake / Minimax -> CAKE_TW_RAW_GID`, never SG-Raw.

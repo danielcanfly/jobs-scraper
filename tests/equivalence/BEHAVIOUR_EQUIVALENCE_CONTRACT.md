@@ -1,4 +1,4 @@
-# v1.6.9 Behaviour Equivalence Contract
+# v1.7.0 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -51,6 +51,15 @@ which is the behaviour the split had to preserve.
     source. The region set may grow a city, but only together with a tab-base rule that keeps
     the Sheet target unambiguous.
 15. Tracker schema and write-safety contracts are unchanged.
+
+## Sheet-write invariants
+
+21. A write never overwrites a row that holds data. The write start is resolved once the number
+    of rows is known: a blank row in the middle of the sheet is reused only when the whole write
+    fits into blank rows, otherwise the run appends at the end. A hole that fits is still filled.
+    The rule exists because the opposite happened: on 2026-11-24 a run that wrote 159 rows into a
+    one-row hole destroyed 415 rows of collected jobs, and the destroyed jobs were then fetched
+    again because they were no longer in the sheet to be de-duplicated against.
 
 ## Generated-worker invariants
 

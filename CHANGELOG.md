@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.7.0 — 2026-11-24
+
+A Sheet write never overwrites a row that holds data.
+
+Fixed
+
+- **415 collected rows were destroyed by the sg 14d run.** The write start was always "the first blank row in the sheet", and the run wrote its rows from there. The sheet carries a hole in the middle when a previous run was killed after writing part of a batch, and a write of 159 rows into a one-row hole overwrites the 158 rows of data below it. On 2026-11-24 that is exactly what happened: the LinkedIn 100-page chunk landed in a hole at row 2860, and the JobStreet chunks that followed landed at 3019 and overwrote rows that were already there — 415 rows of collected jobs gone.
+- The destroyed jobs then cost more than the rows: they were no longer in the sheet, so the pre-detail dedup stopped skipping them and the next run fetched their JDs again for nothing.
+- The write start is now resolved once the number of rows is known. A hole is used only when the whole write fits into blank rows; otherwise the run appends at the end. A hole that fits is still filled, so the normal case is unchanged, and a write can never destroy a row that holds data.
+
+Acceptance
+
+- `tests/test_sheet_write_start_v170.py` (8 tests) pins that a one-row hole is still filled when one row is written, that a hole too small for the write falls back to appending, that a run of blank rows is used only when it fits, that a hole at the tail is used, and that the key collection is unaffected by a hole.
+- The write path resolves the start inside `push_to_sheet`, so the subprocess worker (which calls the same function) is covered too.
+
 ## v1.6.9 — 2026-11-24
 
 The 104 source talks to 104 the way a browser does — or it talks to nobody.
