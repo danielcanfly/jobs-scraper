@@ -187,7 +187,7 @@ def _run_main(monkeypatch, tmp_path, extra_argv, with_jd=True):
     """Drive main() with the crawl / JD / sheet layers faked out."""
     calls: list[dict] = []
 
-    def fake_crawl(daterange, max_pages, keywords=None):
+    def fake_crawl(daterange, max_pages, keywords=None, start_page=1):
         return [_job("aaa11")]
 
     def fake_pre_dedup(jobs, sheet_source_label, **kwargs):

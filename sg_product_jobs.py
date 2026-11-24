@@ -14,7 +14,7 @@ back-compat 保留: JORA_BASE 常數、`build_e_formula("jora", ...)` 分支、
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
 
-__version__ = "1.6.0"  # 2026-10-31: JobStreet list-page retry ladder (30/60/90s)
+__version__ = "1.8.0"  # 2026-11-24: per-source sleep + page-range chunks + parallel JD fetch
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺
@@ -36,12 +36,14 @@ __version__ = "1.6.0"  # 2026-10-31: JobStreet list-page retry ladder (30/60/90s
 #   python sg_product_jobs.py 7d --with-jd --location Taiwan  # 換國家 (preset)
 
 import argparse
+import contextvars
 import hashlib
 import json
 import os
 import random
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -195,6 +197,33 @@ DEFAULT_TPR = "24h"
 # 隨機 sleep 區間 (人類節奏)
 SLEEP_MIN = 3.0
 SLEEP_MAX = 10.0
+
+# ─────────────────────────────────────────────────────────────
+# v1.8.0: per-source sleep (2026-11-24 實測)
+#
+# 為什麼要分 source: 2026-11-24 量到「抓取慢的主因是固定 sleep, 不是網路」——
+# 純網路時間 JobStreet list 0.80s / JobStreet JD 0.29s / LinkedIn list 0.92s,
+# 但每次請求後都睡 3-10s (平均 6.5s) → 整體 wall time 有 80% 是 sleep。
+# 而各 source 的 bot 保護強度差很多, 用同一組 sleep 是過度保守:
+#   - JobStreet: 公開 list API + GraphQL, 壓力測試 0.5s sleep / 200 reqs = 0 fail,
+#     0.1s (10 req/s) / 100 reqs = 0 fail → 降到 0.5-1.0s
+#   - LinkedIn: Guest API, 會真的 429 → 保守降到 1.5-3.0s (30/60/90 backoff 仍在)
+#   - Cake: 實測 2-5s 就 429 → 維持 3-10s 不動 (走 cake_human_sleep)
+#
+# 每組區間由各自的 adapter 定義 (single source of truth), 也可用 env 覆寫
+# (不用改 code 就能調):
+#   JOBS_SCRAPER_LINKEDIN_SLEEP_MIN / _MAX
+#   JOBS_SCRAPER_JOBSTREET_SLEEP_MIN / _MAX
+# ─────────────────────────────────────────────────────────────
+
+# source → 「目前正在爬哪個 source」。contextvar 讓單一注入點 `human_sleep`
+# 決定用哪一組節奏, 而且新 thread 會拿到乾淨的 context → worker 要自己 set。
+_SLEEP_SOURCE: contextvars.ContextVar[str | None] = contextvars.ContextVar("jobs_scraper_sleep_source", default=None)
+
+# JD 抓取的平行 worker 數 (v1.8.0): 1 = 完全串行 (舊行為)。
+# 網路 I/O 會釋放 GIL, 所以 threads 真的能疊請求。
+# 3 = 跟 cake 的 ThreadPoolExecutor(max_workers=3) 一致, 記憶體也還能撐。
+JD_FETCH_WORKERS = max(1, int(os.environ.get("JOBS_SCRAPER_JD_WORKERS", "3")))
 
 # 跨 run 的「已抓過 JD」記錄檔
 #
@@ -2223,10 +2252,60 @@ def fetch_linkedin_jd(job_id: str) -> dict:
 # 主程式
 # ─────────────────────────────────────────────────────────────
 def human_sleep(label: str = ""):
-    s = random.uniform(SLEEP_MIN, SLEEP_MAX)
+    """所有 source 共用的 sleep 注入點。
+
+    v1.8.0: 依「目前正在爬的 source」決定 sleep 區間 (per-source 節奏)。
+    source 是用 contextvar 帶的 → 同一個 process 裡不同 thread 各拿各的,
+    而且測試只要 patch 這一個函式就能完全取代 sleep (既有測試都這樣做)。
+    """
+    src = _SLEEP_SOURCE.get()
+    if src == "jobstreet":
+        lo, hi = _jobstreet.SLEEP_MIN, _jobstreet.SLEEP_MAX
+    elif src == "linkedin":
+        lo, hi = _linkedin.SLEEP_MIN, _linkedin.SLEEP_MAX
+    elif src in ("onezerofour", "104"):
+        lo, hi = _onezerofour.SLEEP_MIN, _onezerofour.SLEEP_MAX
+    else:
+        lo, hi = SLEEP_MIN, SLEEP_MAX
+    s = random.uniform(lo, hi)
     if label:
         print(f"            sleep {s:.1f}s ({label})", flush=True)
     time.sleep(s)
+
+
+def use_source_sleep(source: str | None):
+    """把目前 thread 的 sleep source 設成 `source` (回傳 token 給 reset)。"""
+    return _SLEEP_SOURCE.set(source)
+
+
+def linkedin_human_sleep(label: str = ""):
+    """LinkedIn 專用 sleep (v1.8.0: 1.5-3.0s, 預設 3-10s 太保守)。
+
+    LinkedIn Guest API 會真的 429, 所以只降到 1.5-3.0s, 30/60/90 backoff 仍在
+    (linkedin.fetch_list_page / fetch_jd)。區間由 adapter 定義 (single source of truth)。
+    """
+    return _linkedin.human_sleep(label, sleep=time.sleep)
+
+
+def jobstreet_human_sleep(label: str = ""):
+    """JobStreet 專用 sleep (v1.8.0: 0.5-1.0s)。
+
+    實測: 0.5s sleep / 200 reqs = 0 fail; 0.1s (10 req/s) / 100 reqs = 0 fail。
+    JobStreet 的公開 list API + GraphQL 對壓力比 LinkedIn 寬鬆很多。
+    區間由 adapter 定義 (single source of truth)。
+    """
+    return _jobstreet.human_sleep(label, sleep=time.sleep)
+
+
+def source_human_sleep(source: str, label: str = ""):
+    """依 source 選對的 sleep (v1.8.0)。未知 source → 用全域預設。"""
+    if source == "jobstreet":
+        return jobstreet_human_sleep(label)
+    if source == "linkedin":
+        return linkedin_human_sleep(label)
+    if source == "cake":
+        return cake_human_sleep(label)
+    return human_sleep(label)
 
 
 # Cake 專用 sleep (2026-08-30 加): 跟全域同 3.0-10.0s, 2-5s 測試發現 14 page 就 429
@@ -2253,14 +2332,27 @@ def _is_pagination_ceiling(start: int, exc: Exception) -> bool:
     return start >= _linkedin.PAGINATION_CEILING and isinstance(exc, _linkedin.FatalListPageError)
 
 
-def crawl_list(tpr: str, max_pages: int, location: str = LOCATION, geo_id: str = GEO_ID) -> list[dict]:
+def crawl_list(
+    tpr: str,
+    max_pages: int,
+    location: str = LOCATION,
+    geo_id: str = GEO_ID,
+    start_page: int = 1,
+) -> list[dict]:
     seen: set[str] = set()
     all_jobs: list[dict] = []
     # FIX 2026-09-23: LinkedIn 偶爾 page 只回 9 card (relevance ranking, 不是 EOF).
     # 舊邏輯 `len(jobs) < PAGE_SIZE` 會誤判截斷, 改成連續 2 頁 0 new jobs 才視為 EOF.
     empty_streak = 0
 
-    for p in range(max_pages):
+    # v1.8.0: per-source sleep 節奏 (LinkedIn 1.5-3.0s, 見 linkedin.SLEEP_MIN/MAX)
+    _SLEEP_SOURCE.set("linkedin")
+
+    # v1.8.0: start_page — 頁面區間式切塊 (chunk k 爬第 start_page..max_pages 頁)。
+    # 舊的「累計式」切塊 (第 N 塊爬第 1..N 頁) 會把前面 N-1 頁重爬一遍,
+    # 30d 實測是 355 個 page fetch 換 100 頁的池子 = 3.55× 重複。
+    # 改成區間式後, 每頁只抓一次; 跨 chunk 的去重本來就有 (seen_jds.jsonl + sheet pre-dedup)。
+    for p in range(start_page - 1, max_pages):
         start = p * PAGE_SIZE
         print(f"\n  [list page {p + 1}] start={start}")
         try:
@@ -2356,7 +2448,11 @@ def fetch_jobstreet_list_page(keyword: str, page: int, daterange: str, worktype:
 
 
 def crawl_jobstreet_list(
-    daterange: str, max_pages: int, keywords: list[str] | None = None, worktype: str = JOBSTREET_WORKTYPE_FT
+    daterange: str,
+    max_pages: int,
+    keywords: list[str] | None = None,
+    worktype: str = JOBSTREET_WORKTYPE_FT,
+    start_page: int = 1,
 ) -> list[dict]:
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
@@ -2366,12 +2462,17 @@ def crawl_jobstreet_list(
 
     跨 keyword dedup 不變: 兩個 keyword 都撈到的職缺只回傳一次。
 
+    `start_page` (v1.8.0): 只爬第 start_page..max_pages 頁 (頁面區間式切塊)。
+    舊的累計式切塊 (第 N 塊爬第 1..N 頁) 讓 30d 這輪多爬了 5.4× 的頁數。
+
     session / sleep / list helper 在呼叫時才讀取, 所以測試可以繼續 patch
     `sg_product_jobs._cc_session`、`sg_product_jobs.human_sleep` (內含 `sg_product_jobs.time`)
     與 `sg_product_jobs.build_jobstreet_list_url` / `sg_product_jobs.parse_jobstreet_list_page`。
     """
     if keywords is None:
         keywords = JOBSTREET_KEYWORDS
+    # v1.8.0: per-source sleep 節奏 (JobStreet 0.5-1.0s, 見 jobstreet.SLEEP_MIN/MAX)
+    _SLEEP_SOURCE.set("jobstreet")
     return _jobstreet.crawl_list(
         daterange,
         max_pages,
@@ -2382,6 +2483,7 @@ def crawl_jobstreet_list(
         sleep_seconds=time.sleep,
         build_url=build_jobstreet_list_url,
         parse_page=parse_jobstreet_list_page,
+        start_page=start_page,
     )
 
 
@@ -2610,18 +2712,106 @@ def fetch_onezerofour_jd(slug: str) -> dict:
     return _onezerofour.fetch_jd(slug, hit=hit_onezerofour_detail)
 
 
-def crawl_onezerofour_list(daterange: str, max_pages: int, keywords: list[str] | None = None) -> list[dict]:
+def crawl_onezerofour_list(
+    daterange: str,
+    max_pages: int,
+    keywords: list[str] | None = None,
+    start_page: int = 1,
+) -> list[dict]:
     """8 keyword × max_pages list API, ThreadPoolExecutor 8 workers 平行抓 (RULES §15.8, §15.11)。
 
     `hit` 傳的是本模組的 wrapper 而不是 adapter 內部的函式, 所以測試 patch
     `sg_product_jobs.hit_onezerofour_list` 仍然有效。
     """
+    # v1.8.0: per-source sleep 節奏 (104 1.0-2.0s, 見 onezerofour.SLEEP_MIN/MAX)
+    _SLEEP_SOURCE.set("onezerofour")
     return _onezerofour.crawl_list(
         daterange,
         max_pages,
         keywords,
         hit=hit_onezerofour_list,
+        sleep=human_sleep,
+        start_page=start_page,
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# JD 抓取 (v1.8.0: 平行)
+#
+# 2026-11-24 實測: 抓 JD 原本是 `for` 迴圈逐筆抓, 完全串行 →
+# 每筆的固定 sleep (3-10s) 會全部疊成 wall time。
+# 改成 ThreadPoolExecutor: 網路 I/O 會釋放 GIL, 所以 threads 真的能疊請求。
+#
+# 執行緒安全的邊界 (故意的):
+#   - worker 只做「網路 I/O + 印進度」, 不碰任何共享狀態。
+#   - append_seen (seen_jds.jsonl)、stats、out 全部在主線程套用結果時處理
+#     → seen file 不會有 interleaving, out 的順序 == 輸入順序。
+# ─────────────────────────────────────────────────────────────
+def _fetch_jd_for_job(job: dict) -> dict:
+    """抓一筆 JD (依 source 決定 fetcher)。回傳 adapter 的 result dict。"""
+    jid = job.get("job_id")
+    src = job.get("source", "linkedin")
+    if src == "jobstreet":
+        return fetch_jobstreet_jd(jid)
+    if src == "cake":
+        return fetch_cake_jd(job)
+    if src == "onezerofour":
+        return fetch_onezerofour_jd(jid)
+    # 預設 LinkedIn (unknown source 也 fallback 到這)
+    return fetch_jd(jid)
+
+
+def _fetch_jds(to_fetch: list[dict]) -> list[dict]:
+    """抓一批 JD。回傳跟 to_fetch 同順序的 result list。
+
+    `JD_FETCH_WORKERS <= 1` → 完全串行 (舊行為, 測試與保守模式用)。
+    """
+    if not to_fetch:
+        return []
+    n_total = len(to_fetch)
+    source = to_fetch[0].get("source", "linkedin")
+    workers = min(JD_FETCH_WORKERS, n_total)
+
+    if workers <= 1:
+        results: list[dict] = []
+        for i, job in enumerate(to_fetch, 1):
+            print(f"  [{i}/{n_total}] {job['job_id']} {job['title'][:50]}")
+            result = _fetch_jd_for_job(job)
+            if result.get("jd_text"):
+                print(
+                    f"            ✓ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={result.get('company', '')[:30]}"
+                )
+            else:
+                print(f"            ✗ {result.get('error')}")
+            results.append(result)
+            if i < n_total:
+                human_sleep("jd")
+        return results
+
+    print(f"  (平行抓 JD: {workers} workers)")
+    parallel_results: list[dict | None] = [None] * n_total
+
+    def _worker(idx_job: tuple[int, dict]) -> tuple[int, dict]:
+        idx, job = idx_job
+        # contextvar 在新 thread 是乾淨的 → 每個 worker 要自己設 source
+        _SLEEP_SOURCE.set(source)
+        print(f"  [{idx + 1}/{n_total}] {job['job_id']} {job['title'][:50]}", flush=True)
+        result = _fetch_jd_for_job(job)
+        if result.get("jd_text"):
+            print(
+                f"            ✓ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={result.get('company', '')[:30]}",
+                flush=True,
+            )
+        else:
+            print(f"            ✗ {result.get('error')}", flush=True)
+        human_sleep("jd")
+        return idx, result
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for idx, result in pool.map(_worker, list(enumerate(to_fetch))):
+            parallel_results[idx] = result
+
+    return [r if r is not None else {"jd_text": None, "error": "no result"} for r in parallel_results]
 
 
 def enrich_with_jd(
@@ -2691,52 +2881,72 @@ def enrich_with_jd(
 
     out = []
     stats = {"total": n_total, "skipped": 0, "cached": 0, "fetched": 0, "failed": 0}
+
+    # ── 階段 1 (主線程): 決定每一筆是 skip / cache / 還是要抓 ──────────────
+    # v1.8.0: 抓 JD 改成平行 → 先把「要抓哪些」決定好, 平行抓完再由主線程套用結果。
+    # 這樣 append_seen (seen_jds.jsonl) 仍然只有主線程在寫 → 沒有 interleaving 風險,
+    # out 的順序也跟輸入順序一致 (Sheet 的 row 順序不會亂)。
+    plan: list[dict] = []
+    to_fetch: list[dict] = []
     for i, j in enumerate(jobs, 1):
         reason = _skip_reason(j)
-        j2 = dict(j)
         if reason:
-            j2["jd_text"] = None
-            j2["jd_skipped"] = reason
-            stats["skipped"] += 1
-            print(f"  [{i}/{n_total}] ⏭  skip ({reason})  {j['title'][:55]}")
-            out.append(j2)
+            plan.append({"job": j, "action": "skip", "reason": reason})
             continue
         jid = j.get("job_id")
         src = j.get("source", "linkedin")
         if not refetch:
             # 1) in-memory jd_text (同 run 內)
             if j.get("jd_text"):
-                j2["jd_text"] = j["jd_text"]
-                j2["jd_lines"] = j.get("jd_lines")
-                j2["jd_hash"] = j.get("jd_hash")
-                j2["jd_cached"] = "memory"
-                stats["cached"] += 1
-                print(f"  [{i}/{n_total}] 💾 cached (mem)  {j['title'][:55]}")
-                out.append(j2)
+                plan.append({"job": j, "action": "cache_mem"})
                 continue
             # 2) json_cache (跨 run)
             if (src, jid) in json_cache:
-                c = json_cache[(src, jid)]
-                j2["jd_text"] = c["jd_text"]
-                j2["jd_lines"] = c.get("jd_lines")
-                j2["jd_hash"] = c.get("jd_hash")
-                j2["jd_cached"] = "json"
-                stats["cached"] += 1
-                print(f"  [{i}/{n_total}] 💾 cached (json) {j['title'][:55]}")
-                out.append(j2)
+                plan.append({"job": j, "action": "cache_json"})
                 continue
-        # 3) 抓 JD (依 source 決定 fetcher)
-        # DEPRECATED 2026-09-09: jora dispatch 已移除 (sg.jora.com 關站), active sources 剩 linkedin / jobstreet / cake / onezerofour
-        print(f"  [{i}/{n_total}] {j['job_id']} {j['title'][:50]}")
-        if src == "jobstreet":
-            result = fetch_jobstreet_jd(jid)
-        elif src == "cake":
-            result = fetch_cake_jd(j)
-        elif src == "onezerofour":
-            result = fetch_onezerofour_jd(jid)
-        else:
-            # 預設 LinkedIn (unknown source 也 fallback 到這)
-            result = fetch_jd(jid)
+        plan.append({"job": j, "action": "fetch"})
+        to_fetch.append(j)
+
+    # ── 階段 2: 抓 JD (平行) ─────────────────────────────────────────────────
+    fetch_results = _fetch_jds(to_fetch)
+
+    # ── 階段 3 (主線程): 套用結果 + 更新狀態 ────────────────────────────────
+    fetch_idx = 0
+    for i, j in enumerate(jobs, 1):
+        entry = plan[i - 1]
+        j2 = dict(j)
+        action = entry["action"]
+        if action == "skip":
+            j2["jd_text"] = None
+            j2["jd_skipped"] = entry["reason"]
+            stats["skipped"] += 1
+            print(f"  [{i}/{n_total}] ⏭  skip ({entry['reason']})  {j['title'][:55]}")
+            out.append(j2)
+            continue
+        jid = j.get("job_id")
+        src = j.get("source", "linkedin")
+        if action == "cache_mem":
+            j2["jd_text"] = j["jd_text"]
+            j2["jd_lines"] = j.get("jd_lines")
+            j2["jd_hash"] = j.get("jd_hash")
+            j2["jd_cached"] = "memory"
+            stats["cached"] += 1
+            print(f"  [{i}/{n_total}] 💾 cached (mem)  {j['title'][:55]}")
+            out.append(j2)
+            continue
+        if action == "cache_json":
+            c = json_cache[(src, jid)]
+            j2["jd_text"] = c["jd_text"]
+            j2["jd_lines"] = c.get("jd_lines")
+            j2["jd_hash"] = c.get("jd_hash")
+            j2["jd_cached"] = "json"
+            stats["cached"] += 1
+            print(f"  [{i}/{n_total}] 💾 cached (json) {j['title'][:55]}")
+            out.append(j2)
+            continue
+        # action == "fetch"
+        result = fetch_results[fetch_idx]
+        fetch_idx += 1
         if result.get("jd_text"):
             j2["jd_text"] = result["jd_text"]
             j2["jd_lines"] = result["jd_lines"]
@@ -2747,9 +2957,6 @@ def enrich_with_jd(
             if result.get("location"):
                 j2["location"] = result["location"]
             stats["fetched"] += 1
-            print(
-                f"            ✓ {len(result['jd_text'])} chars / {len(result['jd_lines'])} lines / co={j2.get('company', '')[:30]}"
-            )
             # 記到 seen file (只在 seen 沒記錄時 append, 避免重複行)
             # refetch=True 時 seen_ids 會是空 set → 全部都會 append (更新 hash/timestamp)
             seen_key = (src, jid)
@@ -2762,10 +2969,7 @@ def enrich_with_jd(
             j2["jd_text"] = None
             j2["jd_error"] = result.get("error")
             stats["failed"] += 1
-            print(f"            ✗ {result.get('error')}")
         out.append(j2)
-        if i < n_total:
-            human_sleep("jd")
     return out, stats
 
 
@@ -2793,6 +2997,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--geo-id", default=None, help=f"LinkedIn geoId (default: {GEO_ID}); 跟 --location 一起給")
     ap.add_argument("--with-jd", action="store_true", help="抓取每個職缺的 JD 全文 (會增加不少時間)")
     ap.add_argument("--max-pages", type=int, default=None, help="override 預設頁數上限")
+    ap.add_argument(
+        "--start-page",
+        type=int,
+        default=1,
+        help="起始頁 (v1.8.0, 頁面區間式切塊)。--max-pages 當成「結束頁」, "
+        "這個 crawl 只爬第 start_page..max_pages 頁。預設 1 = 從頭爬 (舊行為)。"
+        "累計式切塊 (第 N 塊爬第 1..N 頁) 會把前面重爬一遍, 30d 實測多爬 5.4× 頁數。",
+    )
     ap.add_argument(
         "--skip-keywords",
         nargs="*",
@@ -2929,7 +3141,14 @@ def main():
         print(
             f"==== JobStreet Jobs / {location} / {args.range} / daterange={js_tpr} (multi-keyword={len(JOBSTREET_KEYWORDS)}) ===="
         )
-    print(f"==== MAX_PAGES = {max_pages}  (隨機 sleep {SLEEP_MIN}-{SLEEP_MAX}s) ====\n")
+    _src_sleep = {
+        "linkedin": f"{_linkedin.SLEEP_MIN}-{_linkedin.SLEEP_MAX}s",
+        "jobstreet": f"{_jobstreet.SLEEP_MIN}-{_jobstreet.SLEEP_MAX}s",
+    }.get(args.source, f"{SLEEP_MIN}-{SLEEP_MAX}s")
+    _page_span = f"pages {args.start_page}..{max_pages}" if args.start_page > 1 else f"pages 1..{max_pages}"
+    print(
+        f"==== MAX_PAGES = {max_pages}  ({_page_span}, 隨機 sleep {_src_sleep}) [JD workers={JD_FETCH_WORKERS}] ====\n"
+    )
     if args.with_jd and skip_pat:
         print(f"==== JD skip 規則: {skip_pat.pattern} ====")
         if args.skip_keywords is not None:
@@ -2946,7 +3165,7 @@ def main():
     # DEPRECATED 2026-09-09: jora dispatch 已移除 (sg.jora.com 關站)
     if args.source == "jobstreet":
         js_tpr = JOBSTREET_TPR[args.range]
-        jobs = crawl_jobstreet_list(js_tpr, max_pages, keywords=JOBSTREET_KEYWORDS)
+        jobs = crawl_jobstreet_list(js_tpr, max_pages, keywords=JOBSTREET_KEYWORDS, start_page=args.start_page)
     elif args.source == "cake":
         # P1-01: max_pages 接到 crawl_cake_list (跟其他 source 對齊, 沒傳 fallback CAKE_MAX_PAGES[range])
         cake_result = crawl_cake_list(args.range, max_pages=max_pages, keywords=CAKE_KEYWORDS)
@@ -2958,9 +3177,9 @@ def main():
             flush=True,
         )
     elif args.source == "onezerofour":
-        jobs = crawl_onezerofour_list(args.range, max_pages, keywords=ONEZEROFOUR_KEYWORDS)
+        jobs = crawl_onezerofour_list(args.range, max_pages, keywords=ONEZEROFOUR_KEYWORDS, start_page=args.start_page)
     else:
-        jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id)
+        jobs = crawl_list(tpr, max_pages, location=location, geo_id=geo_id, start_page=args.start_page)
     if not jobs:
         print("\n無資料，結束。")
         return

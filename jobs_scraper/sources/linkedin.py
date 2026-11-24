@@ -15,6 +15,8 @@ those module attributes keep working unchanged.
 
 from __future__ import annotations
 
+import os
+import random
 import time
 from typing import Callable
 from urllib.parse import urlencode
@@ -119,6 +121,37 @@ JD_BLOCK_SEL = (
 
 #: Backoff ladder shared with the other sources: 30/60/90s, four attempts.
 BACKOFF = [30, 60, 90]
+
+
+def _sleep_range_from_env(prefix: str, default_min: float, default_max: float) -> tuple[float, float]:
+    """讀 env 的 sleep 區間; 沒設或格式錯就用預設值。"""
+    try:
+        lo = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MIN", default_min))
+        hi = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MAX", default_max))
+    except ValueError:
+        lo, hi = default_min, default_max
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+# v1.8.0: LinkedIn 的請求節奏 (2026-11-24 實測純網路只要 0.92s, 舊的 3-10s sleep
+# 讓 wall time 有 88% 是等待)。
+# 沒有像 JobStreet 那樣降到 0.5-1.0s: Guest API 會真的 429,
+# 所以保守地降到 1.5-3.0s, 30/60/90 的 backoff ladder 仍然保留。
+SLEEP_MIN, SLEEP_MAX = _sleep_range_from_env("LINKEDIN", 1.5, 3.0)
+
+
+def human_sleep(label: str = "", *, sleep: Callable[[float], None] = time.sleep) -> None:
+    """LinkedIn 的請求節奏 (v1.8.0)。
+
+    `sleep` 在呼叫時才傳進來 → 引擎可以注入自己的 sleep, 測試也可以取代它。
+    """
+    s = random.uniform(SLEEP_MIN, SLEEP_MAX)
+    if label:
+        print(f"            sleep {s:.1f}s ({label})", flush=True)
+    sleep(s)
+
 
 #: The Guest API refuses to paginate past this `start` offset: it answers HTTP
 #: 400 instead of an empty page (measured 2026-11-23: start=990 → 200 with an

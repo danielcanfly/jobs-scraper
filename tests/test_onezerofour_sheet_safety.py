@@ -141,7 +141,7 @@ def _run_104_main_with_sheet(monkeypatch, tmp_path, extra_argv):
     """Drive main() up to the push_to_sheet call with everything faked."""
     captured: dict = {}
 
-    def fake_crawl(daterange, max_pages, keywords=None):
+    def fake_crawl(daterange, max_pages, keywords=None, start_page=1):
         return [_job()]
 
     def fake_push(jobs, sheet_url, **kwargs):

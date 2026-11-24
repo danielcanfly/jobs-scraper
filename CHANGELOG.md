@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.8.0 — 2026-11-24
+
+The crawl was not slow because the network was slow. It was slow because the
+engine waited.
+
+Fixed
+
+- **80% of a run's wall time was `time.sleep()`.** Measured 2026-11-24 against the live APIs: a JobStreet list page costs 0.80s of network time, a JobStreet JD 0.29s, a LinkedIn list page 0.92s — and the engine then slept 3–10s (6.5s on average) after *every* request. The sg 30d JobStreet phase made 1,750 requests over 3h51m: 80% sleeping, 6% on the wire, 14% on process start-up and the sheet read.
+- **Every source now owns its pacing, and the adapter is where that budget lives.** JobStreet paces at 0.5–1.0s — its public list API and GraphQL endpoint survived a stress test of 0.5s between requests across 200 requests with zero failures, and 10 req/s with zero failures. LinkedIn paces at 1.5–3.0s: the Guest API really does return 429, so it stays conservative and keeps its 30/60/90s retry ladder. 104 paces at 1.0–2.0s: its detail API survived 59 requests at 0.3s apart with zero failures, and its list API — which had **no** general pacing at all, so eight keyword workers hit it without a pause — was answered with 403 after one dense burst. Cake stays at 3–10s, because Cake answers 429 at 2–5s. A budget can be overridden from the environment (`JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX`) without touching the code.
+- **Chunks crawl a page span instead of re-crawling the whole prefix.** The supervisors used the cumulative style — chunk *N* crawled pages 1..*N* — so every earlier page was fetched again on every chunk. The 30d JobStreet run made 2,179 page fetches for a pool that needs ~406: a 5.4× redundancy, and 7.5× for `product lead` alone (1,260 fetches for 169 pages). LinkedIn paid 3.55× the same way. A chunk now owns a span (`--start-page` / `--max-pages`) and crawls only its own pages; cross-chunk de-duplication is unaffected, because the seen file and the pre-detail dedup against the target tab both survive across processes.
+- **Detail fetches run in a thread pool.** They were a sequential `for` loop, so every detail's sleep stacked into the wall time. The pool defaults to 3 workers (like Cake's) and can be set with `JOBS_SCRAPER_JD_WORKERS`. The threads do network I/O and nothing else — the seen file, the counters and the output order stay in the main thread, so `seen_jds.jsonl` cannot interleave and the Sheet's row order does not change.
+- A span beyond the pool returns no data, and that is an end rather than a gap: the supervisor records it as "pool exhausted" instead of retrying it or reporting a coverage hole.
+- The 104 adapter honours a page span as well, and it paces its list pages, not only its details.
+
+Acceptance
+
+- `tests/test_sleep_budget_v180.py` (12 tests) pins the per-source defaults, the environment override, the fallback on a malformed or inverted range, and that the engine's sleep follows the source being crawled.
+- `tests/test_page_range_chunks_v180.py` (12 tests) pins that a span touches only its own pages, that consecutive spans cover every page exactly once, that the cumulative style demonstrably re-crawls, and that the soft stop still fires at the pool end.
+- `tests/test_jd_parallel_v180.py` (11 tests) pins that the workers really overlap, that a single worker stays sequential, that the seen file is only written from the main thread, and that the output order matches the input order.
+- 922 passed, freeze v12, hygiene PASS, ruff/mypy clean.
+
 ## v1.7.0 — 2026-11-24
 
 A Sheet write never overwrites a row that holds data.

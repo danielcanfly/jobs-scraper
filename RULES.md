@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.6.0` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.6.0` | package metadata |
-| `uv.lock` | `1.6.0` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.6.0` | Mavis plugin manifest |
-| `.codex-plugin/plugin.json` | `1.6.0` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.6.0` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.6.0` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.0` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.0` | package metadata |
+| `uv.lock` | `1.8.0` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.0` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.0` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.0` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.0` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
@@ -454,6 +454,32 @@ Since v1.5.0 the engine keeps the orchestration and the business rules, and each
 The `jobs_scraper/sources/` package that v1.4.0 removed has returned with the opposite meaning: in v1.4.0 it held an unused duplicate of the LinkedIn adapter with no importer; in v1.5.0 it holds one adapter per active source. An AST check in the equivalence suite asserts the engine keeps only wrappers, so the duplication v1.4.0 removed cannot come back.
 
 Since v1.6.0 every source adapter's list fetch has the same retry contract: a transient 429, 5xx, connection error or JSON decode error sleeps 30/60/90s and retries (four attempts), while any other 4xx is raised without retry. A caller must therefore treat a run as successful only when the list crawl actually produced pages — the process exit code alone is not evidence that any job was collected.
+
+### Request pacing (2026-11-24, v1.8.0)
+
+Measured against the live APIs on 2026-11-24: a JobStreet list page costs 0.80s of network time, a JobStreet JD 0.29s, a LinkedIn list page 0.92s — while the shared 3–10s sleep between every request made 80% of a run's wall time waiting.
+
+- Each source owns its pacing budget, and the budget lives in that source's adapter: JobStreet 0.5–1.0s, LinkedIn 1.5–3.0s, 104 1.0–2.0s, Cake 3–10s (Cake answers 429 at 2–5s, so it is not tightened).
+- The 104 adapter paces its **list pages** as well as its details. 104's list API had no general pacing at all — only a retry backoff — so eight keyword workers hit it without a pause; a dense burst was answered with 403. Its detail API is far more tolerant (59 requests at 0.3s apart, zero failures).
+- A budget may be overridden from the environment with `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX`. A malformed value falls back to the default; an inverted range is swapped, never rejected.
+- The engine keeps **one** sleep injection point, `human_sleep`. The source being crawled selects the range through a context variable, so a test that replaces `human_sleep` replaces every source's pacing, and a worker thread sets the source itself (a fresh thread starts with a clean context).
+- The retry ladders are untouched by the pacing change.
+
+### Page spans (2026-11-24, v1.8.0)
+
+The supervisors used the cumulative style — chunk *N* crawled pages 1..*N* — so every earlier page was fetched again on every chunk (30d JobStreet: 2,179 fetches for a pool of ~406 pages, 5.4×; LinkedIn: 3.55×).
+
+- A crawl may be given a page span: `--start-page` (default 1) and `--max-pages` as the **end** page. A chunk that owns a span crawls only its own pages. The 104 adapter honours it too: its keyword worker crawls only its own pages.
+- Consecutive spans cover every page exactly once — no page fetched twice, none skipped.
+- Cross-chunk de-duplication does not depend on the span: the seen file and the pre-detail dedup against the target tab both survive across processes.
+- A span beyond the pool returns no data. That is an end, not a gap: the supervisor records it as "pool exhausted" instead of retrying it.
+
+### Parallel detail fetch (2026-11-24, v1.8.0)
+
+- Detail fetches run in a thread pool; `JOBS_SCRAPER_JD_WORKERS` sets the worker count (default 3, 1 = fully sequential).
+- The threads do network I/O and nothing else. The seen file, the counters and the output list are the main thread's, so `seen_jds.jsonl` cannot interleave and the output order still matches the input order — the Sheet's row order does not change.
+- A worker sets the source's pacing context itself.
+- A failed detail fetch stays a failed row; it does not raise.
 
 ## 16. Installation and governance
 

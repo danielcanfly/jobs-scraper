@@ -341,7 +341,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本與發版說明
 
-`v1.7.0` 為目前版本：寫 Sheet 永遠不能蓋掉有資料的 row。寫入起點原本一律取「sheet 裡第一個空白 row」，然後從那裡連寫這一輪的列數。如果 sheet 中間有一個洞（前一輪被殺、batch 只寫一半就留下來的），把 159 列寫進一個 1 列的洞 → 下面 158 列**有資料**的 row 就被寫爆蓋掉。2026-11-24 就是這樣：sg 14d 那輪毀掉 415 列已收集的職缺；而且被毀掉的 job 不在 sheet 裡 → pre-detail dedup 不會再擋 → 又重抓一次 JD。
+`v1.8.0` 為目前版本：慢的不是網路，是引擎在等。2026-11-24 對照線上 API 實測：JobStreet list 一頁純網路 0.80s、JobStreet JD 0.29s、LinkedIn list 一頁 0.92s，而引擎在**每個**請求之後都睡 3–10s（平均 6.5s）。sg 30d 的 JobStreet 階段 3h51m 發了 1,750 個請求：80% 在睡、6% 在網路上、14% 在 process 啟動與讀表。由此得到三個改動。第一，每個來源有自己的節奏，而且預算就放在各自的 adapter 裡：JobStreet 0.5–1.0s（公開 list API 與 GraphQL 實測 0.5s 間隔連發 200 個請求零失敗、10 req/s 零失敗）、LinkedIn 1.5–3.0s（Guest API 真的會回 429，所以保守保留 30/60/90s 的 retry ladder）、104 1.0–2.0s（detail API 實測 0.3s 間隔連發 59 筆零失敗；而它的 list API 原本**完全沒有**一般性的節拍 → 8 個 keyword worker 會無間隔連打，實測密集 burst 之後回過 403）、Cake 維持 3–10s（Cake 在 2–5s 就回 429）。預算可以用 `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX` 從環境變數覆寫，不用改 code。第二，塊改成「爬自己的頁區間」而不是「重爬整個前綴」：舊 supervisor 是累計式切塊，第 N 塊爬第 1..N 頁 → 前面每一頁每跑一塊就重抓一次，30d 的 JobStreet 發了 2,179 次分頁請求但池子只需要 ~406 頁（5.4×，`product lead` 一個 keyword 就 7.5×），LinkedIn 同樣吃了 3.55×。現在每塊擁有自己的區間（`--start-page` / `--max-pages`），只爬自己那幾頁；跨塊去重不受影響，因為 seen file 與「對目標分頁做 pre-detail dedup」本來就跨 process 存活。第三，抓 JD 改成 thread pool（預設 3 個 worker，`JOBS_SCRAPER_JD_WORKERS`），不再是一個接一個的 `for` 迴圈：thread 只做網路 I/O，seen file、計數器與輸出順序都留在主 thread → `seen_jds.jsonl` 不會交錯、Sheet 的 row 順序也不變。區間超出池子時回空資料，那是「結束」而不是「缺口」。
 
 現在寫入起點會在「知道要寫幾列」之後才定：只有當那個洞連續塞得下整批列時才用它，否則一律 append 到最後。塞得下的洞還是會被填，所以正常情況的行為不變。
 
@@ -372,7 +372,7 @@ CI 也會檢查鎖定依賴、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 對外提供 MCP server 版本。
-- 目前 frozen equivalence baseline 為 `v1.7.0`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住每個已知城市的實測池深」規則、「每個 JobStreet keyword 都要爬到自己的池底」規則、「Guest API 1000 筆分頁視窗是結束而不是失敗」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則，以及「生成 worker」的相關規則。
+- 目前 frozen equivalence baseline 為 `v1.8.0`，明確保護五來源 contract、「每個來源一個 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空頁與 JD retry 規則、「range 的頁數上限必須蓋得住每個已知城市的實測池深」規則、「每個 JobStreet keyword 都要爬到自己的池底」規則、「Guest API 1000 筆分頁視窗是結束而不是失敗」規則、「pre-detail dedup 讀的是要寫入的那個分頁」規則、「生成 worker」的相關規則、per-source 節奏規則、頁區間規則，以及平行抓 JD 規則。
 
 ## 授權
 

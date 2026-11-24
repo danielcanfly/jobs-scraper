@@ -1,4 +1,4 @@
-# v1.7.0 Behaviour Equivalence Contract
+# v1.8.0 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -173,3 +173,56 @@ which is the behaviour the split had to preserve.
 
 Any future source expansion or retirement is an explicit public-contract change and requires a new
 authorized equivalence baseline.
+
+## Pacing invariants (v1.8.0)
+
+35. Every source owns its own request pacing, and the adapter is where that budget lives: the
+    JobStreet adapter paces at 0.5–1.0s, the LinkedIn adapter at 1.5–3.0s, the 104 adapter at
+    1.0–2.0s, Cake stays at 3–10s.
+    Measured 2026-11-24: the pure network time of a JobStreet list page is 0.80s, of a JobStreet
+    JD 0.29s, of a LinkedIn list page 0.92s — while the old 3–10s sleep between every request made
+    80% of a run's wall time waiting. A shared budget across sources with very different bot
+    protection is over-conservative for the tolerant ones.
+35a. The 104 adapter paces too, and it paces its list pages as well as its details. 104's list API
+    had no general pacing at all — only a retry backoff — so eight keyword workers hit it without a
+    pause between pages; a dense burst was answered with 403 (measured 2026-11-24: eight concurrent
+    requests and ten back-to-back requests both answered 200, but a burst that followed a detail run
+    answered 403). Its detail API tolerates far more (59 requests at 0.3s apart, zero failures), so
+    the 104 budget is 1.0–2.0s: four times faster than the global budget, still conservative.
+36. The engine keeps **one** sleep injection point, `human_sleep`, and the source being crawled
+    selects the range through a context variable. A test that replaces `human_sleep` therefore
+    replaces every source's pacing, and a worker thread has to set the source itself — a fresh
+    thread starts with a clean context.
+37. A source's budget can be overridden from the environment
+    (`JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX`) without touching the code. A malformed value falls
+    back to the default and an inverted range is swapped, never rejected.
+38. The retry ladders are unchanged by the pacing change: JobStreet and LinkedIn still retry a
+    transient 429/5xx/connection/JSON failure with 30/60/90s and still raise a non-429 4xx
+    immediately. The lower per-request budget is a pacing change, not a retry change.
+
+## Page-range invariants (v1.8.0)
+
+39. A crawl may be given a page **span** (`--start-page` / `--max-pages`), and a chunk that owns a
+    span crawls only its own pages. The cumulative style — chunk *N* crawls pages 1..*N* — re-crawled
+    every earlier page on every chunk: 2,179 page fetches for a 30d JobStreet pool that needs ~406,
+    a 5.4× redundancy (7.5× for one keyword), and 355 for a 100-page LinkedIn pool, a 3.55× one.
+40. Consecutive spans cover every page exactly once: no page is fetched twice and none is skipped.
+    Cross-chunk de-duplication does not depend on the span — it is the seen file plus the
+    pre-detail dedup against the target tab, both of which survive across processes.
+41. `--start-page` defaults to 1, so a crawl without a span behaves exactly as before.
+42. A span that lies beyond the pool returns no data. That is an end, not a gap: the supervisor
+    records it as "pool exhausted" rather than retrying it or reporting a coverage hole.
+42a. The 104 adapter honours a span as well: its keyword worker crawls only its own pages, so a
+    chunk that owns a span never re-crawls the prefix.
+
+## Parallel-detail invariants (v1.8.0)
+
+43. Detail fetches run in a thread pool (`JOBS_SCRAPER_JD_WORKERS`, default 3). The threads do
+    network I/O and nothing else: the seen file, the counters and the output list are written by the
+    main thread after the pool drains, so the seen file cannot interleave and the output order
+    still matches the input order. The Sheet's row order therefore does not change.
+44. A worker sets the source's pacing context itself, because a fresh thread starts with a clean
+    context and would otherwise fall back to the global budget.
+45. A worker count of 1 keeps the fully sequential behaviour, and the detail fetch still reports a
+    failure as a failed row instead of raising.
+

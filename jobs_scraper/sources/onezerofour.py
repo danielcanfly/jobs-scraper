@@ -14,6 +14,7 @@ that patch those module attributes keep working unchanged.
 from __future__ import annotations
 
 import os
+import random
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -67,6 +68,39 @@ SOURCE = "onezerofour"
 
 #: Backoff ladder shared with the other sources: 30/60/90s, four attempts.
 BACKOFF = [30, 60, 90]
+
+
+def _sleep_range_from_env(prefix: str, default_min: float, default_max: float) -> tuple[float, float]:
+    """讀 env 的 sleep 區間; 沒設或格式錯就用預設值。"""
+    try:
+        lo = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MIN", default_min))
+        hi = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MAX", default_max))
+    except ValueError:
+        lo, hi = default_min, default_max
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+# v1.8.0: 104 的請求節奏 (2026-11-24 實測: detail API 0.38s/筆, 59 筆 @0.3s 間隔零失敗)
+#
+# 104 的 list API 之前**完全沒有**一般性的節奏 sleep (只在 retry 時 backoff) →
+# 8 個 keyword 的 worker 會無間隔連打。實測 8 workers 全平行 + 連續 10 次都回 200,
+# 但一次密集的 burst 之後確實出現過 403 → 所以給它一組自己的、保守的區間。
+# 1.0-2.0s 比全域的 3-10s 快 4 倍, 又留足餘裕。
+SLEEP_MIN, SLEEP_MAX = _sleep_range_from_env("ONEZEROFOUR", 1.0, 2.0)
+
+
+def human_sleep(label: str = "", *, sleep: Callable[[float], None] = time.sleep) -> None:
+    """104 的請求節奏 (v1.8.0)。
+
+    `sleep` 在呼叫時才傳進來 → 引擎可以注入自己的 sleep, 測試也可以取代它。
+    """
+    s = random.uniform(SLEEP_MIN, SLEEP_MAX)
+    if label:
+        print(f"            sleep {s:.1f}s ({label})", flush=True)
+    sleep(s)
+
 
 _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -299,6 +333,8 @@ def crawl_list(
     keywords: list[str] | None = None,
     *,
     hit: Callable[..., list[dict]],
+    sleep: Callable[[str], None] | None = None,
+    start_page: int = 1,
 ) -> list[dict]:
     """8 keyword × max_pages list API, ThreadPoolExecutor 8 workers 平行抓 (RULES §15.8, §15.11)。
 
@@ -306,9 +342,18 @@ def crawl_list(
 
     `hit` is the list fetcher, injected so the caller controls the session and
     so tests can substitute their own.
+
+    `sleep` is the per-page pacing hook (v1.8.0): 104 的 list API 之前完全沒有
+    一般性的節奏, 8 個 worker 會無間隔連打 → 密集 burst 之後會出現 403。
+    引擎注入自己的 per-source sleep, 測試可以取代它。
+
+    `start_page` (v1.8.0): 只爬第 start_page..max_pages 頁 (頁面區間式切塊)。
+    舊的累計式切塊 (第 N 塊爬第 1..N 頁) 會把前面重爬一遍。
     """
     if keywords is None:
         keywords = _module_keywords()
+    if sleep is None:
+        sleep = _no_sleep
     isnew = TPR[daterange]
     seen: set[str] = set()
     collected: list[tuple[str, dict]] = []  # (keyword, raw_job)
@@ -318,12 +363,14 @@ def crawl_list(
         Returns: list of (kw, slug, raw_job) for dedup tracking。
         """
         results = []
-        for p in range(1, max_pages + 1):
+        for p in range(start_page, max_pages + 1):
             try:
                 raw = hit(kw, p, isnew)
             except RuntimeError as e:
                 print(f"  [104 KW FAIL] {kw!r} p{p}: {e}", flush=True)
                 continue
+            if p < max_pages:
+                sleep("list")
             for j in raw:
                 slug = (j.get("link") or {}).get("job", "")
                 if "/" in slug:
@@ -351,6 +398,11 @@ def crawl_list(
     for kw, raw in collected:
         out.extend(parse_list_page([raw], keyword=kw))
     return out
+
+
+def _no_sleep(label: str = "") -> None:
+    """Default pacing hook — the engine injects its own."""
+    return None
 
 
 def _module_keywords() -> list[str]:

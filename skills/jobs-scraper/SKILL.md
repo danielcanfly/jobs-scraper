@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+ and network access. Google Sheet tools require user-owned service-account credentials plus explicit SHEET_ID configuration. Worksheet IDs are resolved by region; users do not need to configure SHEET_GID. Local MCP uses STDIO via server_v1_1.py.
 metadata:
   author: danielcanfly
-  version: "1.7.0"
+  version: "1.8.0"
 ---
 
 # Jobs Scraper
@@ -14,13 +14,13 @@ Use the bundled MCP tools when they are available. Do not reimplement scraping l
 
 ## Build map — which code actually runs
 
-There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.7.0` engine:
+There is **one** build. The plugin runtime, any working copy, and the upstream repository all carry the same `v1.8.0` engine:
 
 | Artifact | Path | Version |
 |---|---|---|
-| Scraping engine + CLI | `sg_product_jobs.py` | `1.7.0` |
-| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.7.0` |
-| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.7.0` |
+| Scraping engine + CLI | `sg_product_jobs.py` | `1.8.0` |
+| MCP entrypoints | `server_v1_1.py`, `server.py` | `1.8.0` |
+| MCP service layer | `jobs_scraper/mcp_services/`, `jobs_scraper/tracker/` | `1.8.0` |
 | Title-filter semantics | `SKIP.md` (skip filter v8.5) | frozen contract |
 | Per-source fetching | `jobs_scraper/sources/<source>.py` | one adapter per source |
 
@@ -94,6 +94,13 @@ For the MCP interface, region input is `SG | TW | China | Hangzhou | Shenzhen`.
 List-only crawls are relatively fast. Full-JD enrichment can take a long time on broad ranges. Respect the user's requested source/range and use bounded options such as `max_pages` when the user asks for a smaller run.
 
 The default full-JD path does not skip titles. Apply title skip filtering only when the user explicitly supplies `--skip-keywords`; `--no-skip` remains accepted and means no title skip filter.
+
+### Pacing, page spans and parallel details (v1.8.0)
+
+- **Each source paces itself.** The budget lives in that source's adapter: JobStreet 0.5–1.0s, LinkedIn 1.5–3.0s, 104 1.0–2.0s, Cake 3–10s. Override with `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX` — a malformed value falls back to the default, an inverted range is swapped. Do not lower a source's budget below its adapter default to "go faster": Cake answers 429 at 2–5s, the LinkedIn Guest API does too, and 104's list API answers 403 after a dense burst.
+- **`--start-page` gives a crawl a page span.** `--max-pages` is the *end* page of the span, and `--start-page` (default 1) is where it begins. Use spans for chunked runs so a chunk crawls only its own pages instead of re-crawling the whole prefix; consecutive spans must cover every page exactly once.
+- **A span past the pool end returns no data.** That is an end, not a failure — do not retry it or report a coverage gap.
+- **Detail fetches run in a thread pool** (`JOBS_SCRAPER_JD_WORKERS`, default 3; 1 = sequential). The threads only do network I/O: the seen file, the counters and the output order stay in the main thread, so `seen_jds.jsonl` cannot interleave and the Sheet's row order does not change.
 
 ## Failure handling
 

@@ -18,6 +18,7 @@ patch those module attributes keep working unchanged.
 from __future__ import annotations
 
 import os
+import random
 import re
 import time
 import urllib.parse
@@ -51,6 +52,37 @@ SOFT_STOP_MIN_FRESH = 10
 #: Retry backoff (seconds) for a list page. Mirrors LinkedIn's ladder, which
 #: was added on 2026-10-07 after a 429 hard abort truncated long-range coverage.
 BACKOFF = [30, 60, 90]
+
+
+def _sleep_range_from_env(prefix: str, default_min: float, default_max: float) -> tuple[float, float]:
+    """讀 env 的 sleep 區間; 沒設或格式錯就用預設值。"""
+    try:
+        lo = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MIN", default_min))
+        hi = float(os.environ.get(f"JOBS_SCRAPER_{prefix}_SLEEP_MAX", default_max))
+    except ValueError:
+        lo, hi = default_min, default_max
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+# v1.8.0: JobStreet 的請求節奏 (2026-11-24 實測純網路只要 0.29-0.80s,
+# 舊的 3-10s sleep 讓 wall time 有 80% 是等待)。
+# 壓力測試: 0.5s sleep / 200 reqs = 0 fail; 0.1s (10 req/s) / 100 reqs = 0 fail。
+# JobStreet 的公開 list API + GraphQL 對壓力比 LinkedIn 寬鬆很多。
+SLEEP_MIN, SLEEP_MAX = _sleep_range_from_env("JOBSTREET", 0.5, 1.0)
+
+
+def human_sleep(label: str = "", *, sleep: Callable[[float], None] = time.sleep) -> None:
+    """JobStreet 的請求節奏 (v1.8.0)。
+
+    `sleep` 在呼叫時才傳進來 → 引擎可以注入自己的 sleep, 測試也可以取代它。
+    """
+    s = random.uniform(SLEEP_MIN, SLEEP_MAX)
+    if label:
+        print(f"            sleep {s:.1f}s ({label})", flush=True)
+    sleep(s)
+
 
 #: range → API `daterange` query value.
 TPR = {
@@ -399,6 +431,7 @@ def crawl_list(
     sleep_seconds: Callable[[float], None] = time.sleep,
     build_url: Callable[..., str] = build_list_url,
     parse_page: Callable[[dict, str], list[dict]] = parse_list_page,
+    start_page: int = 1,
 ) -> list[dict]:
     """跑多個 keyword 的 JobStreet list, 跨 keyword dedup。回傳 unique jobs。
 
@@ -423,15 +456,24 @@ def crawl_list(
     `session`, `sleep`, `sleep_seconds`, `build_url` and `parse_page` are injected
     so the caller decides which implementation runs (and so tests can substitute
     their own).
+
+    `start_page` (v1.8.0): 只爬第 `start_page`..`max_pages` 頁。
+    舊的「累計式」切塊 (第 N 塊爬第 1..N 頁) 會把前面 N-1 頁重爬一遍 ——
+    30d 實測 product lead 一個 keyword 就爬了 1,260 頁, 但池子只有 169 頁 = 7.5× 重複。
+    改成頁面區間式 (chunk k 爬自己的那一段) 後每頁只抓一次。
+    跨 chunk 的去重不需要在這裡做: 引擎層的 seen_jds.jsonl + sheet pre-dedup
+    已經擋掉前一塊寫過的職缺 → 區間式切塊不會重抓 JD, 也不會漏。
     """
     if keywords is None:
         keywords = _keywords_from_env()
+    if start_page < 1:
+        start_page = 1
     seen: set[str] = set()
     all_jobs: list[dict] = []
     failed_keywords: list[str] = []
     for kw in keywords:
         kw_seen: set[str] = set()
-        for p in range(1, max_pages + 1):
+        for p in range(start_page, max_pages + 1):
             try:
                 data = fetch_list_page(
                     kw,

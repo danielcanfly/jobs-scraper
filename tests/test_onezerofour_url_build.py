@@ -137,7 +137,7 @@ def _run_main(monkeypatch, tmp_path, argv):
     oof_calls: list[dict] = []
     li_calls: list[dict] = []
 
-    def fake_oof(daterange, max_pages, keywords=None):
+    def fake_oof(daterange, max_pages, keywords=None, start_page=1):
         oof_calls.append({"daterange": daterange, "max_pages": max_pages, "keywords": list(keywords or [])})
         return []
 
