@@ -1,4 +1,4 @@
-# v1.8.4 Behaviour Equivalence Contract
+# v1.8.5 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -279,4 +279,40 @@ authorized equivalence baseline.
     (`.env`, `.secrets`, `seen_jds.jsonl`, the JD caches) neither travels nor is touched. A
     file that differs from the upstream, or is missing from the working copy, is drift, and
     the check reports it instead of passing.
+
+## Release-flow invariants (v1.8.5)
+
+50. A release is one command. `ops/release.sh` runs the guards, pushes, tags, syncs the
+    plugin runtime and the working copy, and verifies all three. The order is the contract:
+    nothing is pushed or tagged before every guard has passed, and a tree with uncommitted
+    changes stops the release before it does anything at all. Every check in that flow fails
+    closed: a check that cannot read the tree is not the same answer as a tree that is
+    clean. The release refuses to start outside a git checkout, refuses to start when the
+    tree has uncommitted changes, and refuses to start when it cannot read the git status at
+    all — a failure is not a pass. A tag that already exists has to point at HEAD: a tag is
+    the record of which commit a release was, and the release does not move a published one
+    silently.
+51. The tag is created locally, after the guards, because whether a change is a release is
+    a person's decision and not the pipeline's. The GitHub Release object is created by CI
+    when it sees the tag, because that needs no credential on the machine — the pipeline
+    mints its own. The two steps are separated on purpose.
+52. The version line is one value across every carrier: the package metadata, the lock
+    file, the engine, the two MCP server identities, the plugin manifests and the Agent
+    Skill. A release checks it before it tags, so a tag cannot land on a commit whose
+    metadata states a different version.
+54. The plugin manifest is part of the version line. It is a Mavis-specific file, so the
+    sync preserves it and a sync never updates it — it drifts on its own, and v1.8.5's own
+    verification found the plugin runtime two versions behind because of it. The release
+    updates the manifest before it syncs, so a plugin never reports a version other than the
+    one its code carries.
+
+53. The scripts that copy themselves to run from a temporary file — the two syncs and the
+    release — delete only that temporary copy, and they re-exec on their own terms even when
+    a child process inherits their state. That state is exported, so a child inherits it; a
+    child that inherited it and skipped the re-exec would run the original in place, where a
+    cleanup naming the running script would delete the original, and where the inherited
+    origin would resolve the parent's repository — the release script ran its own release in
+    a loop that way, each layer starting a pytest that started the next layer. The re-exec is
+    keyed on comparing the running script's own path with the temporary copy's path, and the
+    cleanup names the temporary copy explicitly.
 

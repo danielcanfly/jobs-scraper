@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.8.4` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.8.4` | package metadata |
-| `uv.lock` | `1.8.4` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.8.4` | Mavis plugin manifest (lives in the plugin runtime) |
-| `.codex-plugin/plugin.json` | `1.8.4` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.8.4` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.8.4` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.5` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.5` | package metadata |
+| `uv.lock` | `1.8.5` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.5` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.5` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.5` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.5` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
@@ -514,4 +514,23 @@ Three rules follow from that, and all three have already cost a release:
 - **A working copy is refreshed with the upstream file list, not with its own.** Each placement has files the others do not — the plugin has Mavis-specific files, a working copy has local leftovers — so comparing a placement against its own `git ls-files` produces differences that are not drift. Compare every placement against the upstream list, and look at the actual files.
 - **Every link in the chain is a command.** The upstream→working-copy link used to be a hand-typed copy loop, and v1.8.3 is how that showed up: the working copy was missing the whole `ops/` directory until somebody ran the loop by hand. A link that lives in someone's memory is a link that eventually does not get run.
 
+The three scripts in the chain — `scripts/sync-from-repo.sh`, `scripts/sync-working-copy.sh` and `ops/release.sh` — each overwrite the directory they live in, so each runs from a temporary copy of itself: bash reads a running script incrementally, and a script that rewrites itself while it runs resumes at a byte offset that no longer matches the file. The copy is what runs, and the copy is the only thing it cleans up. The flag that says "you are already the copy" is exported, so a child process inherits it and skips the re-exec — which means the cleanup must name the temporary copy explicitly rather than the running script, or a child deletes the original. v1.8.5 is how that showed up: the release script's own pytest run deleted `ops/release.sh` from the repository.
+
 The crawl is launched from the repository checkout, not from the runtime directory: the runtime directory holds logs and state only, so exactly one copy of a supervisor can be launched.
+
+## 18. Release flow
+
+A release is one command, and it runs the checks before it acts:
+
+```bash
+bash ops/release.sh            # 驗收 → push → tag → 同步三處 → 三處驗收
+bash ops/release.sh --dry-run  # 只驗收與同步, 不 push、不 tag
+```
+
+The order is fixed. The working tree has to be clean, the version line has to agree with itself, and every guard has to pass — before anything is pushed, and before a tag exists. Then the tag is created and pushed, then the plugin runtime and the working copy are synced, then all three are verified byte for byte.
+
+**The tag is created here, and the GitHub Release object is created by CI.** The tag is a person's decision, made after the guards passed, so it belongs on this side. The Release object needs no credential on this machine — the pipeline mints its own — so it belongs on the other side. The CI workflow creates it when it sees a `v*` tag, and the release notes are the matching section of `CHANGELOG.md`.
+
+**The version line is one value.** It appears in `pyproject.toml`, `uv.lock`, `sg_product_jobs.py`, `server.py`, `server_v1_1.py`, both plugin manifests and the Agent Skill, and `ops/check_version_line.py` fails closed when any two of them disagree. A release checks it before it tags, so a tag cannot land on a commit whose metadata states a different version.
+
+A release never rewrites published history. The versions that were published under a rewritten SHA are the ones whose tag points at the final SHA, and the tag is the record of which commit that was.

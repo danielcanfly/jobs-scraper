@@ -23,21 +23,29 @@ set -euo pipefail
 # (v1.8.3 實際踩到: 合併完 scripts/ 之後炸在 `(cd "$REPO_DIR" && ...)` 那行。)
 #
 # 解法: 先把腳本本身複製一份, 從副本執行。正在跑的那份永遠不會被改寫。
+#
+# 旗標會 export 給子行程, 所以子行程繼承了旗標時會跳過 re-exec、直接跑原檔。
+# 因此「刪掉暫存副本」不能用 BASH_SOURCE[0] —— 那時它指向的是原檔, 刪掉的就
+# 是原檔了。改成明確比對: 只有當「正在跑的就是這次建立的暫存副本」才刪。
 # ─────────────────────────────────────────────────────────────
-if [ -z "${_JOBS_SCRAPER_SYNC_REEXEC:-}" ]; then
+# 判斷「我是不是那份副本」用 BASH_SOURCE[0] 跟 _SELF 比對, 不要靠繼承的旗標。
+# 旗標與路徑都會被 export 給子行程: 子行程繼承之後會跳過 re-exec 而直接跑原檔,
+# 而它手上的 _ORIGIN 指向的是父行程的腳本 → 它會跑去父行程的目錄發布,
+# 一層套一層 (v1.8.5 實際踩到: release 腳本在測試裡遞迴執行)。
+if [ "${BASH_SOURCE[0]}" != "${_JOBS_SCRAPER_SYNC_REPO_SELF:-}" ]; then
   _sync_origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
   _sync_self="$(mktemp -t jobs-scraper-sync-self-XXXXXX)"
   cp -- "$_sync_origin" "$_sync_self"
   chmod +x "$_sync_self"
-  export _JOBS_SCRAPER_SYNC_REEXEC=1
-  export _JOBS_SCRAPER_SYNC_ORIGIN="$_sync_origin"
+  export _JOBS_SCRAPER_SYNC_REPO_SELF="${_sync_self}"
+  export _JOBS_SCRAPER_SYNC_REPO_ORIGIN="${_sync_origin}"
   exec bash "$_sync_self" "$@"
 fi
 
-# 這一份是暫存副本 → 跑完刪掉 (exec 會清掉 trap, 所以在這裡設)。
-trap 'rm -f -- "${BASH_SOURCE[0]}"' EXIT
+# 到這裡我就是那份暫存副本 → 跑完只刪它, 而且只刪它。
+trap 'rm -f -- "${_JOBS_SCRAPER_SYNC_REPO_SELF}"' EXIT
 
-REPO_DIR="$(cd -- "$(dirname -- "${_JOBS_SCRAPER_SYNC_ORIGIN:-${BASH_SOURCE[0]}}")/.." &> /dev/null && pwd)"
+REPO_DIR="$(cd -- "$(dirname -- "${_JOBS_SCRAPER_SYNC_REPO_ORIGIN:-${BASH_SOURCE[0]}}")/.." &> /dev/null && pwd)"
 UPSTREAM="${JOBS_SCRAPER_UPSTREAM:-https://github.com/danielcanfly/jobs-scraper.git}"
 BRANCH="${JOBS_SCRAPER_BRANCH:-main}"
 TMP_DIR="$(mktemp -d -t jobs-scraper-sync-XXXXXX)"

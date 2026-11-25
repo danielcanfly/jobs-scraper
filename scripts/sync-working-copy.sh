@@ -23,19 +23,24 @@ set -euo pipefail
 # 這支腳本會把 upstream 的 scripts/ 複製到工作目錄 → 覆蓋自己。
 # bash 逐段讀腳本: 執行中的檔案被改寫, 讀取位移沒跟著走 → 下一段從錯的
 # 位置解析 → 語法錯誤。從暫存副本執行, 正在跑的那份永遠不會被改寫。
-if [ -z "${_JOBS_SCRAPER_SYNC_REEXEC:-}" ]; then
+# 判斷「我是不是那份副本」用 BASH_SOURCE[0] 跟 _SELF 比對, 不要靠繼承的旗標。
+# 旗標與路徑都會被 export 給子行程: 子行程繼承之後會跳過 re-exec 而直接跑原檔,
+# 而它手上的 _ORIGIN 指向的是父行程的腳本 → 它會跑去父行程的目錄發布,
+# 一層套一層 (v1.8.5 實際踩到: release 腳本在測試裡遞迴執行)。
+if [ "${BASH_SOURCE[0]}" != "${_JOBS_SCRAPER_SYNC_WC_SELF:-}" ]; then
   _sync_origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
   _sync_self="$(mktemp -t jobs-scraper-wc-sync-self-XXXXXX)"
   cp -- "$_sync_origin" "$_sync_self"
   chmod +x "$_sync_self"
-  export _JOBS_SCRAPER_SYNC_REEXEC=1
-  export _JOBS_SCRAPER_SYNC_ORIGIN="$_sync_origin"
+  export _JOBS_SCRAPER_SYNC_WC_SELF="${_sync_self}"
+  export _JOBS_SCRAPER_SYNC_WC_ORIGIN="${_sync_origin}"
   exec bash "$_sync_self" "$@"
 fi
 
-trap 'rm -f -- "${BASH_SOURCE[0]}"' EXIT
+# 到這裡我就是那份暫存副本 → 跑完只刪它, 而且只刪它。
+trap 'rm -f -- "${_JOBS_SCRAPER_SYNC_WC_SELF}"' EXIT
 
-REPO_DIR="$(cd -- "$(dirname -- "${_JOBS_SCRAPER_SYNC_ORIGIN:-${BASH_SOURCE[0]}}")/.." &> /dev/null && pwd)"
+REPO_DIR="$(cd -- "$(dirname -- "${_JOBS_SCRAPER_SYNC_WC_ORIGIN:-${BASH_SOURCE[0]}}")/.." &> /dev/null && pwd)"
 
 # upstream 的位置: 預設是這個腳本所在的 checkout (前提是它就是 upstream),
 # 否則用標準位置。判斷方式是 origin remote —— 工作目錄沒有 remote,

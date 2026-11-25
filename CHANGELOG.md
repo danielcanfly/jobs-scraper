@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.8.5 — 2026-11-26
+
+A release was six things to remember, and the tag never matched the version.
+
+Added
+
+- **`ops/release.sh` makes a release one command.** It runs the guards, pushes, tags, syncs the plugin runtime and the working copy, and verifies all three byte for byte — in that order, and nothing is pushed or tagged before every guard has passed. A tree with uncommitted changes stops it before it does anything. `--dry-run` runs everything except the push and the tag.
+- **`ops/check_version_line.py` fails closed when the version line disagrees with itself.** The version appears in the package metadata, the lock file, the engine, the two MCP server identities, the plugin manifests and the Agent Skill; any two of them drifting apart means the thing you are running is not the thing you think you are running, and a tag could land on a commit whose metadata says a different version. The check runs in CI and as the release's own preflight.
+- **CI turns a pushed tag into a GitHub Release.** The tag itself is still created locally, by `ops/release.sh`, after the guards pass — whether a change is a release is a person's decision, not the pipeline's. The Release object needs no credential on this machine, so CI makes it, using the token GitHub mints for the run. The release notes are the matching section of `CHANGELOG.md`.
+
+Changed
+
+- The `v1.8.0` through `v1.8.4` tags now exist. They did not: the Releases page still showed `v1.2.1` from August, while `main` had moved six versions. Each tag is annotated the way the older ones are and points at the commit that carried that version.
+
+Fixed
+
+- **The release's own checks could be read as passes.** The first version read git status and treated a failure as "the working tree is clean" — so in a directory that is not a checkout at all (the fresh-install harness copies the repository without its `.git`) the release walked past its own first gate and carried on towards the push. A check that cannot read the tree is not the same answer as a tree that is clean. The release now refuses to start outside a checkout, refuses to start when it cannot read the git status, and refuses to start without a venv.
+- **The scripts that run from a temporary copy of themselves could delete the original — and could run each other in a loop.** All three of them — the two syncs and the release — copy themselves to a temporary file and run that, because bash reads a running script incrementally and each of them overwrites the directory it lives in. The state that says "you are already the copy" is exported, so a child process inherits it. A child that inherited it skipped the re-exec and ran the original in place, where a cleanup naming the running script deleted the original: the release script's own pytest run left `ops/release.sh` gone from the repository. Worse, the same inherited state carries the path the script treats as its own origin, so that child resolved the *parent's* repository — and the release script ran its own release in a loop, each layer starting a pytest that started the next layer. The re-exec is now keyed on comparing the running script's own path with the temporary copy's path, so a child that inherits the state re-execs on its own terms and works on its own directory, and the cleanup names the temporary copy explicitly. The three scripts also use separate state names, so one cannot suppress another's re-exec.
+
+- **The release did not check that an existing tag points at HEAD.** A tag is the record of which commit a release was, so a tag that points somewhere else means someone moved it — and the release would have carried on and reported that the tag was already there. The release now refuses to start when the tag for the version being released does not point at HEAD, and it says plainly that it will not move a published tag.
+
+- **The plugin manifest drifts, and nothing kept up with it.** The manifest is a Mavis-specific file, so the plugin sync preserves it — which means a sync never updates it either, and it falls behind on its own. The plugin runtime was two versions behind by the time v1.8.5's own verification looked, and the version-line check is what said so. The release now updates the manifest before it syncs, and `ops/update_plugin_manifest_version.py` does it.
+
+Acceptance
+
+- `tests/test_version_line_v185.py` (6 tests) runs the checker against throwaway trees: a consistent tree passes, one drifted carrier fails and names both values, a missing carrier fails, the Mavis plugin manifest is optional because it lives in the plugin runtime, and it is checked when it is there.
+- `tests/test_release_script_v185.py` (7 tests) covers the parts that end before anything is pushed or tagged: the usage, the rejection of an unknown argument, a dirty tree stopping the release, a directory that is not a checkout stopping it too, a tag that does not point at HEAD stopping it too, and the order of the script — the guards before the push.
+- `tests/test_plugin_manifest_version_v185.py` (5 tests) covers the manifest updater: it moves the manifest to the engine's version, `--check` reports drift without writing, a missing manifest is not an error, and updating twice is stable.
+- `tests/test_reexec_self_deletion_v185.py` (10 tests) covers all three re-exec scripts: a child that inherits the state does not delete the script, the temporary copy is cleaned up afterwards, each script keys its re-exec on its own path, and a copy of the release script works on its own directory rather than the parent's.
+- 986 passed, freeze v17, hygiene PASS, sync-manifest PASS, ruff/mypy clean.
+
 ## v1.8.4 — 2026-11-25
 
 The working copy was kept in sync by remembering to remember.

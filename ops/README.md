@@ -128,3 +128,17 @@ passphrase 本身放密碼管理器，不要跟加密檔放在一起。
 CI 對整個 repo 跑 `ruff format --check` 與 `ruff check`，所以 `ops/` 裡的 Python
 也必須乾淨。`scripts/check_repo_hygiene.py` 掃**全樹**，所以任何寫死的試算表 ID、
 Service Account 身分或私鑰片段都會讓 CI 失敗 —— 這是刻意的，寫死的識別碼就是會外洩的東西。
+
+## 發布
+
+```bash
+bash ops/release.sh            # 驗收 → push → tag → 同步三處 → 三處驗收
+bash ops/release.sh --dry-run  # 只驗收與同步, 不 push、不 tag
+```
+
+tag 在這台機器上打（守衛全過之後），GitHub Release 物件由 CI 在收到 tag push 時建立。
+版本號要手動改，`ops/check_version_line.py` 負責確認改對了 —— 它比對 `pyproject.toml`、
+`uv.lock`、`sg_product_jobs.py`、兩個 MCP server、兩個 plugin manifest 和 Agent Skill
+共 7 個載體，任何兩個不一致就 fail-closed。
+
+細節在 `RULES.md` §18。

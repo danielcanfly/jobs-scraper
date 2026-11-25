@@ -6,6 +6,7 @@ permissions:
 on:
   push:
     branches: [main, repair/**, feature/**, hardening/**]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -105,3 +106,46 @@ jobs:
 
       - name: Verify the plugin sync manifest covers every tracked file
         run: .venv/bin/python scripts/check_sync_manifest.py
+
+      - name: Verify the version line agrees with itself
+        run: .venv/bin/python ops/check_version_line.py
+
+  release:
+    # A pushed tag becomes a GitHub Release.
+    #
+    # The tag itself is created by ops/release.sh, locally, after every guard
+    # has passed: whether a change is a release is a person's decision, not the
+    # pipeline's. This job only turns a tag that was already decided into a
+    # Release object — and it needs no credential of its own, because
+    # GITHUB_TOKEN is minted by GitHub for this run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the GitHub Release for this tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes="$(awk -v want="## ${tag} " '
+            index($0, want) == 1 { grab = 1; next }
+            grab && /^## / { exit }
+            grab { print }
+          ' CHANGELOG.md)"
+          if [ -z "$notes" ]; then
+            notes="Release ${tag}."
+          fi
+          # Idempotent: a tag that already has a release gets its notes
+          # refreshed instead of failing the run.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --notes "$notes"
+            echo "updated the release for $tag"
+          else
+            gh release create "$tag" --title "$tag" --notes "$notes"
+            echo "created the release for $tag"
+          fi
