@@ -1,0 +1,6 @@
+# 執行期狀態不進版控 (log / state / pid / 備份)
+*.log
+*.pid
+*_chunk_state.txt
+*.bak-*
+*.bak

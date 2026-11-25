@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.8.2 — 2026-11-25
+
+The operational half of the crawler was living on one machine and nowhere else.
+
+Added
+
+- **`ops/` — the crawl supervisors and the tooling around them are now in the repository.** 33 scripts that used to exist only in `~/.minimax-agent/projects/.runs/`: the SG and TW chunked supervisors, the JobStreet keyword-axis supervisor, the chain runner, the state reset tool, the China runners, and the pool-depth probes. They encode the things a live run taught us — the page-span chunk plans, the `tw_paused.flag` switch, the state-file key format, the "pool exhausted is an end, not a gap" rule, and how each source's pool depth was measured — and none of it was version-controlled. Losing one of those files meant re-deriving it from logs.
+- Every path in those scripts is now resolved from the environment (`JOBS_SCRAPER_DIR`, `JOBS_SCRAPER_RUNTIME_DIR`, `UPSTREAM_DIR`, `SHEET_ID`) with the previous location as the default, so the same script runs on another machine. The two China runners used to carry a hard-coded spreadsheet ID; they now fail closed when `SHEET_ID` is unset, which is the same rule the engine itself follows.
+- Scripts call each other relative to their own directory, so the repository copy is the single source of truth and the runtime directory holds only state.
+- `ops/README.md` documents the layout, the state-file convention and the trap it carries, how to launch a crawl through `launchctl`, how to measure a pool, and how to back up the private state without putting it on GitHub.
+
+Unchanged
+
+- The engine's behaviour is untouched by this release: the contract, the pacing budgets, the page spans, the parallel detail fetches and the Sheet write path are all as they were in v1.8.1. The four crawl supervisors are added to the frozen baseline, because the contract already describes how a supervisor treats a span beyond the pool.
+
 ## v1.8.1 — 2026-11-25
 
 The 104 budget was never applied to the requests that mattered.

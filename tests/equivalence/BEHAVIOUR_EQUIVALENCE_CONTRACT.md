@@ -1,4 +1,4 @@
-# v1.8.1 Behaviour Equivalence Contract
+# v1.8.2 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -224,6 +224,14 @@ authorized equivalence baseline.
     records it as "pool exhausted" rather than retrying it or reporting a coverage hole.
 42a. The 104 adapter honours a span as well: its keyword worker crawls only its own pages, so a
     chunk that owns a span never re-crawls the prefix.
+42b. The crawl supervisors live in the repository, under `ops/`, and are part of the frozen
+    baseline. The rules above about how a supervisor treats a span beyond the pool, about
+    which chunk keys the state file holds, and about a failed chunk not being recorded as
+    done are the supervisors' behaviour, so the scripts that implement them are frozen with
+    the rest of the baseline. A supervisor resolves its paths from the environment and never
+    carries a spreadsheet id, a service-account identity or a private key: the repository's
+    hygiene guard scans the whole tracked tree for exactly those, and the China runners fail
+    closed when no spreadsheet id is configured.
 
 ## Parallel-detail invariants (v1.8.0)
 

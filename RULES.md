@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.8.1` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.8.1` | package metadata |
-| `uv.lock` | `1.8.1` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.8.1` | Mavis plugin manifest (lives in the plugin runtime) |
-| `.codex-plugin/plugin.json` | `1.8.1` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.8.1` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.8.1` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.2` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.2` | package metadata |
+| `uv.lock` | `1.8.2` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.2` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.2` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.2` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.2` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
