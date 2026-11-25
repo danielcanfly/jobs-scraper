@@ -1,4 +1,4 @@
-# v1.8.0 Behaviour Equivalence Contract
+# v1.8.1 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -189,6 +189,16 @@ authorized equivalence baseline.
     requests and ten back-to-back requests both answered 200, but a burst that followed a detail run
     answered 403). Its detail API tolerates far more (59 requests at 0.3s apart, zero failures), so
     the 104 budget is 1.0–2.0s: four times faster than the global budget, still conservative.
+35b. The 104 list pacing is chosen by **aggregate request rate**, not by the gap between one
+    request and the next. 104's list API is sensitive to how many requests are in flight at once:
+    eight keyword workers at 1.0–2.0s each is an aggregate 2.1 req/s and was answered with 403 at
+    the start of a run, while a single worker at 1.0–2.0s is an aggregate 0.5–1.0 req/s and walked
+    50 pages (1,010 postings) with zero failures. So one keyword in flight uses the 104 budget
+    (1.0–2.0s) and several keywords in flight keep the global budget (3–10s, an aggregate ~1.2
+    req/s, the rate 104 has always been crawled at). The pacing hook is invoked inside the adapter's
+    own worker thread, so that is where the source is pinned — a context variable set in the main
+    thread is not visible in a worker, and the 104 list budget silently fell back to the global one
+    for an entire release before this was caught by a live run.
 36. The engine keeps **one** sleep injection point, `human_sleep`, and the source being crawled
     selects the range through a context variable. A test that replaces `human_sleep` therefore
     replaces every source's pacing, and a worker thread has to set the source itself — a fresh

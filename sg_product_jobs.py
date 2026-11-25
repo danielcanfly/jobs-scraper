@@ -14,7 +14,7 @@ back-compat 保留: JORA_BASE 常數、`build_e_formula("jora", ...)` 分支、
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
 
-__version__ = "1.8.0"  # 2026-11-24: per-source sleep + page-range chunks + parallel JD fetch
+__version__ = "1.8.1"  # 2026-11-25: 104 的 list 節奏真的傳到 worker thread (按總請求率選區間)
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺
@@ -2722,15 +2722,43 @@ def crawl_onezerofour_list(
 
     `hit` 傳的是本模組的 wrapper 而不是 adapter 內部的函式, 所以測試 patch
     `sg_product_jobs.hit_onezerofour_list` 仍然有效。
+
+    v1.8.1 — 節奏要傳到真正跑 pacing 的 thread, 而且按「總請求率」選區間:
+
+    1. 104 的 list paging 跑在 adapter 自己的 ThreadPoolExecutor worker 裡。
+       Python 3.11 的新 thread 不繼承主執行緒的 contextvars → 引擎在主執行緒
+       set 的 _SLEEP_SOURCE, 在 worker 裡讀不到 → v1.8.0 說好的 104 1.0-2.0s
+       從來沒生效過, 104 的 list 一直落回全域 3-10s (實測 list sleep 4.8-9.4s)。
+       v1.8.0 的單元測試把 crawl_list 整個 stub 掉 → 讀的是主執行緒的 contextvar
+       → 測試過關但行為是錯的, 這支測試就是補那個缺口。
+       修法: sleep hook 本身就是在 worker thread 裡被呼叫的 → 在那裡 set
+       contextvar, 對該 thread 持續有效。
+    2. 但 104 的 list API 對「同時併發的請求數」敏感, 不是對單一請求的間隔:
+       2026-11-24 實測 8 workers × 1.0-2.0s = 聚合 2.1 req/s → 開頭就 403
+       (靠 30/60/90 backoff 救回); 單 worker × 1.0-2.0s = 聚合 0.5-1.0 req/s
+       → 50 頁 1,010 筆 0 失敗。所以:
+         - 單 keyword (supervisor 每個塊只跑一個 keyword) → 104 自己的 1.0-2.0s
+         - 多 keyword 平行 (engine 預設 8 workers) → 維持全域 3-10s
+           (聚合 ~1.2 req/s, 這是 104 一直以來跑得動的速率)
     """
+    kws = list(keywords) if keywords is not None else list(ONEZEROFOUR_KEYWORDS)
     # v1.8.0: per-source sleep 節奏 (104 1.0-2.0s, 見 onezerofour.SLEEP_MIN/MAX)
+    # 這行只影響主執行緒; worker 裡由下面的 _sleep hook 重新設定。
     _SLEEP_SOURCE.set("onezerofour")
+    use_104_budget = len(kws) <= 1
+
+    def _sleep(label: str = "") -> None:
+        # 這個 hook 在 104 adapter 的 worker thread 裡被呼叫 → 在這裡 set
+        # contextvar 才是對那個 thread 有效的 (v1.8.0 的缺口)。
+        use_source_sleep("onezerofour" if use_104_budget else None)
+        return human_sleep(label)
+
     return _onezerofour.crawl_list(
         daterange,
         max_pages,
-        keywords,
+        kws,
         hit=hit_onezerofour_list,
-        sleep=human_sleep,
+        sleep=_sleep,
         start_page=start_page,
     )
 

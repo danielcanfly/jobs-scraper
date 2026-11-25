@@ -341,7 +341,9 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 
 ## 版本与发布说明
 
-`v1.8.0` 为当前版本：慢的不是网络，是引擎在等。2026-11-24 对照线上 API 实测：JobStreet list 一页纯网络 0.80s、JobStreet JD 0.29s、LinkedIn list 一页 0.92s，而引擎在**每个**请求之后都睡 3–10s（平均 6.5s）。sg 30d 的 JobStreet 阶段 3h51m 发了 1,750 个请求：80% 在睡、6% 在网络上、14% 在 process 启动与读表。由此得到三个改动。第一，每个来源有自己的节奏，而且预算就放在各自的 adapter 里：JobStreet 0.5–1.0s（公开 list API 与 GraphQL 实测 0.5s 间隔连发 200 个请求零失败、10 req/s 零失败）、LinkedIn 1.5–3.0s（Guest API 真的会回 429，所以保守保留 30/60/90s 的 retry ladder）、104 1.0–2.0s（detail API 实测 0.3s 间隔连发 59 笔零失败；而它的 list API 原本**完全没有**一般性的节拍 → 8 个 keyword worker 会无间隔连打，实测密集 burst 之后回过 403）、Cake 维持 3–10s（Cake 在 2–5s 就回 429）。预算可以用 `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX` 从环境变量覆盖，不用改 code。第二，块改成「爬自己的页区间」而不是「重爬整个前缀」：旧 supervisor 是累计式切块，第 N 块爬第 1..N 页 → 前面每一页每跑一块就重抓一次，30d 的 JobStreet 发了 2,179 次分页请求但池子只需要 ~406 页（5.4×，`product lead` 一个 keyword 就 7.5×），LinkedIn 同样吃了 3.55×。现在每块拥有自己的区间（`--start-page` / `--max-pages`），只爬自己那几页；跨块去重不受影响，因为 seen file 与「对目标分页做 pre-detail dedup」本来就跨 process 存活。第三，抓 JD 改成 thread pool（默认 3 个 worker，`JOBS_SCRAPER_JD_WORKERS`），不再是一个接一个的 `for` 循环：线程只做网络 I/O，seen file、计数器与输出顺序都留在主线程 → `seen_jds.jsonl` 不会交错、Sheet 的 row 顺序也不变。区间超出池子时回空资料，那是「结束」而不是「缺口」。
+`v1.8.1` 为当前版本：修掉 v1.8.0 带进来的节奏 bug —— 104 的预算从来没作用在真正该受节奏管的请求上。104 的 list paging 跑在 adapter 自己的 `ThreadPoolExecutor` worker 里，而 Python 3.11 的新 thread 以干净的 context 起步 → 引擎在主线程钉住的 source 在 worker 里看不见 → 每个 104 list 页都落回全域 3–10s。跑 TW 7d 时看得很清楚：list 的 sleep 是 4.8s、6.8s、9.4s、4.9s、3.2s，而同一轮的 detail sleep 是 1.5–1.7s（104 的值）。现在节奏 hook 是在 worker thread 里被调用的 → source 就钉在那里。预算也改成按「总请求率」选，而不是按「两个请求的间隔」，因为 104 的 list API 对同时在飞的请求数敏感：8 个 keyword worker 各 1.0–2.0s = 聚合 2.1 req/s，一轮开头就被回 403；单 worker 1.0–2.0s = 聚合 0.5–1.0 req/s → 走完 50 页（1,010 笔）零失败。现在单 keyword 用 104 的预算，多 keyword 平行维持全域预算（那是一直以来跑得动 104 的速率）。
+
+`v1.8.0` 为当前版本：慢的不是网络，是引擎在等。2026-11-24 对照线上 API 实测：2026-11-24 对照线上 API 实测：JobStreet list 一页纯网络 0.80s、JobStreet JD 0.29s、LinkedIn list 一页 0.92s，而引擎在**每个**请求之后都睡 3–10s（平均 6.5s）。sg 30d 的 JobStreet 阶段 3h51m 发了 1,750 个请求：80% 在睡、6% 在网络上、14% 在 process 启动与读表。由此得到三个改动。第一，每个来源有自己的节奏，而且预算就放在各自的 adapter 里：JobStreet 0.5–1.0s（公开 list API 与 GraphQL 实测 0.5s 间隔连发 200 个请求零失败、10 req/s 零失败）、LinkedIn 1.5–3.0s（Guest API 真的会回 429，所以保守保留 30/60/90s 的 retry ladder）、104 1.0–2.0s（detail API 实测 0.3s 间隔连发 59 笔零失败；而它的 list API 原本**完全没有**一般性的节拍 → 8 个 keyword worker 会无间隔连打，实测密集 burst 之后回过 403）、Cake 维持 3–10s（Cake 在 2–5s 就回 429）。预算可以用 `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX` 从环境变量覆盖，不用改 code。第二，块改成「爬自己的页区间」而不是「重爬整个前缀」：旧 supervisor 是累计式切块，第 N 块爬第 1..N 页 → 前面每一页每跑一块就重抓一次，30d 的 JobStreet 发了 2,179 次分页请求但池子只需要 ~406 页（5.4×，`product lead` 一个 keyword 就 7.5×），LinkedIn 同样吃了 3.55×。现在每块拥有自己的区间（`--start-page` / `--max-pages`），只爬自己那几页；跨块去重不受影响，因为 seen file 与「对目标分页做 pre-detail dedup」本来就跨 process 存活。第三，抓 JD 改成 thread pool（默认 3 个 worker，`JOBS_SCRAPER_JD_WORKERS`），不再是一个接一个的 `for` 循环：线程只做网络 I/O，seen file、计数器与输出顺序都留在主线程 → `seen_jds.jsonl` 不会交错、Sheet 的 row 顺序也不变。区间超出池子时回空资料，那是「结束」而不是「缺口」。
 
 现在写入起点会在「知道要写几列」之后才定：只有当那个洞连续塞得下整批列时才用它，否则一律 append 到最后。塞得下的洞还是会被填，所以正常情况的行为不变。
 
@@ -372,7 +374,7 @@ CI 也会检查锁定依赖、plugin manifest 一致性，以及 frozen equivale
 - `pyproject.toml` 保存套件版本。
 - `.codex-plugin/plugin.json` 保存 plugin 版本。
 - `server_v1_1.py` 对外提供 MCP server 版本。
-- 当前 frozen equivalence baseline 为 `v1.8.0`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则、「range 的页数上限必须盖得住每个已知城市的实测池深」规则、「每个 JobStreet keyword 都要爬到自己的池底」规则、「Guest API 1000 笔分页窗口是结束而不是失败」规则、「pre-detail dedup 读的是要写入的那个分页」规则、「生成 worker」的相关规则、per-source 节奏规则、页区间规则，以及平行抓 JD 规则。
+- 当前 frozen equivalence baseline 为 `v1.8.1`，明确保护五来源 contract、「每个来源一个 adapter」的拆分、JobStreet list page 的 retry ladder、LinkedIn 空页与 JD retry 规则、「range 的页数上限必须盖得住每个已知城市的实测池深」规则、「每个 JobStreet keyword 都要爬到自己的池底」规则、「Guest API 1000 笔分页窗口是结束而不是失败」规则、「pre-detail dedup 读的是要写入的那个分页」规则、「生成 worker」的相关规则、per-source 节奏规则、页区间规则，以及平行抓 JD 规则。
 
 ## 许可
 

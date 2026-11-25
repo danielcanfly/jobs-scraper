@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.8.1 — 2026-11-25
+
+The 104 budget was never applied to the requests that mattered.
+
+Fixed
+
+- **The 104 list was paced at the global 3–10s, not at the 1.0–2.0s v1.8.0 promised.** 104's list paging runs inside the adapter's own `ThreadPoolExecutor` workers, and a fresh thread in Python 3.11 starts with a clean context — so the source the engine had pinned in the main thread was invisible in the worker, and every 104 list page fell back to the global budget. A live TW 7d run showed it: list sleeps of 4.8s, 6.8s, 9.4s, 4.9s and 3.2s, while the detail fetches in the same run slept 1.5–1.7s, the 104 value. The contract already required a worker to set the source itself (items 36 and 44); the implementation did not, and v1.8.0's own test missed it because it stubbed `crawl_list` out entirely and therefore read the main thread's context variable. The pacing hook is now invoked inside the worker thread, which is where the source is pinned.
+- **The 104 budget is chosen by aggregate request rate, not by the gap between two requests.** 104's list API is sensitive to how many requests are in flight at once: eight keyword workers at 1.0–2.0s each is an aggregate 2.1 req/s and was answered with 403 at the start of a run (recovered by the 30/60/90s ladder), while a single worker at 1.0–2.0s is an aggregate 0.5–1.0 req/s and walked 50 pages — 1,010 postings — with zero failures. One keyword in flight now uses the 104 budget; several keywords in flight keep the global budget, which is the aggregate rate 104 has always been crawled at.
+
+Acceptance
+
+- `tests/test_sleep_worker_propagation_v181.py` (6 tests) walks the adapter's real worker path: the pacing happens off the main thread, the source is visible there, a single keyword lands inside the 104 budget and not inside the global one, and a parallel crawl lands in the global budget. Reverting the engine fix fails three of them.
+- 936 passed, freeze v13, hygiene PASS, ruff/mypy clean.
+
 ## v1.8.0 — 2026-11-24
 
 The crawl was not slow because the network was slow. It was slow because the

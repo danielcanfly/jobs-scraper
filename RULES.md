@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.8.0` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.8.0` | package metadata |
-| `uv.lock` | `1.8.0` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.8.0` | Mavis plugin manifest (lives in the plugin runtime) |
-| `.codex-plugin/plugin.json` | `1.8.0` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.8.0` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.8.0` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.1` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.1` | package metadata |
+| `uv.lock` | `1.8.1` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.1` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.1` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.1` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.1` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
@@ -464,6 +464,13 @@ Measured against the live APIs on 2026-11-24: a JobStreet list page costs 0.80s 
 - A budget may be overridden from the environment with `JOBS_SCRAPER_<SOURCE>_SLEEP_MIN` / `_MAX`. A malformed value falls back to the default; an inverted range is swapped, never rejected.
 - The engine keeps **one** sleep injection point, `human_sleep`. The source being crawled selects the range through a context variable, so a test that replaces `human_sleep` replaces every source's pacing, and a worker thread sets the source itself (a fresh thread starts with a clean context).
 - The retry ladders are untouched by the pacing change.
+
+### 104 pacing by aggregate rate (2026-11-25, v1.8.1)
+
+- The 104 list budget is chosen by **aggregate request rate**, not by the gap between two requests. 104's list API is sensitive to how many requests are in flight: eight keyword workers at 1.0–2.0s each is an aggregate 2.1 req/s and was answered with 403 at the start of a run (recovered by the 30/60/90s ladder); a single worker at 1.0–2.0s is an aggregate 0.5–1.0 req/s and walked 50 pages — 1,010 postings — with zero failures.
+- **One keyword in flight → the 104 budget (1.0–2.0s). Several keywords in flight → the global budget (3–10s, an aggregate ~1.2 req/s, the rate 104 has always been crawled at).**
+- 104's list paging runs inside the adapter's own worker threads, and a fresh thread in Python 3.11 starts with a clean context — so the source is pinned **inside the worker**, at the point where the pacing hook is called. A context variable set in the main thread is invisible in a worker: v1.8.0 set it in the main thread, so the 104 list silently ran at the global 3–10s for a whole release, and the v1.8.0 test missed it because it stubbed `crawl_list` out and therefore read the main thread's context variable.
+- A test that claims to cover per-source pacing must walk the real worker path. `tests/test_sleep_worker_propagation_v181.py` does; reverting the engine fix fails three of its six tests.
 
 ### Page spans (2026-11-24, v1.8.0)
 
