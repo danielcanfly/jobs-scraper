@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.8.3` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.8.3` | package metadata |
-| `uv.lock` | `1.8.3` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.8.3` | Mavis plugin manifest (lives in the plugin runtime) |
-| `.codex-plugin/plugin.json` | `1.8.3` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.8.3` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.8.3` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.4` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.4` | package metadata |
+| `uv.lock` | `1.8.4` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.4` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.4` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.4` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.4` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
@@ -496,11 +496,22 @@ The supervisors used the cumulative style — chunk *N* crawled pages 1..*N* —
 
 The upstream repository is the only source of truth. The plugin runtime and any working copy are copies of it, and for every file the upstream tracks, all three placements hold the same bytes.
 
-`scripts/sync-from-repo.sh` is the mechanism that carries them there. It clones the upstream branch, copies the root files and merges the directories listed in its manifest, and then compares every upstream file against the local copy byte for byte. It merges rather than replaces: a file the local side owns alone is never deleted, and the Mavis-specific files and the private runtime state sit on an explicit preserve list that a sync never touches.
+The chain has three links, and each one is a command:
 
-Two rules follow from that, and both have already cost a release:
+| 段 | 指令 | 落地 |
+|---|---|---|
+| upstream → GitHub | `git push` | GitHub `danielcanfly/jobs-scraper` |
+| GitHub → plugin runtime | `bash scripts/sync-from-repo.sh` | `~/.minimax/plugins/jobs-scraper` |
+| upstream → 工作目錄 | `bash scripts/sync-working-copy.sh` | `~/.minimax-agent/projects/scrapling-test` |
+
+`scripts/sync-from-repo.sh` is the mechanism that carries the code to the plugin runtime. It clones the upstream branch, copies the root files and merges the directories listed in its manifest, and then compares every upstream file against the local copy byte for byte. It merges rather than replaces: a file the local side owns alone is never deleted, and the Mavis-specific files and the private runtime state sit on an explicit preserve list that a sync never touches.
+
+`scripts/sync-working-copy.sh` is the same idea for a working copy. Its file list is the upstream checkout's tracked set — never the working copy's own `git ls-files`, because the working copy has its own repository and tracks whatever is left on that machine. It merges, it leaves the private state alone, and `--verify` reports drift without touching anything.
+
+Three rules follow from that, and all three have already cost a release:
 
 - **Every tracked directory must be on the merge manifest.** `ops/` was missing from it in v1.8.2, so the 35 tracked supervisor and tooling files never reached the plugin runtime — a runtime that ran its own copy while the repository's copy sat unchanged. The crawl supervisors in `ops/` are frozen baseline behaviour, so a runtime copy that drifts from the repository's copy runs behaviour the baseline does not describe.
 - **A working copy is refreshed with the upstream file list, not with its own.** Each placement has files the others do not — the plugin has Mavis-specific files, a working copy has local leftovers — so comparing a placement against its own `git ls-files` produces differences that are not drift. Compare every placement against the upstream list, and look at the actual files.
+- **Every link in the chain is a command.** The upstream→working-copy link used to be a hand-typed copy loop, and v1.8.3 is how that showed up: the working copy was missing the whole `ops/` directory until somebody ran the loop by hand. A link that lives in someone's memory is a link that eventually does not get run.
 
 The crawl is launched from the repository checkout, not from the runtime directory: the runtime directory holds logs and state only, so exactly one copy of a supervisor can be launched.

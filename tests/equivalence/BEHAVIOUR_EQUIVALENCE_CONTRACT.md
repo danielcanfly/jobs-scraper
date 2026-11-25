@@ -1,4 +1,4 @@
-# v1.8.3 Behaviour Equivalence Contract
+# v1.8.4 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -268,4 +268,15 @@ authorized equivalence baseline.
 48. The sync carries the frozen supervisors but does not run them. A crawl is launched from
     the repository checkout, and the runtime directory holds only logs and state, so there is
     exactly one copy of a supervisor that can be launched.
+
+## Working-copy sync invariants (v1.8.4)
+
+49. The working copy is reached from the upstream checkout by
+    `scripts/sync-working-copy.sh`, not by a hand-typed copy loop. The file list is the
+    upstream checkout's tracked set — never the working copy's own `git ls-files`, because the
+    working copy has its own repository and tracks whatever is left on that machine. The
+    script merges: a file the working copy owns alone is never deleted, and the private state
+    (`.env`, `.secrets`, `seen_jds.jsonl`, the JD caches) neither travels nor is touched. A
+    file that differs from the upstream, or is missing from the working copy, is drift, and
+    the check reports it instead of passing.
 

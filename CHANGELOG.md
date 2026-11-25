@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.8.4 — 2026-11-25
+
+The working copy was kept in sync by remembering to remember.
+
+Fixed
+
+- **The upstream→working-copy link was a hand-typed copy loop.** The three placements had a command for two of the three links — `git push` to GitHub, `scripts/sync-from-repo.sh` to the plugin runtime — while the third lived in someone's memory. v1.8.3 is how that showed up: the working copy was missing the whole `ops/` directory, 35 tracked files, until the loop was run by hand. `scripts/sync-working-copy.sh` makes the third link a command too, carrying the same rules the other two carry: the file list is the upstream checkout's tracked set and never the working copy's own `git ls-files`, the copy merges and never deletes a file the working copy owns alone, the private state (`.env`, `.secrets`, `seen_jds.jsonl`, the JD caches) neither travels nor is touched, and `--verify` reports a file that differs or is missing instead of passing.
+- **The working-copy sync also runs from a temporary copy of itself**, for the same reason the plugin sync does: it copies `scripts/` over the working copy's own, and bash reads a running script incrementally.
+
+Acceptance
+
+- `tests/test_working_copy_sync_v184.py` (8 tests) runs the real script against a throwaway upstream and a throwaway working copy: the tracked files land, the private state does not, a file the working copy owns alone survives, `--verify` reports drift without touching anything, a missing file is drift, and the sync repairs drift.
+- 958 passed, freeze v16, hygiene PASS, sync-manifest PASS, ruff/mypy clean.
+
 ## v1.8.3 — 2026-11-25
 
 The repository held the supervisors, but the sync never carried them.
