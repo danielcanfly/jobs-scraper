@@ -112,7 +112,7 @@ class RegionStatsResult(BaseModel):
 
 mcp = MCPServer(
     name="jobs-scraper",
-    version="1.8.2",
+    version="1.8.3",
     description=(
         "LinkedIn Guest API PM job scraper with a portable Google Sheet Job Tracker. "
         "initialize_job_tracker creates Region-Raw / Region-Selected pairs using the frozen A:AA schema. "

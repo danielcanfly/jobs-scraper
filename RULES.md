@@ -439,13 +439,13 @@ This release is a **single version line**. There is exactly one build of the scr
 
 | Artifact | Version | Notes |
 |---|---|---|
-| `sg_product_jobs.py` | `1.8.2` | `__version__` is authoritative for the engine |
-| `pyproject.toml` | `1.8.2` | package metadata |
-| `uv.lock` | `1.8.2` | locked dependency set; must match `pyproject.toml` |
-| `.minimax-plugin/plugin.json` | `1.8.2` | Mavis plugin manifest (lives in the plugin runtime) |
-| `.codex-plugin/plugin.json` | `1.8.2` | Codex plugin manifest |
-| `server.py`, `server_v1_1.py` | `1.8.2` | MCP server identity |
-| `skills/jobs-scraper/SKILL.md` | `1.8.2` | Agent Skill metadata |
+| `sg_product_jobs.py` | `1.8.3` | `__version__` is authoritative for the engine |
+| `pyproject.toml` | `1.8.3` | package metadata |
+| `uv.lock` | `1.8.3` | locked dependency set; must match `pyproject.toml` |
+| `.minimax-plugin/plugin.json` | `1.8.3` | Mavis plugin manifest (lives in the plugin runtime) |
+| `.codex-plugin/plugin.json` | `1.8.3` | Codex plugin manifest |
+| `server.py`, `server_v1_1.py` | `1.8.3` | MCP server identity |
+| `skills/jobs-scraper/SKILL.md` | `1.8.3` | Agent Skill metadata |
 
 Any change to one of these must be applied to all of them in the same commit. A version number that appears in more than one place is a single value, not several.
 
@@ -491,3 +491,16 @@ The supervisors used the cumulative style — chunk *N* crawled pages 1..*N* —
 ## 16. Installation and governance
 
 `setup.sh`, doctor, CI, and `scripts/verify_fresh_install.py` operate on the extracted candidate. They must not install to or overwrite an active plugin directory. A fresh audit, not the builder, decides acceptance.
+
+## 17. Three-placement sync
+
+The upstream repository is the only source of truth. The plugin runtime and any working copy are copies of it, and for every file the upstream tracks, all three placements hold the same bytes.
+
+`scripts/sync-from-repo.sh` is the mechanism that carries them there. It clones the upstream branch, copies the root files and merges the directories listed in its manifest, and then compares every upstream file against the local copy byte for byte. It merges rather than replaces: a file the local side owns alone is never deleted, and the Mavis-specific files and the private runtime state sit on an explicit preserve list that a sync never touches.
+
+Two rules follow from that, and both have already cost a release:
+
+- **Every tracked directory must be on the merge manifest.** `ops/` was missing from it in v1.8.2, so the 35 tracked supervisor and tooling files never reached the plugin runtime — a runtime that ran its own copy while the repository's copy sat unchanged. The crawl supervisors in `ops/` are frozen baseline behaviour, so a runtime copy that drifts from the repository's copy runs behaviour the baseline does not describe.
+- **A working copy is refreshed with the upstream file list, not with its own.** Each placement has files the others do not — the plugin has Mavis-specific files, a working copy has local leftovers — so comparing a placement against its own `git ls-files` produces differences that are not drift. Compare every placement against the upstream list, and look at the actual files.
+
+The crawl is launched from the repository checkout, not from the runtime directory: the runtime directory holds logs and state only, so exactly one copy of a supervisor can be launched.

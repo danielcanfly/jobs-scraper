@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.8.3 — 2026-11-25
+
+The repository held the supervisors, but the sync never carried them.
+
+Fixed
+
+- **The plugin runtime was never going to receive `ops/`.** v1.8.2 put the 33 crawl supervisors and the tooling around them into the repository, but `scripts/sync-from-repo.sh` merges only the directories on its manifest, and `ops` was not on it. Thirty-five tracked files — every supervisor, every pool probe, the chain runner, the state reset tool — existed in the repository and would never arrive in the runtime that actually executes them. The crawl supervisors are frozen baseline behaviour (contract item 42b), so a runtime copy that drifts from the repository's copy runs behaviour the baseline does not describe. `ops` is on the manifest now, and the manifest itself is frozen: it is the mechanism that gives the upstream repository, the plugin runtime and a working copy the same bytes for every tracked file, so a change to it would change what "the same build" means.
+- **The sync overwrote the script it was running.** `scripts/` is on the merge manifest, so a sync rewrites `scripts/sync-from-repo.sh` while that script is still executing it. bash reads a running script incrementally, and the read offset does not move when the file's length changes, so the next segment was parsed from the wrong place and the run died on `syntax error near unexpected token '('` — after the merge, before the verify. It only showed up once the script itself changed, which is exactly when it was needed. The sync now runs from a temporary copy of itself, so the file on disk may change underneath it.
+
+Added
+
+- **`scripts/check_sync_manifest.py` fails CI when a tracked file is not covered by the manifest.** It runs where the tracked set is authoritative — the upstream checkout — and checks that every file `git ls-files` reports is either a named root file or inside a merged directory, that every manifest entry exists and is not empty, and that the private state (`.env`, `.secrets`, `seen_jds.jsonl`, `local_tools`, the Mavis-specific files) is on the preserve list rather than on the travel list. This is the check that would have caught v1.8.2. It recognises the upstream checkout by its origin remote and reports that it does not apply anywhere else: the plugin runtime and a working copy have their own tracked files, and judging those against the manifest would report files that are deliberately not carried.
+- **`tests/test_plugin_sync_manifest_v183.py` (12 tests)** guards the same property from inside the test suite, and it reads the tree next to the manifest rather than git, because the same tree exists in three places with three different git histories: `ops` is on the merge manifest, every frozen supervisor travels with it, every merged directory exists and is not empty, every top-level directory of the tree is covered by the manifest, private state is never carried and always preserved, and the guard skips a checkout that is not the upstream one.
+
+Changed
+
+- **The stale script copies are gone from the runtime directory.** There were 33 of them, unversioned and with hard-coded paths, byte-different from the repository's copies only in how they resolved their paths. Two copies of a supervisor that can both be launched is one too many, and the repository's copy is the one that is version-controlled. The runtime directory now holds logs and state only.
+- `RULES.md` gains a section on how the three placements are kept identical, including the two mistakes that cost this release: a tracked directory missing from the merge manifest, and comparing a placement against its own file list instead of the upstream one.
+
+Unchanged
+
+- The engine's behaviour is untouched. The contract gains three items (46–48) about how the sync carries the frozen supervisors and where a crawl is launched from; nothing about how a crawl fetches, paces, deduplicates or writes changed. The pacing budgets, the page spans, the parallel detail fetches and the Sheet write path are all as they were in v1.8.2.
+
 ## v1.8.2 — 2026-11-25
 
 The operational half of the crawler was living on one machine and nowhere else.

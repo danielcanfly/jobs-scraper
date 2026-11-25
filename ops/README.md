@@ -16,6 +16,22 @@
 執行期狀態與腳本分開，是為了讓 repo 保持乾淨（CI 的 hygiene 掃全樹），
 而且 state 檔可以在換機器時直接沿用。
 
+## 哪一份才是要跑的那一份
+
+repo 這份是 source of truth。plugin runtime 也會收到**同一份** —— `scripts/sync-from-repo.sh`
+的合併清單包含 `ops/`，所以兩邊對每個被追蹤的檔案都是同樣的位元組。
+
+**要跑就從 repo 這份跑。** runtime 目錄只放 log 與 state，不放腳本副本，
+所以不會有兩份 supervisor 搶同一個 launchd label、也不會有哪一份默默比較舊。
+
+```bash
+cd ~/.minimax-agent/projects/jobs-scraper-unified
+bash ops/run_tw_chunked.sh 7d
+```
+
+v1.8.2 之前，runtime 目錄裡還留著 33 支腳本副本（未版控、路徑寫死）。它們跟 repo
+這份功能等價，但各自會漂移 —— v1.8.3 把副本清掉，runtime 目錄從此只留 log 與 state。
+
 ## 環境變數
 
 | 變數 | 預設 | 用途 |

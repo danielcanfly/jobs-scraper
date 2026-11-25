@@ -1,4 +1,4 @@
-# v1.8.2 Behaviour Equivalence Contract
+# v1.8.3 Behaviour Equivalence Contract
 
 This gate protects the five-source public source contract and the per-source
 adapter split.
@@ -243,4 +243,29 @@ authorized equivalence baseline.
     context and would otherwise fall back to the global budget.
 45. A worker count of 1 keeps the fully sequential behaviour, and the detail fetch still reports a
     failure as a failed row instead of raising.
+
+## Plugin-sync invariants (v1.8.3)
+
+46. The plugin runtime receives the repository's `ops/` directory on every sync. The crawl
+    supervisors in there are frozen baseline behaviour (item 42b), so a runtime that kept a
+    private copy of them would run behaviour the baseline does not describe. `ops` is one of
+    the merged directories in the sync manifest, and the manifest itself is frozen (item 47).
+47. The sync manifest is part of the frozen baseline. It is the mechanism that gives the three
+    placements — the upstream repository, the plugin runtime and a working copy — the same
+    bytes for every tracked file, so a change to it would change what "the same build" means.
+    It merges rather than replaces: a directory upstream owns is merged file by file, a file
+    the local side owns alone is never deleted, and the Mavis-specific files and the private
+    runtime state sit on an explicit preserve list that a sync never touches. The sync runs
+    from a temporary copy of itself: it merges the repository's `scripts/` directory over its
+    own location, and bash reads a running script incrementally, so a script that rewrites
+    itself while it runs resumes at a byte offset that no longer matches the file and dies on
+    a syntax error. The copy is what runs, so the file on disk may change underneath it.
+    The guard that checks the manifest runs in the upstream checkout, where the tracked set is
+    authoritative. The plugin runtime and a working copy have their own tracked files — the
+    Mavis-specific ones and whatever is left on that machine — so the guard recognises a
+    checkout that is not the upstream one and reports that it does not apply, rather than
+    failing on a file set it was never meant to judge.
+48. The sync carries the frozen supervisors but does not run them. A crawl is launched from
+    the repository checkout, and the runtime directory holds only logs and state, so there is
+    exactly one copy of a supervisor that can be launched.
 

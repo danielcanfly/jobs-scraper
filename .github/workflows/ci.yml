@@ -102,3 +102,6 @@ jobs:
 
       - name: Repository-wide production metadata and secret hygiene
         run: .venv/bin/python scripts/check_repo_hygiene.py
+
+      - name: Verify the plugin sync manifest covers every tracked file
+        run: .venv/bin/python scripts/check_sync_manifest.py

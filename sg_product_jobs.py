@@ -14,7 +14,7 @@ back-compat 保留: JORA_BASE 常數、`build_e_formula("jora", ...)` 分支、
 Single source of truth: RULES.md (4 種 URL, MAX_PAGES, skip list, sheet 11 欄, dedup, visa)
 """
 
-__version__ = "1.8.2"  # 2026-11-25: 抓取 supervisor 與運維工具收進 ops/, 開始版控
+__version__ = "1.8.3"  # 2026-11-25: plugin sync 把 ops/ 一起帶到 runtime, 三處不再分岔
 
 # 原始 module 註解保留:
 # LinkedIn Guest API — 新加坡 Product 系列職缺

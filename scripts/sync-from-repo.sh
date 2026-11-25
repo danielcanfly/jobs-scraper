@@ -16,7 +16,28 @@
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
-REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &> /dev/null && pwd)"
+# ─────────────────────────────────────────────────────────────
+# 這個腳本會把 upstream 的 scripts/ 合併回來 → 覆蓋自己。
+# bash 是逐段讀腳本的: 執行中的檔案被改寫, 讀取位移沒有跟著走,
+# 下一段就會從錯的地方開始解析 → "syntax error near unexpected token"。
+# (v1.8.3 實際踩到: 合併完 scripts/ 之後炸在 `(cd "$REPO_DIR" && ...)` 那行。)
+#
+# 解法: 先把腳本本身複製一份, 從副本執行。正在跑的那份永遠不會被改寫。
+# ─────────────────────────────────────────────────────────────
+if [ -z "${_JOBS_SCRAPER_SYNC_REEXEC:-}" ]; then
+  _sync_origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+  _sync_self="$(mktemp -t jobs-scraper-sync-self-XXXXXX)"
+  cp -- "$_sync_origin" "$_sync_self"
+  chmod +x "$_sync_self"
+  export _JOBS_SCRAPER_SYNC_REEXEC=1
+  export _JOBS_SCRAPER_SYNC_ORIGIN="$_sync_origin"
+  exec bash "$_sync_self" "$@"
+fi
+
+# 這一份是暫存副本 → 跑完刪掉 (exec 會清掉 trap, 所以在這裡設)。
+trap 'rm -f -- "${BASH_SOURCE[0]}"' EXIT
+
+REPO_DIR="$(cd -- "$(dirname -- "${_JOBS_SCRAPER_SYNC_ORIGIN:-${BASH_SOURCE[0]}}")/.." &> /dev/null && pwd)"
 UPSTREAM="${JOBS_SCRAPER_UPSTREAM:-https://github.com/danielcanfly/jobs-scraper.git}"
 BRANCH="${JOBS_SCRAPER_BRANCH:-main}"
 TMP_DIR="$(mktemp -d -t jobs-scraper-sync-XXXXXX)"
@@ -48,6 +69,11 @@ SYNC_FILES=(
 
 # ── 會被整個目錄覆蓋的路徑 ───────────────────────────────────────
 # 注意: 目錄是「合併」不是「刪掉重建」, 同名檔覆蓋, 本地獨有的保留。
+#
+# `ops` 在這裡的原因 (v1.8.3): 抓取 supervisor 住在 ops/, 而且它們是
+# 凍結基準的一部分 (契約條目 42b) → runtime 手上必須是同一份, 否則
+# runtime 跑出來的行為跟基準描述的不一樣。少了這一行, 35 支追蹤中的
+# 腳本永遠送不到 plugin runtime, 兩邊會無聲分岔。
 SYNC_DIRS=(
   jobs_scraper
   skills/jobs-scraper
@@ -56,6 +82,7 @@ SYNC_DIRS=(
   scripts
   tests
   .codex-plugin
+  ops
 )
 
 # ── 永遠保留 (Mavis 專屬 / 本機狀態) ──────────────────────────────
@@ -83,7 +110,7 @@ for arg in "$@"; do
     --verify) MODE="verify" ;;
     --check)  MODE="check" ;;
     -h|--help)
-      sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
